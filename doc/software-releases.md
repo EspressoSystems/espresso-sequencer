@@ -32,7 +32,7 @@ or cut, and on tracker commands. Sections:
 
 - Deployed line: the release each network runs, `Deployed: mainnet <tag> · decaf <tag>`, from the release titles.
 - Tag log: tags on the branch with date, commit, GitHub release state (pre-release or release, with the networks it is
-  published on), operator notes (✅ stated, ⬜ missing) and build runs.
+  published on), the number of operator-notes fragments new in the tag (`-` for none and for `.0`) and build runs.
 - Backports from `main` to the branch: commits on `main` since the `.0` tag. A row shows ✅ when the commit is on the
   branch: its backport PR (head `backport-<PR>-to-<branch>`) merged, `git cherry` finds the same patch, a branch commit
   has the same PR number, or a `[Backport ...]` commit has the same title. Backport PR status is appended when one
@@ -46,31 +46,34 @@ or cut, and on tracker commands. Sections:
 Commands are comments on the tracker issue by a user with write access to the repository; comments by others are
 ignored. `<sha>` is a commit sha prefix of at least 7 characters.
 
-| Command                  | Effect                                                                                                               |
-| ------------------------ | -------------------------------------------------------------------------------------------------------------------- |
-| `/tag`                   | Tag the branch tip with the next patch, create a GitHub pre-release, build. Lines 2..n are the tag's operator notes. |
-| `/tag X.Y.Z.N`           | Same with an explicit tag. Must match the branch version and be new.                                                 |
-| `/notes X.Y.Z.N`         | Replace the tag's operator notes with lines 2..n.                                                                    |
-| `/publish X.Y.Z.N decaf` | Publish the tag to `decaf` or `mainnet`. Lines 2..n are notes for that network only.                                 |
-| `/done <sha>`            | Mark a commit ☑️ that was ported outside the backport workflow.                                                      |
-| `/skip <sha>`            | Mark a commit ⏭️ and strike it through: deliberately not ported.                                                     |
-| `/unmark <sha>`          | Undo `/done` or `/skip`.                                                                                             |
-| `/backport 123`          | Open a backport PR for merged PR 123 against this release branch (`#123` works too).                                 |
+| Command                  | Effect                                                                               |
+| ------------------------ | ------------------------------------------------------------------------------------ |
+| `/tag`                   | Tag the branch tip with the next patch, create a GitHub pre-release, build.          |
+| `/tag X.Y.Z.N`           | Same with an explicit tag. Must match the branch version and be new.                 |
+| `/publish X.Y.Z.N decaf` | Publish the tag to `decaf` or `mainnet`. Lines 2..n are notes for that network only. |
+| `/done <sha>`            | Mark a commit ☑️ that was ported outside the backport workflow.                      |
+| `/skip <sha>`            | Mark a commit ⏭️ and strike it through: deliberately not ported.                     |
+| `/unmark <sha>`          | Undo `/done` or `/skip`.                                                             |
+| `/backport 123`          | Open a backport PR for merged PR 123 against this release branch (`#123` works too). |
 
 Marks are replayed from the issue's comment history, so the body can always be regenerated.
 
 ### Operator notes
 
-Each tag's release body starts with a block between `<!-- operator-notes -->` and `<!-- /operator-notes -->`, above the
-generated PR list. It states what an operator must do when moving to the tag from the previous tag on the same line. The
-`.0` tag describes the move from the previous line, including protocol activation.
+Operator notes live in the repository as fragment files, one per change, in `doc/operator-notes/*.md`. A PR that changes
+environment variables, CLI flags, config or genesis, DB migrations, ports, storage layout, restart requirements or
+upgrade timing adds a fragment. `doc/operator-notes/README.md` has the template. Backports carry the file from the
+original PR. The release process never deletes fragments and never commits; the rollup lives only in the GitHub release
+body.
 
-- `/tag` lines 2..n fill the block. Without them the block reads `_Not yet stated._`.
-- `/notes X.Y.Z.N` replaces the block. `none` renders `No operator action required.` If the markers were deleted in the
-  GitHub UI, the block is inserted again at the top.
-- Suggested content: urgency (High, Medium, Low), config or env changes, DB migration and its duration, restart order, a
-  deadline as view number plus UTC time.
-- The comment author and time are the record of who stated the notes.
+- Collection is pure git: the fragments added between two refs are
+  `git diff --diff-filter=A --name-only <from> <to> -- doc/operator-notes/`, read at `<to>`, `README.md` excluded.
+  Fragments are sorted by path.
+- `/tag` writes the fragments added since the previous tag on the same line into the release body, between
+  `<!-- operator-notes -->` and `<!-- /operator-notes -->`, above the generated PR list. No fragments render
+  `No operator action required.` The `.0` tag has no block. Lines 2..n of `/tag` are ignored.
+- A fragment containing `<!--` fails `/tag` and `/publish` with a comment naming the file. Fix it with a PR, then tag
+  again.
 
 ### Publishing to a network
 
@@ -80,40 +83,33 @@ first and mainnet later. Only `/publish` turns a pre-release into a release.
 - Title: `X.Y.Z.N [decaf]`, `[mainnet]` or `[decaf, mainnet]`. Only the release currently published on a network carries
   its marker. The previous holder loses the marker, stays a full release and gets the line
   `Superseded on <network> by <tag> (<date>)`, wrapped in `<!-- superseded:<network> -->` markers.
-- Latest: always the release published on mainnet. Every release edit, including `/notes`, sends `--latest` explicitly,
-  because GitHub defaults to true.
+- Latest: always the release published on mainnet. Every release edit sends `--latest` explicitly, because GitHub
+  defaults to true.
 - Body: one block per network between `<!-- publish:<network> prev=<tag|none> date=<date> -->` and
   `<!-- /publish:<network> -->`, above the notes block. It holds the deploy date, the previous tag, the `docker pull`
-  line, the lines 2..n of `/publish`, the operator actions of every tag in the range and a compare link. Text outside
-  the bot's markers is kept.
-- Range of tags whose notes the block collects, for current holder P and target X:
+  line, the lines 2..n of `/publish`, the cumulative operator-notes fragments and a compare link. Text outside the bot's
+  markers is kept.
+- Fragments in the block, for current holder P and target X. `P..X` is a tree diff, so it works across release lines:
 
-  | Case                      | Range                                   |
-  | ------------------------- | --------------------------------------- |
-  | P on the same line as X   | tags after P up to X                    |
-  | P on another line         | every tag of each later line, up to X   |
-  | no P (first publish)      | X only                                  |
-  | X older than P (rollback) | empty; the block says `Rollback from P` |
+  | Case                      | Fragments                                   |
+  | ------------------------- | ------------------------------------------- |
+  | P exists                  | added in `P..X`                             |
+  | no P (first publish)      | added in X's `/tag` range (none for a `.0`) |
+  | X older than P (rollback) | none; the block says `Rollback from P`      |
 
-  Tags after P on P's own line are not in a cross-line range: publish the last tag of P's line first, or restate its
-  actions in the `.0` notes of the next line.
-
-  Tags with a stated action get a subsection, newest first. Tags with `none` fold into one `<tags>: no action` line.
+  No fragments render `No operator action required.`
 
 - Do not edit release titles or the bot's markers by hand. The title marker is the record of the current holder. If it
   is lost while the block remains, `/publish` fails naming the release; restore the title (`<tag> [<network>]`) and
   rerun.
 - Command text (lines 2..n) must not contain `<!--`; the command fails with a tracker comment otherwise.
-- `/notes X.Y.Z.N` re-renders every current block, so the per-tag notes and the cumulative view stay in step.
 - Gates, each reported as a tracker comment without changing anything: the tag belongs to the tracker's version, the
-  release exists, a `build.yml` run for the tag succeeded, every tag in the range has a GitHub release (see Recovery),
-  and every tag in the range has stated notes (the comment lists the missing tags; `/notes <tag> none` fixes a quiet
-  one).
+  release exists, a `build.yml` run for the tag succeeded, and no fragment in the range contains `<!--`.
 - Network issue: the bot comments the same text on the issue `Releases: <network>` (see below).
 - Rollback: `/publish <older tag> <network>`.
-- Rerunning `/publish` for the current holder only re-renders its block, keeping its date and previous tag. It is also
-  the recovery after a partial failure: the target release is written first, so a rerun still finds its previous tag.
-  Notes given on lines 2..n replace the stored ones; `none` clears them.
+- Rerunning `/publish` for the current holder only re-renders its block from git, keeping its date and previous tag. It
+  is also the recovery after a partial failure: the target release is written first, so a rerun still finds its previous
+  tag. Notes given on lines 2..n replace the stored ones; `none` clears them.
 - `just release-publish-preview X.Y.Z.N decaf` previews the edits and the tracker comment without writing.
 
 ### Following a network
@@ -142,9 +138,10 @@ comment.
    which tags `X.Y.Z.0` as a pre-release, creates the backport label and the tracker issue, and builds images. Running
    the workflow from the Actions UI works once the branch exists, with `source_ref` set to the branch tip sha.
 2. Land backport PRs and fixes on the release branch. Watch the tracker checklist.
-3. Comment `/tag` on the tracker after each batch worth testing, with the operator notes on lines 2..n or `none`. The
-   bot replies with the tag, the GitHub pre-release and a link to the `build.yml` run.
-4. Validate the tag on devnet, or push an experimental branch for ad hoc changes. Fix the notes with `/notes X.Y.Z.N`.
+3. Comment `/tag` on the tracker after each batch worth testing. The bot replies with the tag, the GitHub pre-release
+   and a link to the `build.yml` run. The release body lists the new operator-notes fragments.
+4. Validate the tag on devnet, or push an experimental branch for ad hoc changes. Fix a wrong fragment with a PR on the
+   branch, then tag again.
 5. Optionally preview with `just release-publish-preview X.Y.Z.N decaf`. Once a tag is validated, comment
    `/publish X.Y.Z.N decaf`, with network-specific deadlines on lines 2..n. Only releases are meant for operators. A
    later mainnet promotion of the same tag is `/publish X.Y.Z.N mainnet` on the same tracker. Announce with the release
@@ -195,19 +192,11 @@ scripts/release tag --dry-run --local --branch release-0.0.1
 ## Recovery
 
 `/tag` pushes the git tag first, then creates the pre-release, then dispatches `build.yml`. If a later step fails, the
-bot comments the error on the tracker and the tag stays. Finish by hand rather than tagging again, then state the notes
-with `/notes X.Y.Z.N`:
+bot comments the error on the tracker and the tag stays. Finish by hand rather than tagging again:
 
 ```sh
 gh release create X.Y.Z.N --target <sha> --title X.Y.Z.N --generate-notes --prerelease
 gh workflow run build.yml --ref X.Y.Z.N
-```
-
-A tag in a `/publish` range without a GitHub release (a `/tag` that failed after pushing the tag) fails the gate and the
-comment names it. Create the release by hand, then state its notes with `/notes X.Y.Z.N` and rerun `/publish`:
-
-```sh
-gh release create X.Y.Z.N --target <sha> --title X.Y.Z.N --generate-notes --prerelease
 ```
 
 If `just release-cut` pushed the branch but the dispatch failed, rerunning it is rejected because the branch exists.

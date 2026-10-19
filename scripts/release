@@ -47,6 +47,8 @@ NOTES_CLOSE = "<!-- /operator-notes -->"
 NOTES_HEADING = "## Operator notes"
 NOT_STATED = "_Not yet stated._"
 NO_ACTION = "No operator action required."
+FRAGMENT_DIR = "doc/operator-notes"
+FRAGMENT_README = f"{FRAGMENT_DIR}/README.md"
 # command text is embedded in release bodies between the bot's markers
 BOT_MARKER = "<!--"
 NETWORK_LABEL = "release-network"
@@ -135,6 +137,14 @@ class Commit:
     pr: int | None
 
 
+@dataclass(frozen=True)
+class Fragment:
+    """An operator-notes file added by a change, `doc/operator-notes/<topic>.md`."""
+
+    path: str
+    text: str
+
+
 MarkKind = Literal["done", "skip"]
 
 
@@ -202,6 +212,9 @@ class TrackerState:
     backport_prs: dict[int, BackportPr]  # keyed by source PR number
     experimental_branches: list[tuple[str, str]]  # name, sha
     branch_tags: dict[str, str]  # branch commit sha -> first tag containing it
+    fragment_counts: dict[
+        str, int
+    ]  # tag -> operator-notes fragments new since the previous tag
 
 
 def parse_version(text: str) -> Version | None:
@@ -492,6 +505,44 @@ def render_notes_block(text: str | None) -> str:
     return f"{NOTES_OPEN}\n{NOTES_HEADING}\n\n{text.strip()}\n{NOTES_CLOSE}"
 
 
+def is_fragment_path(path: str) -> bool:
+    return (
+        path.startswith(f"{FRAGMENT_DIR}/")
+        and path.endswith(".md")
+        and path != FRAGMENT_README
+    )
+
+
+def render_fragments(fragments: list[Fragment]) -> str:
+    """The fragments sorted by path, or the no-action line. A bot marker would corrupt the
+    release body, so it fails the gate."""
+    for fragment in fragments:
+        if BOT_MARKER in fragment.text:
+            raise ValueError(
+                f"{fragment.path} contains `{BOT_MARKER}`; remove it from the fragment"
+            )
+    if not fragments:
+        return NO_ACTION
+    ordered = sorted(fragments, key=lambda fragment: fragment.path)
+    return "\n\n".join(fragment.text.strip() for fragment in ordered)
+
+
+def tag_base(target: Tag, tags: list[Tag]) -> Tag | None:
+    """The previous tag on the target's line; None for the `.0` tag."""
+    return max(
+        (tag for tag in tags if tag.version == target.version and tag < target),
+        default=None,
+    )
+
+
+def publish_base(prev: Tag | None, target: Tag, line_tags: list[Tag]) -> Tag | None:
+    """Where the fragment range for `/publish` starts: the previous holder, the target's own
+    `/tag` base when there is none, nothing on rollback."""
+    if prev is None:
+        return tag_base(target, line_tags)
+    return prev if prev < target else None
+
+
 def tag_notes(body: str) -> str | None:
     """The stated notes text, or None when the block is missing or still the placeholder."""
     match = _NOTES_RE.search(normalize_newlines(body))
@@ -548,22 +599,6 @@ def current_release(
     return holders[-1][1] if holders else None
 
 
-def notes_range(prev: Tag | None, target: Tag, line_tags: list[Tag]) -> list[Tag]:
-    """Tags whose notes an operator moving from `prev` to `target` must read. Empty on rollback.
-
-    Across lines: every tag of every line after `prev`'s, up to `target`.
-    """
-    if prev is None:
-        return [target]
-    if target <= prev:
-        return []
-    if prev.version == target.version:
-        return sorted(tag for tag in line_tags if prev < tag <= target)
-    return sorted(
-        tag for tag in line_tags if prev.version < tag.version and tag <= target
-    )
-
-
 def _block_re(network: Network) -> re.Pattern[str]:
     return re.compile(
         rf"<!-- publish:{network} prev=(?P<prev>\S+) date=(?P<date>\S+) -->\n"
@@ -595,24 +630,13 @@ def publish_block_notes(body: str, network: Network) -> str | None:
     return notes.group(1) if notes else None
 
 
-def release_entries(
-    releases: list[ReleaseInfo], tags: list[Tag]
-) -> list[tuple[Tag, str]]:
-    entries = []
-    for tag in tags:
-        release = find_release(releases, str(tag))
-        text = tag_notes(release.body) if release else None
-        entries.append((tag, text or NOT_STATED))
-    return entries
-
-
 def render_publish_block(
     network: Network,
     prev: Tag | None,
     target: Tag,
     date: str,
     network_notes: str | None,
-    entries: list[tuple[Tag, str]],
+    fragments: list[Fragment],
     repo: str,
 ) -> str:
     rollback = prev is not None and target < prev
@@ -623,7 +647,8 @@ def render_publish_block(
     sections = []
     if network_notes:
         sections.append(f"{NETWORK_NOTES_OPEN}\n{network_notes}\n{NETWORK_NOTES_CLOSE}")
-    sections += _render_entries(entries)
+    if not rollback:
+        sections.append(render_fragments(fragments))
     if prev is not None and not rollback:
         compare = f"https://github.com/{repo}/compare/{prev}...{target}"
         sections.append(f"Compare: [{prev}...{target}]({compare})")
@@ -641,16 +666,6 @@ def render_publish_block(
             f"<!-- /publish:{network} -->",
         ]
     )
-
-
-def _render_entries(entries: list[tuple[Tag, str]]) -> list[str]:
-    """Tags with stated actions, newest first, then one line for the tags without."""
-    ordered = sorted(entries, reverse=True)
-    sections = [f"### {tag}\n\n{text}" for tag, text in ordered if text != NO_ACTION]
-    quiet = [str(tag) for tag, text in reversed(ordered) if text == NO_ACTION]
-    if quiet and not sections:
-        return [NO_ACTION]
-    return [*sections, f"{', '.join(quiet)}: no action"] if quiet else sections
 
 
 def with_block(body: str, network: Network, block: str) -> str:
@@ -679,8 +694,8 @@ def mark_superseded(body: str, network: Network, by: str, date: str) -> str:
     return body[: match.start()] + block + body[match.end() :]
 
 
-# `tags_for(prev, target)` lists the git tags a notes range from `prev` to `target` can draw from.
-TagsFor = Callable[[Tag | None, Tag], list[Tag]]
+# `collect(base, target)` lists the fragments added between two tags.
+Collect = Callable[[Tag, Tag], list[Fragment]]
 
 
 def plan_publish(
@@ -688,7 +703,8 @@ def plan_publish(
     target: Tag,
     network: Network,
     network_notes: str | None,
-    tags_for: TagsFor,
+    line_tags: list[Tag],
+    collect: Collect,
     date: str,
     repo: str,
 ) -> tuple[Tag | None, list[ReleaseEdit]]:
@@ -709,16 +725,10 @@ def plan_publish(
     prev, since, network_notes = _previous_holder(
         release, others, network, network_notes, date
     )
-    scope = notes_range(prev, target, tags_for(prev, target))
-    _require_range_ready(releases, scope)
+    base = publish_base(prev, target, line_tags)
+    fragments = collect(base, target) if base is not None else []
     block = render_publish_block(
-        network,
-        prev,
-        target,
-        since,
-        network_notes,
-        release_entries(releases, scope),
-        repo,
+        network, prev, target, since, network_notes, fragments, repo
     )
     edit = ReleaseEdit(
         release.tag,
@@ -754,23 +764,6 @@ def _previous_holder(
     return (parse_tag(stored[0]) if stored[0] else None), stored[1], notes
 
 
-def _require_range_ready(releases: list[ReleaseInfo], scope: list[Tag]) -> None:
-    unreleased = [str(tag) for tag in scope if find_release(releases, str(tag)) is None]
-    if unreleased:
-        raise ValueError(
-            f"no GitHub release for {', '.join(unreleased)}; create it as described under "
-            f"Recovery in doc/software-releases.md"
-        )
-    missing = [
-        str(tag) for tag, text in release_entries(releases, scope) if text == NOT_STATED
-    ]
-    if missing:
-        raise ValueError(
-            f"operator notes missing for {', '.join(missing)}; "
-            f"state them with `/notes <tag> ...` or `/notes <tag> none`"
-        )
-
-
 def _require_no_lost_holder(releases: list[ReleaseInfo], network: Network) -> None:
     """A live block without a title marker means the title was edited by hand; the previous
     holder is unknown, so publishing now would lose it."""
@@ -795,36 +788,6 @@ def _supersede(
         mark_superseded(release.body, network, by, date),
         False,
     )
-
-
-def rerender_blocks(
-    releases: list[ReleaseInfo], tags_for: TagsFor, repo: str
-) -> list[ReleaseInfo]:
-    """Re-renders every current publish block from the release bodies; returns the changed releases.
-    `tags_for` lists the git tags a holder's range can draw from."""
-    changed = []
-    for release in releases:
-        target = parse_tag(release.tag)
-        body = release.body
-        for network in title_networks(release.title):
-            stored = publish_block_prev(body, network)
-            if stored is None or target is None:
-                continue
-            prev = parse_tag(stored[0]) if stored[0] else None
-            scope = notes_range(prev, target, tags_for(prev, target))
-            block = render_publish_block(
-                network,
-                prev,
-                target,
-                stored[1],
-                publish_block_notes(body, network),
-                release_entries(releases, scope),
-                repo,
-            )
-            body = with_block(body, network, block)
-        if body != release.body:
-            changed.append(replace(release, body=body))
-    return changed
 
 
 def render_deployed_line(releases: list[ReleaseInfo], repo: str) -> str:
@@ -896,15 +859,11 @@ def parse_network_history(body: str) -> History:
     ]
 
 
-def render_notes_cell(tag: str, releases: list[ReleaseInfo]) -> str:
-    release = find_release(releases, tag)
-    if release is None:
-        return "-"
-    return "✅" if tag_notes(release.body) is not None else "⬜"
-
-
 def render_tag_log(
-    tags: list[tuple[str, str, str]], releases: list[ReleaseInfo], repo: str
+    tags: list[tuple[str, str, str]],
+    releases: list[ReleaseInfo],
+    fragment_counts: dict[str, int],
+    repo: str,
 ) -> str:
     if not tags:
         return "_No tags yet._"
@@ -912,7 +871,7 @@ def render_tag_log(
         f"| `{_escape_cell(html.escape(name, quote=False))}` | {_escape_cell(date)} | "
         f"[`{sha[:8]}`](https://github.com/{repo}/commit/{sha}) | "
         f"{render_release_cell(name, releases, repo)} | "
-        f"{render_notes_cell(name, releases)} | "
+        f"{fragment_counts.get(name) or '-'} | "
         f"[runs]({build_runs_url(repo, name)}) |"
         for name, date, sha in tags
     ]
@@ -1056,7 +1015,12 @@ def render_body(state: TrackerState, human_notes: str, repo: str) -> str:
     if state.anchor is not None:
         anchor_url = f"https://github.com/{repo}/commit/{state.anchor}"
         sections += [f"Cut from [`{state.anchor[:8]}`]({anchor_url}).", ""]
-    sections += ["## Tag log", "", render_tag_log(state.tags, state.releases, repo), ""]
+    sections += [
+        "## Tag log",
+        "",
+        render_tag_log(state.tags, state.releases, state.fragment_counts, repo),
+        "",
+    ]
     sections += ["## Commits on `main` not yet on the branch", "", STATUS_LEGEND, ""]
     sections += [
         render_checklist(
@@ -1255,6 +1219,28 @@ class Git:
         return parse_git_log(
             self._run(["git", "log", "--no-merges", "--format=%H%x00%s", rev_range])
         )
+
+    def fragments(self, base: str, to: str) -> list[Fragment]:
+        """Fragments added between two refs, read at `to`."""
+        return [
+            Fragment(path, self._run(["git", "show", f"{to}:{path}"]))
+            for path in self.fragment_paths(base, to)
+        ]
+
+    def fragment_paths(self, base: str, to: str) -> list[str]:
+        out = self._run(
+            [
+                "git",
+                "diff",
+                "--diff-filter=A",
+                "--name-only",
+                base,
+                to,
+                "--",
+                f"{FRAGMENT_DIR}/",
+            ]
+        )
+        return [line for line in out.splitlines() if is_fragment_path(line)]
 
     def cherry(self, upstream: str, head: str, limit: str | None = None) -> set[str]:
         command = ["git", "cherry", upstream, head]
@@ -1474,8 +1460,7 @@ class Gh:
                 sha,
                 "--title",
                 tag,
-                "--notes",
-                notes,
+                *(["--notes", notes] if notes else []),
                 "--generate-notes",
                 "--prerelease",
             ]
@@ -1644,7 +1629,7 @@ def cmd_cut(args: argparse.Namespace, git: Git, gh: Gh) -> int:
     if not git.ls_remote_tags(tag_name):
         git.create_and_push_tag(tag_name, sha, f"Release {tag_name}")
     if find_release(gh.release_list(), tag_name) is None:
-        gh.release_create(tag_name, sha, render_notes_block(None))
+        gh.release_create(tag_name, sha, "")
 
     repo = gh.repo()
     title = f"Release {version}"
@@ -1666,6 +1651,7 @@ def cmd_cut(args: argparse.Namespace, git: Git, gh: Gh) -> int:
             backport_prs={},
             experimental_branches=[],
             branch_tags={},
+            fragment_counts={},
         )
         issue = gh.issue_create(title, "release-tracker", render_body(state, "", repo))
 
@@ -1763,20 +1749,20 @@ def cmd_tag(args: argparse.Namespace, git: Git, gh: Gh) -> int:
         gh_error(f"branch {branch} is an experimental branch")
         return 1
 
-    comment_explicit = notes = None
+    comment_explicit = None
     if args.comment is not None:
         command = parse_command(args.comment)
         if command is None or command.name != "tag":
             message = bad_command(args.comment, "a /tag command")
             return report_failure(gh, args.issue, "/tag", message, args.dry_run)
-        comment_explicit, notes = command.arg, command.text
+        comment_explicit = command.arg
     explicit = args.explicit if args.explicit is not None else comment_explicit
 
     issue = args.issue
     if issue is None:
         issue = find_tracker(gh.open_trackers(), version)
 
-    return _tag(args, git, gh, repo, branch, version, explicit, notes, issue)
+    return _tag(args, git, gh, repo, branch, version, explicit, issue)
 
 
 def _tag(
@@ -1787,7 +1773,6 @@ def _tag(
     branch: str,
     version: Version,
     explicit: str | None,
-    notes: str | None,
     issue: int | None,
 ) -> int:
     """Resolves and writes the tag; once `issue` is known, every failure is also reported there."""
@@ -1806,16 +1791,20 @@ def _tag(
 
     tag_name = str(tag)
     sha = git.rev_parse(git.ref(branch))
+    try:
+        notes = _tag_notes(git, tag, existing_for_version, sha)
+    except ValueError as error:
+        return fail(str(error))
     comment = render_tag_comment(tag, sha, repo, args.actor, args.run_url)
     if args.dry_run:
         print(f"# {tag_name} at {sha} (issue={issue})\n")
         print(comment, end="")
-        print(f"\n{render_notes_block(notes)}")
+        print(f"\n{notes}")
         return 0
 
     try:
         git.create_and_push_tag(tag_name, sha, f"Release {tag_name}")
-        gh.release_create(tag_name, sha, render_notes_block(notes))
+        gh.release_create(tag_name, sha, notes)
         gh.workflow_run("build.yml", tag_name, {})
         if issue is not None:
             gh.workflow_run("update-release-tracker.yml", None, {"issue": str(issue)})
@@ -1825,6 +1814,15 @@ def _tag(
             gh.issue_comment(issue, f"/tag failed: {error}")
         raise
     return 0
+
+
+def _tag_notes(git: Git, tag: Tag, existing: list[str], sha: str) -> str:
+    """The operator-notes block for the new tag; empty for the `.0` tag. Raises ValueError for a
+    bad fragment."""
+    base = tag_base(tag, [parsed for t in existing if (parsed := parse_tag(t))])
+    if base is None:
+        return ""
+    return render_notes_block(render_fragments(git.fragments(str(base), sha)))
 
 
 def cmd_notes(args: argparse.Namespace, git: Git, gh: Gh) -> int:
@@ -1853,21 +1851,11 @@ def cmd_notes(args: argparse.Namespace, git: Git, gh: Gh) -> int:
         else r
         for r in releases
     ]
-    try:
-        for network in NETWORKS:
-            _require_no_lost_holder(releases, network)
-    except ValueError as error:
-        return fail(str(error))
     repo = gh.repo()
-    rerendered = rerender_blocks(
-        releases,
-        git_tags_for(git, releases),
-        repo,
-    )
-    changed = {r.tag: r for r in releases if r.tag == command.arg}
-    changed |= {r.tag: r for r in rerendered}
     edits = [
-        ReleaseEdit(r.tag, r.title, r.body, r.prerelease) for r in changed.values()
+        ReleaseEdit(r.tag, r.title, r.body, r.prerelease)
+        for r in releases
+        if r.tag == command.arg
     ]
     if args.dry_run:
         for edit in edits:
@@ -1881,32 +1869,6 @@ def cmd_notes(args: argparse.Namespace, git: Git, gh: Gh) -> int:
         args.issue, render_notes_comment(tag, repo, args.actor, args.run_url)
     )
     return 0
-
-
-def git_tags_for(git: Git, releases: list[ReleaseInfo]) -> TagsFor:
-    """Tags of the release lines between `prev` and `target`, fetching each line once."""
-    lines: dict[Version, list[Tag]] = {}
-
-    def line_tags(version: Version) -> list[Tag]:
-        if version not in lines:
-            git.fetch(version, [])
-            lines[version] = [
-                tag for name in git.tag_list(f"{version}.*") if (tag := parse_tag(name))
-            ]
-        return lines[version]
-
-    def tags_for(prev: Tag | None, target: Tag) -> list[Tag]:
-        if prev is None or target <= prev:
-            return []
-        versions = {
-            tag.version
-            for r in releases
-            if (tag := parse_tag(r.tag))
-            and prev.version < tag.version <= target.version
-        } | {target.version}
-        return [tag for version in sorted(versions) for tag in line_tags(version)]
-
-    return tags_for
 
 
 def _promotion(
@@ -1987,7 +1949,8 @@ def _plan_publish(
         target,
         network,
         command.text,
-        git_tags_for(git, releases),
+        _line_tags(git, target.version),
+        partial(_collect_fragments, git),
         datetime.now(UTC).date().isoformat(),
         repo,
     )
@@ -1995,6 +1958,17 @@ def _plan_publish(
         target, network, prev, repo, args.actor, args.run_url
     )
     return PublishPlan(network, target, prev, edits, comment, repo, args.actor)
+
+
+def _line_tags(git: Git, version: Version) -> list[Tag]:
+    git.fetch(version, [])
+    return [tag for name in git.tag_list(f"{version}.*") if (tag := parse_tag(name))]
+
+
+def _collect_fragments(git: Git, base: Tag, target: Tag) -> list[Fragment]:
+    for version in {base.version, target.version}:
+        git.fetch(version, [])
+    return git.fragments(str(base), str(target))
 
 
 def _print_publish(gh: Gh, plan: PublishPlan) -> None:
@@ -2086,8 +2060,20 @@ def build_tracker_state(
         backport_prs=backport_prs,
         experimental_branches=git.ls_remote_heads(f"{branch}--*"),
         branch_tags=branch_tags,
+        fragment_counts=fragment_counts(git, tags),
     )
     return state, body_before
+
+
+def fragment_counts(git: Git, tags: list[tuple[str, str, str]]) -> dict[str, int]:
+    """Fragments new in each tag since the previous tag on its line."""
+    parsed = [tag for name, _date, _sha in tags if (tag := parse_tag(name))]
+    counts = {}
+    for tag in parsed:
+        base = tag_base(tag, parsed)
+        if base is not None:
+            counts[str(tag)] = len(git.fragment_paths(str(base), str(tag)))
+    return counts
 
 
 def refresh_plan(

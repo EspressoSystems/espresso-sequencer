@@ -83,6 +83,7 @@ def state(**overrides) -> "rel.TrackerState":
         "backport_prs": {},
         "experimental_branches": [],
         "branch_tags": {},
+        "fragment_counts": {},
     }
     defaults.update(overrides)
     return rel.TrackerState(**defaults)
@@ -743,6 +744,7 @@ class CmdTagHappyPath(unittest.TestCase):
                 ("git", "fetch"): "",
                 ("git", "tag", "--list", "0.6.0.*"): "0.6.0.0\n0.6.0.1\n",
                 ("git", "rev-parse", "origin/release-0.6.0"): sha,
+                ("git", "diff"): "",
                 ("git", "tag", "-a"): "",
                 ("git", "push", "origin", "refs/tags/0.6.0.2"): "",
                 ("gh", "release", "create"): "https://example/releases/0.6.0.2",
@@ -771,6 +773,8 @@ class CmdTagHappyPath(unittest.TestCase):
         )
         self.assertIn("--prerelease", release_call)
         self.assertNotIn("--latest=true", release_call)
+        notes = release_call[release_call.index("--notes") + 1]
+        self.assertIn(rel.NO_ACTION, notes)
         self.assertTrue(runner.ran("gh", "workflow", "run"))
         self.assertTrue(runner.ran("gh", "issue", "comment"))
 
@@ -784,6 +788,7 @@ class CmdTagHappyPath(unittest.TestCase):
                 ("git", "fetch"): "",
                 ("git", "tag", "--list"): "0.6.0.0\n",
                 ("git", "rev-parse", "origin/release-0.6.0"): "c" * 40,
+                ("git", "diff"): "",
                 PERMISSION: "write",
             }
         )
@@ -856,16 +861,18 @@ class CmdTagHappyPath(unittest.TestCase):
         )
         self.assertIn("--paginate", runner.calls[-1])
 
-    def test_release_cmd_tag_notes_in_release_ok(self):
-        runner = FakeRunner(
+    def _fragment_runner(self, diff: str, shown: str, tags="0.6.0.0\n"):
+        return FakeRunner(
             {
                 ("gh", "repo", "view"): REPO,
                 ("gh", "issue", "view"): json.dumps(
                     {"title": "Release 0.6.0", "body": ""}
                 ),
                 ("git", "fetch"): "",
-                ("git", "tag", "--list", "0.6.0.*"): "0.6.0.0\n",
+                ("git", "tag", "--list", "0.6.0.*"): tags,
                 ("git", "rev-parse", "origin/release-0.6.0"): "c" * 40,
+                ("git", "diff"): diff,
+                ("git", "show"): shown,
                 ("git", "tag", "-a"): "",
                 ("git", "push"): "",
                 ("gh", "release", "create"): "",
@@ -874,20 +881,74 @@ class CmdTagHappyPath(unittest.TestCase):
                 PERMISSION: "write",
             }
         )
-        args = argparse.Namespace(
+
+    def _tag_args(self, comment="/tag"):
+        return argparse.Namespace(
             issue=42,
             branch=None,
-            comment="/tag\nUrgency: High",
+            comment=comment,
             explicit=None,
             actor="alice",
             run_url=None,
             dry_run=False,
         )
-        self.assertEqual(rel.cmd_tag(args, rel.Git(runner), rel.Gh(runner)), 0)
+
+    def test_release_cmd_tag_fragments_in_release_ok(self):
+        diff = "doc/operator-notes/b.md\ndoc/operator-notes/README.md\n"
+        runner = self._fragment_runner(diff, "### B\n\nUrgency: High\n")
+        self.assertEqual(
+            rel.cmd_tag(self._tag_args(), rel.Git(runner), rel.Gh(runner)), 0
+        )
+        self.assertIn(
+            [
+                "git",
+                "diff",
+                "--diff-filter=A",
+                "--name-only",
+                "0.6.0.0",
+                "c" * 40,
+                "--",
+                "doc/operator-notes/",
+            ],
+            runner.calls,
+        )
+        self.assertIn(
+            ["git", "show", f"{'c' * 40}:doc/operator-notes/b.md"], runner.calls
+        )
+        self.assertFalse(
+            runner.ran("git", "show", f"{'c' * 40}:doc/operator-notes/README.md")
+        )
         create = next(c for c in runner.calls if c[:3] == ["gh", "release", "create"])
         notes = create[create.index("--notes") + 1]
-        self.assertEqual(rel.tag_notes(notes), "Urgency: High")
+        self.assertEqual(rel.tag_notes(notes), "### B\n\nUrgency: High")
         self.assertIn("--generate-notes", create)
+
+    def test_release_cmd_tag_text_is_ignored_ok(self):
+        runner = self._fragment_runner("", "")
+        args = self._tag_args("/tag\nUrgency: High")
+        self.assertEqual(rel.cmd_tag(args, rel.Git(runner), rel.Gh(runner)), 0)
+        create = next(c for c in runner.calls if c[:3] == ["gh", "release", "create"])
+        self.assertNotIn("Urgency", create[create.index("--notes") + 1])
+
+    def test_release_cmd_tag_dot_zero_has_no_block_ok(self):
+        runner = self._fragment_runner("", "", tags="")
+        self.assertEqual(
+            rel.cmd_tag(self._tag_args(), rel.Git(runner), rel.Gh(runner)), 0
+        )
+        create = next(c for c in runner.calls if c[:3] == ["gh", "release", "create"])
+        self.assertNotIn("--notes", create)
+        self.assertFalse(runner.ran("git", "diff"))
+
+    def test_release_cmd_tag_bad_fragment_fails(self):
+        diff = "doc/operator-notes/b.md\n"
+        runner = self._fragment_runner(diff, "### B\n<!-- /operator-notes -->")
+        self.assertEqual(
+            rel.cmd_tag(self._tag_args(), rel.Git(runner), rel.Gh(runner)), 1
+        )
+        self.assertFalse(runner.ran("git", "tag", "-a"))
+        self.assertFalse(runner.ran("gh", "release", "create"))
+        comment = next(c for c in runner.calls if c[:3] == ["gh", "issue", "comment"])
+        self.assertIn("doc/operator-notes/b.md", comment[-1])
 
 
 # REQ:release-tag-failure-reported
@@ -1185,6 +1246,7 @@ class BuildTrackerStateAnchor(unittest.TestCase):
                 ("git", "rev-parse", "origin/main"): "m" * 40,
                 ("git", "rev-parse", "origin/release-0.6.0"): "b" * 40,
                 ("git", "tag", "--list", "0.6.0.0"): "0.6.0.0\n",
+                ("git", "diff"): "doc/operator-notes/a.md\n",
                 ("git", "rev-parse", "0.6.0.0^{commit}"): anchor,
                 ("git", "merge-base", "--is-ancestor"): "",
                 (
@@ -1236,6 +1298,7 @@ class BuildTrackerStateAnchor(unittest.TestCase):
         git, gh = rel.Git(runner), rel.Gh(runner)
         state, _body_before = rel.build_tracker_state(git, gh, 7, version())
         self.assertEqual(state.branch_tags, {branch_sha: "0.6.0.1"})
+        self.assertEqual(state.fragment_counts, {"0.6.0.1": 1})
         self.assertEqual(
             [c.sha for c in state.main_commits], [cherry_sha, pr_match_sha]
         )
@@ -1249,7 +1312,7 @@ class TagLogReleases(unittest.TestCase):
             ("0.6.3.0", "2026-09-21", "c" * 40),
             ("0.6.3.1", "2026-09-22", "d" * 40),
         ]
-        body = rel.render_tag_log(tags, [release("0.6.3.1")], REPO)
+        body = rel.render_tag_log(tags, [release("0.6.3.1")], {}, REPO)
         self.assertIn("| GitHub release | Notes | Build |", body)
         self.assertIn(
             f"[pre-release](https://github.com/{REPO}/releases/tag/0.6.3.1)", body
@@ -1258,20 +1321,79 @@ class TagLogReleases(unittest.TestCase):
         self.assertIn("| - |", body)
         self.assertIn(
             "[release](",
-            rel.render_tag_log(tags, [release("0.6.3.1", prerelease=False)], REPO),
+            rel.render_tag_log(tags, [release("0.6.3.1", prerelease=False)], {}, REPO),
         )
 
     def test_release_tag_log_notes_column_ok(self):
         tags = [(f"0.6.3.{n}", "2026-09-21", "c" * 40) for n in range(3)]
-        stated = release("0.6.3.0", body=rel.render_notes_block("none"))
-        releases = [stated, release("0.6.3.1", body=rel.render_notes_block(None))]
-        rows = rel.render_tag_log(tags, releases, REPO).splitlines()[2:]
-        self.assertIn("| ✅ |", rows[0])
-        self.assertIn("| ⬜ |", rows[1])
+        rows = rel.render_tag_log(tags, [], {"0.6.3.1": 2}, REPO).splitlines()[2:]
+        self.assertIn("| - | - |", rows[0])
+        self.assertIn("| - | 2 |", rows[1])
         self.assertIn("| - | - |", rows[2])
+
+    def test_release_fragment_counts_ok(self):
+        runner = FakeRunner({("git", "diff"): "doc/operator-notes/a.md\n"})
+        tags = [(f"0.6.3.{n}", "d", "c" * 40) for n in range(3)]
+        counts = rel.fragment_counts(rel.Git(runner), tags)
+        self.assertEqual(counts, {"0.6.3.1": 1, "0.6.3.2": 1})
 
 
 # REQ:release-operator-notes
+
+
+def frag(name="a", text="### A\n\nUrgency: High\n") -> "rel.Fragment":
+    return rel.Fragment(f"doc/operator-notes/{name}.md", text)
+
+
+class Fragments(unittest.TestCase):
+    def test_release_fragment_path_ok(self):
+        self.assertTrue(rel.is_fragment_path("doc/operator-notes/db-migration.md"))
+        for path in (
+            "doc/operator-notes/README.md",
+            "doc/operator-notes/notes.txt",
+            "doc/other/a.md",
+        ):
+            self.assertFalse(rel.is_fragment_path(path), path)
+
+    def test_release_render_fragments_sorted_ok(self):
+        text = rel.render_fragments([frag("b", "### B\n"), frag("a", "### A\n\nx\n")])
+        self.assertEqual(text, "### A\n\nx\n\n### B")
+
+    def test_release_render_fragments_empty_ok(self):
+        self.assertEqual(rel.render_fragments([]), rel.NO_ACTION)
+
+    def test_release_render_fragments_bot_marker_fails(self):
+        with self.assertRaisesRegex(ValueError, "doc/operator-notes/bad.md"):
+            rel.render_fragments([frag("ok"), frag("bad", "### X\n<!-- publish -->")])
+
+    def test_release_git_fragments_ok(self):
+        diff = "doc/operator-notes/a.md\ndoc/operator-notes/README.md\ndoc/operator-notes/b.txt\n"
+        runner = FakeRunner({("git", "diff"): diff, ("git", "show"): "### A\n"})
+        fragments = rel.Git(runner).fragments("0.6.0.1", "0.6.0.2")
+        self.assertEqual(
+            fragments, [rel.Fragment("doc/operator-notes/a.md", "### A\n")]
+        )
+        self.assertIn(["git", "show", "0.6.0.2:doc/operator-notes/a.md"], runner.calls)
+
+    def test_release_tag_base_ok(self):
+        tags = [t("0.6.3.0"), t("0.6.3.2"), t("0.6.3.4"), t("0.7.0.1")]
+        self.assertEqual(rel.tag_base(t("0.6.3.4"), tags), t("0.6.3.2"))
+        self.assertEqual(rel.tag_base(t("0.6.3.3"), tags), t("0.6.3.2"))
+        self.assertEqual(rel.tag_base(t("0.7.0.1"), tags), None)
+        self.assertEqual(rel.tag_base(t("0.6.3.0"), tags), None)
+
+    def test_release_publish_base_ok(self):
+        tags = [t(f"0.7.0.{n}") for n in range(5)]
+        self.assertEqual(
+            rel.publish_base(t("0.7.0.1"), t("0.7.0.4"), tags), t("0.7.0.1")
+        )
+        self.assertEqual(
+            rel.publish_base(t("0.6.3.12"), t("0.7.0.3"), tags), t("0.6.3.12")
+        )
+        self.assertEqual(rel.publish_base(None, t("0.7.0.3"), tags), t("0.7.0.2"))
+        self.assertIsNone(rel.publish_base(None, t("0.7.0.0"), tags))
+        self.assertIsNone(rel.publish_base(t("0.7.0.4"), t("0.7.0.2"), tags))
+        self.assertIsNone(rel.publish_base(t("0.7.0.1"), t("0.6.3.14"), tags))
 
 
 class OperatorNotes(unittest.TestCase):
@@ -1419,10 +1541,25 @@ def stated(
     return release(tag, title, body, prerelease)
 
 
-def plan(releases, target, network="decaf", notes=None, tags=None, date="2026-10-21"):
+def plan(
+    releases,
+    target,
+    network="decaf",
+    notes=None,
+    tags=None,
+    date="2026-10-21",
+    collect=None,
+):
     tags = tags or [t(r.tag) for r in releases]
     return rel.plan_publish(
-        releases, t(target), network, notes, lambda *_: tags, date, REPO
+        releases,
+        t(target),
+        network,
+        notes,
+        tags,
+        collect or (lambda *_: []),
+        date,
+        REPO,
     )
 
 
@@ -1486,110 +1623,75 @@ class TitleNetworks(unittest.TestCase):
         self.assertIsNone(rel.current_release(releases[:1], "mainnet"))
 
 
-class NotesRange(unittest.TestCase):
-    TAGS: ClassVar[list] = [t(f"0.7.0.{n}") for n in range(6)]
+class FragmentRange(unittest.TestCase):
+    def _plan(self, releases, target, network="decaf", tags=None):
+        calls = []
 
-    def test_release_notes_range_same_line_ok(self):
-        self.assertEqual(
-            rel.notes_range(t("0.7.0.1"), t("0.7.0.4"), self.TAGS), self.TAGS[2:5]
+        def collect(base, to):
+            calls.append((str(base), str(to)))
+            return [frag("a")]
+
+        _prev, (edit, *_old) = plan(
+            releases, target, network, tags=tags, collect=collect
         )
+        return calls, edit
 
-    def test_release_notes_range_cross_line_ok(self):
-        self.assertEqual(
-            rel.notes_range(t("0.6.3.12"), t("0.7.0.3"), self.TAGS), self.TAGS[:4]
-        )
+    def test_release_plan_same_line_range_ok(self):
+        releases = published([release("0.7.0.1"), release("0.7.0.4")], "0.7.0.1")
+        calls, edit = self._plan(releases, "0.7.0.4")
+        self.assertEqual(calls, [("0.7.0.1", "0.7.0.4")])
+        self.assertIn("### A\n\nUrgency: High", edit.body)
 
-    def test_release_notes_range_bootstrap_ok(self):
-        self.assertEqual(rel.notes_range(None, t("0.7.0.3"), self.TAGS), [t("0.7.0.3")])
-
-    def test_release_notes_range_rollback_ok(self):
-        self.assertEqual(rel.notes_range(t("0.7.0.4"), t("0.7.0.2"), self.TAGS), [])
-        self.assertEqual(rel.notes_range(t("0.7.0.1"), t("0.6.3.14"), self.TAGS), [])
-
-    def test_release_notes_range_ignores_other_lines_ok(self):
-        tags = [*self.TAGS, t("0.6.3.12")]
-        self.assertEqual(rel.notes_range(None, t("0.7.0.1"), tags), [t("0.7.0.1")])
-        self.assertEqual(
-            rel.notes_range(t("0.6.3.12"), t("0.7.0.1"), tags), self.TAGS[:2]
-        )
-
-
-class CrossLineRange(unittest.TestCase):
-    TAGS: ClassVar[list] = [
-        *(t(f"0.6.3.{n}") for n in (12, 13)),
-        *(t(f"0.7.0.{n}") for n in range(6)),
-        *(t(f"0.7.1.{n}") for n in range(4)),
-    ]
-
-    def test_release_notes_range_every_intermediate_line_ok(self):
-        scope = rel.notes_range(t("0.6.3.12"), t("0.7.1.2"), self.TAGS)
-        self.assertEqual(scope, [*self.TAGS[2:8], *self.TAGS[8:11]])
-
-    def test_release_git_tags_for_fetches_each_line_once_ok(self):
+    def test_release_plan_cross_line_range_ok(self):
         releases = [
             release("0.6.3.12", "0.6.3.12 [mainnet]"),
-            *(release(f"0.7.0.{n}") for n in range(3)),
-            release("0.7.1.2"),
-            release("0.8.0.0"),
+            release("0.7.0.0"),
+            release("0.7.0.3"),
         ]
-        runner = FakeRunner({("git", "fetch"): "", ("git", "tag", "--list"): "0.7.1.2"})
-        tags_for = rel.git_tags_for(rel.Git(runner), releases)
-        tags_for(t("0.6.3.12"), t("0.7.1.2"))
-        tags_for(t("0.7.0.1"), t("0.7.1.2"))
-        self.assertEqual(tags_for(None, t("0.7.1.2")), [])
-        self.assertEqual(tags_for(t("0.7.1.2"), t("0.7.0.1")), [])
+        calls, _edit = self._plan(releases, "0.7.0.3", "mainnet")
+        self.assertEqual(calls, [("0.6.3.12", "0.7.0.3")])
+
+    def test_release_plan_bootstrap_uses_tag_range_ok(self):
+        releases = [release("0.7.0.0"), release("0.7.0.1"), release("0.7.0.2")]
+        calls, _edit = self._plan(releases, "0.7.0.2")
+        self.assertEqual(calls, [("0.7.0.1", "0.7.0.2")])
+
+    def test_release_plan_bootstrap_dot_zero_is_empty_ok(self):
+        calls, edit = self._plan([release("0.7.0.0")], "0.7.0.0")
+        self.assertEqual(calls, [])
+        self.assertIn(rel.NO_ACTION, edit.body)
+
+    def test_release_plan_rollback_collects_nothing_ok(self):
+        releases = published([release("0.7.0.1"), release("0.7.0.2")], "0.7.0.2")
+        calls, edit = self._plan(releases, "0.7.0.1")
+        self.assertEqual(calls, [])
+        self.assertIn("Rollback from 0.7.0.2.", edit.body)
+        self.assertNotIn(rel.NO_ACTION, edit.body)
+
+    def test_release_plan_bad_fragment_fails(self):
+        releases = [release("0.7.0.0"), release("0.7.0.1")]
+        with self.assertRaisesRegex(ValueError, "doc/operator-notes/bad.md"):
+            plan(
+                releases,
+                "0.7.0.1",
+                collect=lambda *_: [frag("bad", "### X\n<!-- y -->")],
+            )
+
+    def test_release_collect_fragments_fetches_both_lines_ok(self):
+        runner = FakeRunner({("git", "fetch"): "", ("git", "diff"): ""})
+        rel._collect_fragments(rel.Git(runner), t("0.6.3.12"), t("0.7.0.3"))
         fetched = [c for c in runner.calls if c[:2] == ["git", "fetch"]]
         self.assertEqual(len(fetched), 2)
 
-    def test_release_cmd_publish_cross_line_collects_every_line_ok(self):
-        releases = [
-            release_row(
-                "0.6.3.12", "0.6.3.12 [mainnet]", rel.render_notes_block("none")
-            ),
-            release_row("0.7.0.0", body=rel.render_notes_block("Urgency: High")),
-            release_row("0.7.0.1", body=rel.render_notes_block("none")),
-            release_row("0.7.1.0", body=rel.render_notes_block("none")),
-            release_row("0.7.1.1", body=rel.render_notes_block("none")),
-        ]
-        runner = CmdPublish()._runner(releases=releases)
-        tag_lists = {
-            "0.6.3.*": "0.6.3.12\n0.6.3.13\n",
-            "0.7.0.*": "0.7.0.0\n0.7.0.1\n",
-            "0.7.1.*": "0.7.1.0\n0.7.1.1\n",
-        }
-        for pattern, out in tag_lists.items():
-            runner.responses[("git", "tag", "--list", pattern)] = out
-        runner.responses[("gh", "issue", "view")] = json.dumps(
-            {"title": "Release 0.7.1", "body": ""}
-        )
-        args = CmdPublish()._args("/publish 0.7.1.1 mainnet")
-        self.assertEqual(rel.cmd_publish(args, rel.Git(runner), rel.Gh(runner)), 0)
-        self.assertTrue(runner.ran("git", "tag", "--list", "0.7.0.*"))
-        self.assertTrue(runner.ran("gh", "release", "edit", "0.7.1.1"))
-
-    def test_release_plan_cross_line_body_ok(self):
-        releases = [
-            release("0.6.3.12", "0.6.3.12 [mainnet]"),
-            stated("0.7.0.0", "Urgency: High"),
-            stated("0.7.0.1"),
-            stated("0.7.1.0", "Config X"),
-            stated("0.7.1.1"),
-        ]
-        prev, (edit, _old) = plan(releases, "0.7.1.1", "mainnet")
-        self.assertEqual(prev, t("0.6.3.12"))
-        self.assertIn("### 0.7.0.0\n\nUrgency: High", edit.body)
-        self.assertIn("### 0.7.1.0\n\nConfig X", edit.body)
-        self.assertNotIn("0.6.3.13", edit.body)
-
 
 class PublishBlock(unittest.TestCase):
-    def _block(self, prev, target, entries, notes=None):
+    def _block(self, prev, target, fragments, notes=None):
         return rel.render_publish_block(
-            "decaf", prev and t(prev), t(target), "2026-10-21", notes, entries, REPO
+            "decaf", prev and t(prev), t(target), "2026-10-21", notes, fragments, REPO
         )
 
     def test_release_publish_block_header_ok(self):
-        block = self._block("0.7.0.1", "0.7.0.3", [(t("0.7.0.2"), rel.NO_ACTION)])
+        block = self._block("0.7.0.1", "0.7.0.3", [])
         self.assertTrue(
             block.startswith("<!-- publish:decaf prev=0.7.0.1 date=2026-10-21 -->\n")
         )
@@ -1602,36 +1704,23 @@ class PublishBlock(unittest.TestCase):
             block,
         )
         self.assertIn("## Operator actions for decaf since 0.7.0.1", block)
+        self.assertIn(rel.NO_ACTION, block)
         self.assertIn(
             f"Compare: [0.7.0.1...0.7.0.3](https://github.com/{REPO}/compare/0.7.0.1...0.7.0.3)",
             block,
         )
 
-    def test_release_publish_block_entries_ok(self):
-        entries = [
-            (t("0.7.0.2"), rel.NO_ACTION),
-            (t("0.7.0.3"), "Urgency: High"),
-            (t("0.7.0.4"), rel.NO_ACTION),
-        ]
-        block = self._block("0.7.0.1", "0.7.0.4", entries, "V0_7 at view 5")
-        self.assertIn("### 0.7.0.3\n\nUrgency: High", block)
-        self.assertIn("0.7.0.2, 0.7.0.4: no action", block)
-        self.assertLess(block.index("V0_7 at view 5"), block.index("### 0.7.0.3"))
+    def test_release_publish_block_fragments_ok(self):
+        block = self._block(
+            "0.7.0.1", "0.7.0.4", [frag("b", "### B\n"), frag("a")], "V0_7 at view 5"
+        )
+        self.assertIn("### A\n\nUrgency: High\n\n### B", block)
+        self.assertNotIn(rel.NO_ACTION, block)
+        self.assertLess(block.index("V0_7 at view 5"), block.index("### A"))
         self.assertEqual(rel.publish_block_notes(block, "decaf"), "V0_7 at view 5")
 
-    def test_release_publish_block_newest_first_ok(self):
-        entries = [(t("0.7.0.2"), "a"), (t("0.7.0.3"), "b")]
-        block = self._block("0.7.0.1", "0.7.0.3", entries)
-        self.assertLess(block.index("### 0.7.0.3"), block.index("### 0.7.0.2"))
-
-    def test_release_publish_block_all_quiet_ok(self):
-        entries = [(t("0.7.0.2"), rel.NO_ACTION), (t("0.7.0.3"), rel.NO_ACTION)]
-        block = self._block("0.7.0.1", "0.7.0.3", entries)
-        self.assertIn(rel.NO_ACTION, block)
-        self.assertNotIn("no action", block)
-
     def test_release_publish_block_bootstrap_ok(self):
-        block = self._block(None, "0.6.3.12", [(t("0.6.3.12"), "Urgency: Low")])
+        block = self._block(None, "0.6.3.12", [frag()])
         self.assertIn("prev=none", block)
         self.assertIn("## Operator actions for decaf\n", block)
         self.assertNotIn("Supersedes", block)
@@ -1701,17 +1790,15 @@ class PublishBlock(unittest.TestCase):
 
 class PlanPublish(unittest.TestCase):
     def test_release_plan_bootstrap_ok(self):
-        releases = [stated("0.7.0.0"), stated("0.7.0.1", "Urgency: High")]
-        prev, edits = plan(releases, "0.7.0.1")
+        releases = [stated("0.7.0.0"), stated("0.7.0.1")]
+        prev, edits = plan(releases, "0.7.0.1", collect=lambda *_: [frag()])
         self.assertIsNone(prev)
         (edit,) = edits
         self.assertEqual(edit.title, "0.7.0.1 [decaf]")
         self.assertFalse(edit.prerelease)
         self.assertFalse(edit.make_latest)
         self.assertIn("prev=none", edit.body)
-        self.assertIn("### 0.7.0.1\n\nUrgency: High", edit.body)
-        self.assertNotIn("### 0.7.0.0", edit.body)
-        self.assertEqual(rel.tag_notes(edit.body), "Urgency: High")
+        self.assertIn("### A\n\nUrgency: High", edit.body)
 
     def test_release_plan_supersedes_previous_ok(self):
         releases = published(
@@ -1728,9 +1815,7 @@ class PlanPublish(unittest.TestCase):
         self.assertIn("Superseded on decaf by 0.7.0.3 (2026-10-23)", old.body)
         self.assertEqual(new.title, "0.7.0.3 [decaf]")
         self.assertIn("Supersedes 0.7.0.1", new.body)
-        self.assertIn("### 0.7.0.3", new.body)
-        self.assertIn("0.7.0.2: no action", new.body)
-        self.assertNotIn("### 0.7.0.1", new.body)
+        self.assertIn(rel.NO_ACTION, new.body)
 
     def test_release_plan_mainnet_takes_latest_ok(self):
         releases = [
@@ -1757,29 +1842,6 @@ class PlanPublish(unittest.TestCase):
         new, old = edits
         self.assertEqual((old.title, old.make_latest), ("0.6.3.12 [mainnet]", True))
         self.assertEqual((new.title, new.make_latest), ("0.6.3.13 [decaf]", False))
-
-    def test_release_plan_missing_notes_fails(self):
-        releases = [
-            release("0.7.0.0", "0.7.0.0 [decaf]", prerelease=False),
-            release("0.7.0.1", body=rel.render_notes_block(None)),
-            release("0.7.0.2", body=""),
-            stated("0.7.0.3"),
-        ]
-        with self.assertRaises(ValueError) as caught:
-            plan(releases, "0.7.0.3")
-        self.assertIn("0.7.0.1, 0.7.0.2;", str(caught.exception))
-        self.assertIn("/notes <tag> none", str(caught.exception))
-
-    def test_release_plan_range_tag_without_release_fails(self):
-        releases = [
-            release("0.7.0.0", "0.7.0.0 [decaf]", prerelease=False),
-            stated("0.7.0.2"),
-        ]
-        with self.assertRaises(ValueError) as caught:
-            plan(releases, "0.7.0.2", tags=[t("0.7.0.1"), t("0.7.0.2")])
-        message = str(caught.exception)
-        self.assertIn("no GitHub release for 0.7.0.1", message)
-        self.assertIn("Recovery", message)
 
     def test_release_plan_none_clears_network_notes_ok(self):
         releases = published(
@@ -1865,41 +1927,6 @@ class PlanPublish(unittest.TestCase):
         self.assertEqual(edits[0].body.count("<!-- publish:decaf"), 1)
 
 
-class RerenderBlocks(unittest.TestCase):
-    def _held(self, notes=None):
-        releases = [stated("0.7.0.1"), stated("0.7.0.2"), stated("0.7.0.3")]
-        releases = published(releases, "0.7.0.1")
-        return published(releases, "0.7.0.3", notes=notes)
-
-    def test_release_rerender_after_notes_change_ok(self):
-        releases = self._held()
-        tags = [t(r.tag) for r in releases]
-        self.assertEqual(rel.rerender_blocks(releases, lambda *_: tags, REPO), [])
-
-        body = rel.with_tag_notes(releases[1].body, "Urgency: High")
-        releases[1] = release("0.7.0.2", body=body)
-        (changed,) = rel.rerender_blocks(releases, lambda *_: tags, REPO)
-        self.assertEqual(changed.tag, "0.7.0.3")
-        self.assertIn("### 0.7.0.2\n\nUrgency: High", changed.body)
-        self.assertEqual(rel.tag_notes(changed.body), rel.NO_ACTION)
-        self.assertEqual(changed.title, "0.7.0.3 [decaf]")
-
-    def test_release_rerender_keeps_network_notes_and_date_ok(self):
-        releases = self._held("Deadline view 5")
-        tags = [t(r.tag) for r in releases]
-        releases[1] = release("0.7.0.2", body=rel.with_tag_notes("", "Urgency: Low"))
-        (changed,) = rel.rerender_blocks(releases, lambda *_: tags, REPO)
-        self.assertIn("Deadline view 5", changed.body)
-        self.assertIn("date=2026-10-21", changed.body)
-        self.assertIn("prev=0.7.0.1", changed.body)
-
-    def test_release_rerender_ignores_superseded_ok(self):
-        releases = self._held()
-        tags = [t(r.tag) for r in releases]
-        releases[0] = release("0.7.0.1", body="stale")
-        self.assertEqual(rel.rerender_blocks(releases[:1], lambda *_: tags, REPO), [])
-
-
 class DeployedLine(unittest.TestCase):
     def test_release_deployed_line_ok(self):
         releases = [
@@ -1982,6 +2009,8 @@ class CmdPublish(unittest.TestCase):
                 ("gh", "issue", "create"): "https://example/issues/9\n",
                 ("gh", "label", "create"): "",
                 ("git", "fetch"): "",
+                ("git", "diff"): "",
+                ("git", "show"): "### A\n",
                 (
                     "git",
                     "tag",
@@ -2101,18 +2130,58 @@ class CmdPublish(unittest.TestCase):
             "/publish failed: no successful build.yml run for 0.7.0.2", comment[-1]
         )
 
-    def test_release_cmd_publish_notes_gate_fails(self):
+    def test_release_cmd_publish_fragments_in_block_ok(self):
+        runner = self._runner()
+        runner.responses[("git", "diff")] = (
+            "doc/operator-notes/a.md\ndoc/operator-notes/README.md\n"
+        )
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            code = rel.cmd_publish(
+                self._args(issue=None, actor=None, dry_run=True),
+                rel.Git(runner),
+                rel.Gh(runner),
+            )
+        self.assertEqual(code, 0)
+        self.assertIn(
+            [
+                "git",
+                "diff",
+                "--diff-filter=A",
+                "--name-only",
+                "0.7.0.1",
+                "0.7.0.2",
+                "--",
+                "doc/operator-notes/",
+            ],
+            runner.calls,
+        )
+        self.assertIn("### A", out.getvalue())
+
+    def test_release_cmd_publish_cross_line_diffs_previous_holder_ok(self):
         rows = [
-            release_row("0.7.0.0", "0.7.0.0 [decaf]", rel.render_notes_block("none")),
-            release_row("0.7.0.1"),
-            release_row("0.7.0.2", body=rel.render_notes_block("none")),
+            release_row("0.6.3.12", "0.6.3.12 [mainnet]"),
+            release_row("0.7.1.1"),
         ]
         runner = self._runner(releases=rows)
+        runner.responses[("git", "tag", "--list", "0.7.1.*")] = "0.7.1.0\n0.7.1.1\n"
+        runner.responses[("gh", "issue", "view")] = json.dumps(
+            {"title": "Release 0.7.1", "body": ""}
+        )
+        args = self._args("/publish 0.7.1.1 mainnet")
+        self.assertEqual(rel.cmd_publish(args, rel.Git(runner), rel.Gh(runner)), 0)
+        diff = next(c for c in runner.calls if c[:2] == ["git", "diff"])
+        self.assertEqual(diff[4:6], ["0.6.3.12", "0.7.1.1"])
+
+    def test_release_cmd_publish_bad_fragment_fails(self):
+        runner = self._runner()
+        runner.responses[("git", "diff")] = "doc/operator-notes/bad.md\n"
+        runner.responses[("git", "show")] = "### X\n<!-- /publish:decaf -->"
         code = rel.cmd_publish(self._args(), rel.Git(runner), rel.Gh(runner))
         self.assertEqual(code, 1)
         self.assertFalse(runner.ran("gh", "release", "edit"))
         comment = next(c for c in runner.calls if c[:3] == ["gh", "issue", "comment"])
-        self.assertIn("missing for 0.7.0.1;", comment[-1])
+        self.assertIn("doc/operator-notes/bad.md", comment[-1])
 
     def test_release_cmd_publish_wrong_version_fails(self):
         runner = self._runner()
@@ -2166,51 +2235,6 @@ class CmdPublish(unittest.TestCase):
             ("gh", "workflow"),
         ):
             self.assertFalse(runner.ran(*write))
-
-    def test_release_cmd_notes_rerenders_publish_block_ok(self):
-        releases = [stated("0.7.0.1"), stated("0.7.0.2"), stated("0.7.0.3")]
-        releases = published(releases, "0.7.0.1")
-        releases = published(releases, "0.7.0.3")
-        rows = [
-            release_row("0.7.0.1", releases[0].title, releases[0].body, False),
-            release_row("0.7.0.2", body=rel.render_notes_block(None)),
-            release_row("0.7.0.3", releases[2].title, releases[2].body, False),
-        ]
-        runner = self._runner(releases=rows)
-        args = argparse.Namespace(
-            issue=42,
-            comment="/notes 0.7.0.2\nUrgency: High",
-            actor="alice",
-            run_url=None,
-            dry_run=False,
-        )
-        self.assertEqual(rel.cmd_notes(args, rel.Git(runner), rel.Gh(runner)), 0)
-        edits = [c for c in runner.calls if c[:3] == ["gh", "release", "edit"]]
-        self.assertEqual([c[3] for c in edits], ["0.7.0.2", "0.7.0.3"])
-        self.assertIn("--prerelease=true", edits[0])
-        self.assertIn("--latest=false", edits[0])
-        self.assertIn("--prerelease=false", edits[1])
-        self.assertIn("--latest=false", edits[1])
-
-    def test_release_cmd_notes_lost_holder_title_comments_fails(self):
-        held = published([stated("0.7.0.1"), stated("0.7.0.2")], "0.7.0.1")[0]
-        rows = [
-            release_row("0.7.0.1", "renamed by hand", held.body, False),
-            release_row("0.7.0.2", body=rel.render_notes_block(None)),
-        ]
-        runner = self._runner(releases=rows)
-        args = argparse.Namespace(
-            issue=42,
-            comment="/notes 0.7.0.2\nUrgency: High",
-            actor="alice",
-            run_url=None,
-            dry_run=False,
-        )
-        self.assertEqual(rel.cmd_notes(args, rel.Git(runner), rel.Gh(runner)), 1)
-        self.assertFalse(runner.ran("gh", "release", "edit"))
-        comment = next(c for c in runner.calls if c[:3] == ["gh", "issue", "comment"])
-        self.assertIn("/notes failed:", comment[-1])
-        self.assertIn("0.7.0.1", comment[-1])
 
 
 class NetworkIndex(unittest.TestCase):
