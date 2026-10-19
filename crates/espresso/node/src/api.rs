@@ -7754,80 +7754,19 @@ mod test {
         #[case] expected: EmptyStateStart,
         #[case] stamp_pruned_height: bool,
     ) -> anyhow::Result<()> {
-        const NUM_NODES: usize = 5;
-        const EPOCH_HEIGHT: u64 = 10;
-        // When pruning is on, the pruner never runs within the test.
-        const RETENTION: &str = "1000000s";
-
-        let storage = join_all((0..NUM_NODES).map(|_| SqlDataSource::create_storage())).await;
-        let persistence: [_; NUM_NODES] = storage
-            .iter()
-            .map(<SqlDataSource as TestableSequencerDataSource>::persistence_options)
-            .collect::<Vec<_>>()
-            .try_into()
-            .unwrap();
-        let api_port = reserve_tcp_port().expect("OS should have ephemeral ports available");
-        let api_url: Url = format!("http://localhost:{api_port}").parse().unwrap();
-        // The API node is the peer the query node fetches the snapshot, leaves and accounts from.
-        let config = TestNetworkConfigBuilder::with_num_nodes()
-            .api_config(SqlDataSource::options(
-                &storage[0],
-                Options::with_port(api_port)
-                    .catchup(Default::default())
-                    .light_client(Default::default()),
-            ))
-            .network_config(
-                TestConfigBuilder::default()
-                    .epoch_height(EPOCH_HEIGHT)
-                    .build(),
-            )
-            .persistences(persistence.clone())
-            .catchups(std::array::from_fn(|_| {
-                StatePeers::<StaticVersion<0, 1>>::from_urls(
-                    vec![api_url.clone()],
-                    Default::default(),
-                    Duration::from_secs(2),
-                    &NoMetrics,
-                )
-            }))
-            .pos_hook(
-                DelegationConfig::MultipleDelegators,
-                StakeTableContractVersion::V3,
-                TEST_UPGRADE,
-            )
-            .await?
-            .build();
-        let genesis_state = config.states()[0].clone();
-        let fee_recipient = genesis_state
-            .chain_config
-            .resolve()
-            .context("genesis chain config")?
-            .fee_recipient;
-        let mut network = TestNetwork::new(config, TEST_UPGRADE).await;
-
-        // Peer 0 comes back later as a query node on a database with no query data.
-        network.peers[0].shut_down().await;
-        network.peers.remove(0);
-        let api_client: Client<ClientErr, StaticVersion<0, 1>> = Client::new(api_url.clone());
-        assert!(api_client.connect(Some(Duration::from_secs(60))).await);
-
-        // Let the chain run a few epochs. Then, unless the database is brand new, stamp a data
-        // pruned height on it, as if the data pruner had run before the loop started.
-        let stamp = 3 * EPOCH_HEIGHT + EPOCH_HEIGHT / 2;
-        wait_until_block_height(&api_client, "status/block-height", stamp + EPOCH_HEIGHT).await;
-        let mut db_opt = tmp_options(&storage[1]);
-        db_opt.prune = expected == EmptyStateStart::RecentBoundary;
-        db_opt.pruning = <persistence::sql::PruningOptions as clap::Parser>::parse_from([
-            "pruning",
-            "--target-retention",
-            RETENTION,
-            "--state-target-retention",
-            RETENTION,
-            "--interval",
-            "3600s",
-        ]);
-        let db =
-            SqlStorage::connect(Config::try_from(&db_opt)?, StorageConnectionType::Query).await?;
+        let network = PrunedStartNetwork::start().await?;
+        // Let the chain run an epoch past the data pruned height stamped below, so a recent
+        // boundary lies above it.
+        let stamp = 3 * PRUNED_START_EPOCH_HEIGHT + PRUNED_START_EPOCH_HEIGHT / 2;
+        wait_until_block_height(
+            &network.api_client,
+            "status/block-height",
+            stamp + PRUNED_START_EPOCH_HEIGHT,
+        )
+        .await;
+        let (db_opt, db) = network.query_database(expected).await?;
+        // Unless the database is brand new, stamp a data pruned height on it, as if the data
+        // pruner had run before the loop started.
         let pruned = if stamp_pruned_height {
             prune_data_to(&db, stamp).await?;
             stamp
@@ -7835,80 +7774,19 @@ mod test {
             0
         };
         // `status/block-height` counts blocks, so the tip is one below it.
-        let tip = api_client.get::<u64>("status/block-height").send().await? - 1;
+        let tip = network
+            .api_client
+            .get::<u64>("status/block-height")
+            .send()
+            .await?
+            - 1;
+        let (_query_node, query_client) = network.start_query_node(db_opt).await;
 
-        let query_port = reserve_tcp_port().expect("OS should have ephemeral ports available");
-        let opt = Options::with_port(query_port).query_sql(
-            Query {
-                peers: vec![api_url.clone()],
-                ..Default::default()
-            },
-            db_opt,
-        );
-        let cfg = network.cfg.clone();
-        let node_persistence = persistence[1].clone();
-        let query_node = opt
-            .serve(move |metrics, consumer, storage| {
-                async move {
-                    Ok(cfg
-                        .init_node(
-                            1,
-                            genesis_state,
-                            node_persistence,
-                            Some(StatePeers::<StaticVersion<0, 1>>::from_urls(
-                                vec![api_url],
-                                Default::default(),
-                                Duration::from_secs(2),
-                                &NoMetrics,
-                            )),
-                            storage,
-                            &*metrics,
-                            STAKE_TABLE_CAPACITY_FOR_TEST,
-                            consumer,
-                            TEST_UPGRADE,
-                            Default::default(),
-                        )
-                        .await)
-                }
-                .boxed()
-            })
-            .await
-            .expect("query node should start");
-        query_node.start_consensus().await;
-
-        // The snapshot is the loop's first, so it holds the lowest block tree nodes.
         let deadline = Instant::now() + Duration::from_secs(180);
-        while state_heights(&db).await.1 == 0 {
-            ensure!(Instant::now() < deadline, "state loop did not start");
-            sleep(Duration::from_millis(200)).await;
-        }
-        let start = lowest_block_tree_node(&db).await?;
-        match expected {
-            // The boundary is recent only if the node's first local block was the consensus tip,
-            // not a lower block it filled in first.
-            EmptyStateStart::RecentBoundary => ensure!(
-                start > pruned && start.is_multiple_of(EPOCH_HEIGHT) && start + EPOCH_HEIGHT > tip,
-                "state loop started at {start}, not at an epoch boundary above the data pruned \
-                 height {pruned} and within an epoch of the tip {tip} when the node started"
-            ),
-            // The genesis tree has no blocks, so the first block tree nodes are at height 1.
-            EmptyStateStart::Genesis => {
-                ensure!(start == 1, "state loop started at {start}, not at genesis")
-            },
-        }
-
-        let past = start.max(pruned) + EPOCH_HEIGHT;
-        loop {
-            let (_, head) = state_heights(&db).await;
-            if head > past {
-                break;
-            }
-            ensure!(
-                Instant::now() < deadline,
-                "state loop did not get past {past}: head {head}, started at {start}"
-            );
-            sleep(Duration::from_millis(200)).await;
-        }
+        let start = wait_for_state_start(&db, deadline).await?;
+        check_state_start(expected, start, pruned, tip)?;
+        let past = start.max(pruned) + PRUNED_START_EPOCH_HEIGHT;
+        wait_for_state_head_above(&db, past, start, deadline).await?;
         let lowest = lowest_block_tree_node(&db).await?;
         ensure!(
             lowest == start,
@@ -7917,42 +7795,249 @@ mod test {
 
         // From V0.6 on no block changes the fee recipient, so the loop has it only if it stored
         // the account when it fetched it.
-        let query_client: Client<ClientErr, StaticVersion<0, 1>> =
-            Client::new(format!("http://localhost:{query_port}").parse()?);
-        wait_until_block_height(&api_client, "fee-state/block-height", past + 1).await;
-        assert_same_response(
-            &api_client,
-            &query_client,
-            &format!("fee-state/{past}/{fee_recipient}"),
-        )
-        .await?;
-
+        wait_until_block_height(&network.api_client, "fee-state/block-height", past + 1).await;
+        let fee_state = format!("fee-state/{past}/{}", network.fee_recipient);
+        assert_same_response(&network.api_client, &query_client, &fee_state).await?;
         if expected == EmptyStateStart::RecentBoundary {
-            let below = start - 1;
+            check_fee_state_around_start(&query_client, start, network.fee_recipient).await?;
+        }
+        Ok(())
+    }
+
+    /// The epoch height of the network in [`test_state_loop_starts_on_pruned_data`].
+    const PRUNED_START_EPOCH_HEIGHT: u64 = 10;
+
+    /// The network of [`test_state_loop_starts_on_pruned_data`]. Node 0 is the API node, the only
+    /// peer the query node fetches the snapshot, leaves and accounts from. Node 1 is shut down, to
+    /// come back as the query node on its own database, with no query data.
+    struct PrunedStartNetwork {
+        network: TestNetwork<persistence::sql::Options, 5>,
+        storage: Vec<<SqlDataSource as TestableSequencerDataSource>::Storage>,
+        /// Node 1's consensus persistence.
+        persistence: persistence::sql::Options,
+        api_url: Url,
+        api_client: Client<ClientErr, StaticVersion<0, 1>>,
+        genesis_state: ValidatedState,
+        fee_recipient: FeeAccount,
+    }
+
+    impl PrunedStartNetwork {
+        async fn start() -> anyhow::Result<Self> {
+            let storage = join_all((0..5).map(|_| SqlDataSource::create_storage())).await;
+            let persistence: [_; 5] = storage
+                .iter()
+                .map(<SqlDataSource as TestableSequencerDataSource>::persistence_options)
+                .collect::<Vec<_>>()
+                .try_into()
+                .unwrap();
+            let api_port = reserve_tcp_port().expect("OS should have ephemeral ports available");
+            let api_url: Url = format!("http://localhost:{api_port}").parse().unwrap();
+            let config = TestNetworkConfigBuilder::with_num_nodes()
+                .api_config(SqlDataSource::options(
+                    &storage[0],
+                    Options::with_port(api_port)
+                        .catchup(Default::default())
+                        .light_client(Default::default()),
+                ))
+                .network_config(
+                    TestConfigBuilder::default()
+                        .epoch_height(PRUNED_START_EPOCH_HEIGHT)
+                        .build(),
+                )
+                .persistences(persistence.clone())
+                .catchups(std::array::from_fn(|_| api_state_peers(&api_url)))
+                .pos_hook(
+                    DelegationConfig::MultipleDelegators,
+                    StakeTableContractVersion::V3,
+                    TEST_UPGRADE,
+                )
+                .await?
+                .build();
+            let genesis_state = config.states()[0].clone();
+            let fee_recipient = genesis_state
+                .chain_config
+                .resolve()
+                .context("genesis chain config")?
+                .fee_recipient;
+            let mut network = TestNetwork::new(config, TEST_UPGRADE).await;
+            network.peers[0].shut_down().await;
+            network.peers.remove(0);
+            let api_client = Client::new(api_url.clone());
+            assert!(api_client.connect(Some(Duration::from_secs(60))).await);
+            Ok(Self {
+                network,
+                storage,
+                persistence: persistence[1].clone(),
+                api_url,
+                api_client,
+                genesis_state,
+                fee_recipient,
+            })
+        }
+
+        /// The options of node 1's database, with pruning on when `expected` is a recent boundary,
+        /// and a connection to it.
+        async fn query_database(
+            &self,
+            expected: EmptyStateStart,
+        ) -> anyhow::Result<(persistence::sql::Options, SqlStorage)> {
+            // When pruning is on, the pruner never runs within the test.
+            const RETENTION: &str = "1000000s";
+            let mut db_opt = tmp_options(&self.storage[1]);
+            db_opt.prune = expected == EmptyStateStart::RecentBoundary;
+            db_opt.pruning = <persistence::sql::PruningOptions as clap::Parser>::parse_from([
+                "pruning",
+                "--target-retention",
+                RETENTION,
+                "--state-target-retention",
+                RETENTION,
+                "--interval",
+                "3600s",
+            ]);
+            let db = SqlStorage::connect(Config::try_from(&db_opt)?, StorageConnectionType::Query)
+                .await?;
+            Ok((db_opt, db))
+        }
+
+        /// Start node 1 as a query node on `db_opt`, and a client for its API.
+        async fn start_query_node(
+            &self,
+            db_opt: persistence::sql::Options,
+        ) -> (
+            SequencerContext<<persistence::sql::Options as PersistenceOptions>::Persistence>,
+            Client<ClientErr, StaticVersion<0, 1>>,
+        ) {
+            let query_port = reserve_tcp_port().expect("OS should have ephemeral ports available");
+            let opt = Options::with_port(query_port).query_sql(
+                Query {
+                    peers: vec![self.api_url.clone()],
+                    ..Default::default()
+                },
+                db_opt,
+            );
+            let cfg = self.network.cfg.clone();
+            let genesis_state = self.genesis_state.clone();
+            let node_persistence = self.persistence.clone();
+            let state_peers = api_state_peers(&self.api_url);
+            let query_node = opt
+                .serve(move |metrics, consumer, storage| {
+                    async move {
+                        Ok(cfg
+                            .init_node(
+                                1,
+                                genesis_state,
+                                node_persistence,
+                                Some(state_peers),
+                                storage,
+                                &*metrics,
+                                STAKE_TABLE_CAPACITY_FOR_TEST,
+                                consumer,
+                                TEST_UPGRADE,
+                                Default::default(),
+                            )
+                            .await)
+                    }
+                    .boxed()
+                })
+                .await
+                .expect("query node should start");
+            query_node.start_consensus().await;
+            let query_client =
+                Client::new(format!("http://localhost:{query_port}").parse().unwrap());
+            (query_node, query_client)
+        }
+    }
+
+    /// State peers that are just the API node at `api_url`.
+    fn api_state_peers(api_url: &Url) -> StatePeers<StaticVersion<0, 1>> {
+        StatePeers::from_urls(
+            vec![api_url.clone()],
+            Default::default(),
+            Duration::from_secs(2),
+            &NoMetrics,
+        )
+    }
+
+    /// The height the state loop started from, once it has stored its first snapshot, which holds
+    /// the lowest block tree nodes.
+    async fn wait_for_state_start(db: &SqlStorage, deadline: Instant) -> anyhow::Result<u64> {
+        while state_heights(db).await.1 == 0 {
+            ensure!(Instant::now() < deadline, "state loop did not start");
+            sleep(Duration::from_millis(200)).await;
+        }
+        lowest_block_tree_node(db).await
+    }
+
+    /// Check that the state loop started where `expected` says, given the data pruned height and
+    /// the tip when the query node started.
+    fn check_state_start(
+        expected: EmptyStateStart,
+        start: u64,
+        pruned: u64,
+        tip: u64,
+    ) -> anyhow::Result<()> {
+        match expected {
+            // The boundary is recent only if the node's first local block was the consensus tip,
+            // not a lower block it filled in first.
+            EmptyStateStart::RecentBoundary => ensure!(
+                start > pruned
+                    && start.is_multiple_of(PRUNED_START_EPOCH_HEIGHT)
+                    && start + PRUNED_START_EPOCH_HEIGHT > tip,
+                "state loop started at {start}, not at an epoch boundary above the data pruned \
+                 height {pruned} and within an epoch of the tip {tip} when the node started"
+            ),
+            // The genesis tree has no blocks, so the first block tree nodes are at height 1.
+            EmptyStateStart::Genesis => {
+                ensure!(start == 1, "state loop started at {start}, not at genesis")
+            },
+        }
+        Ok(())
+    }
+
+    async fn wait_for_state_head_above(
+        db: &SqlStorage,
+        past: u64,
+        start: u64,
+        deadline: Instant,
+    ) -> anyhow::Result<()> {
+        loop {
+            let (_, head) = state_heights(db).await;
+            if head > past {
+                return Ok(());
+            }
+            ensure!(
+                Instant::now() < deadline,
+                "state loop did not get past {past}: head {head}, started at {start}"
+            );
+            sleep(Duration::from_millis(200)).await;
+        }
+    }
+
+    /// Check the fee state a node that started from the boundary `start` serves next to it: at the
+    /// boundary, whose snapshot holds no fee account, the state is missing, and below it, pruned.
+    async fn check_fee_state_around_start(
+        client: &Client<ClientErr, StaticVersion<0, 1>>,
+        start: u64,
+        account: FeeAccount,
+    ) -> anyhow::Result<()> {
+        for (height, status) in [
+            (start, StatusCode::NOT_FOUND),
+            (start - 1, StatusCode::GONE),
+        ] {
             // The state query reads the header there, which the node may still be fetching.
-            query_client
-                .get::<serde_json::Value>(&format!("availability/header/{below}"))
+            client
+                .get::<serde_json::Value>(&format!("availability/header/{height}"))
                 .send()
                 .await?;
-            let answer = query_client
-                .get::<serde_json::Value>(&format!("fee-state/{below}/{fee_recipient}"))
+            let path = format!("fee-state/{height}/{account}");
+            let answer = client
+                .get::<serde_json::Value>(&path)
                 .send()
                 .await
                 .map_err(|err| err.status);
             ensure!(
-                answer == Err(StatusCode::GONE),
-                "fee-state/{below}: answered {answer:?}, not that the state below the start \
-                 {start} is pruned"
-            );
-            // The snapshot at the start holds no fee account, so the fee state there is missing.
-            let answer = query_client
-                .get::<serde_json::Value>(&format!("fee-state/{start}/{fee_recipient}"))
-                .send()
-                .await
-                .map_err(|err| err.status);
-            ensure!(
-                answer == Err(StatusCode::NOT_FOUND),
-                "fee-state/{start}: answered {answer:?}, not that the state there is missing"
+                answer == Err(status),
+                "{path}: answered {answer:?}, not {status}"
             );
         }
         Ok(())
