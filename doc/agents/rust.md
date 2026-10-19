@@ -4,6 +4,8 @@
 
 **MUST:**
 
+- Use `-p <package>` for all cargo commands (full workspace builds OOM)
+- Run `cargo test -p espresso-types reference` after modifying any serializable type
 - Run `cargo fmt` and `cargo check -p <package>` after changes
 - Update all three storage backends (PostgreSQL, SQLite, filesystem) when changing persistence
 
@@ -19,6 +21,7 @@
 cargo nextest run -p <package> -- <test_name>
 
 just check                            # postgres + embedded-db variants (pre-commit only)
+just lint                             # clippy with -D warnings
 just test-demo base                   # basic E2E; other cases in the `test-demo` recipe
 just test-slow                        # long-running tests
 just demo-native                      # local network via process-compose
@@ -112,7 +115,8 @@ Backends:
 
 Migrations (all three backends required when adding storage):
 
-- SQL via Refinery. Naming `V{n}__{name}.sql`.
+- SQL via Refinery. Naming `V{n}__{name}.sql`. Refinery migrations run at startup before the node joins consensus:
+  schema-only, fast. Work that scales with database size uses `DataBackfill`; see `doc/agents/refinery-migrations.md`.
 - Locations: `crates/espresso/node/api/migrations/{postgres,sqlite}/`,
   `crates/hotshot-query-service/migrations/{postgres,sqlite}/`.
 - hotshot-query-service uses multiples of 100 (V100, V200...) leaving gaps for applications.
