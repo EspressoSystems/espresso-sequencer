@@ -2189,6 +2189,26 @@ class CmdPublish(unittest.TestCase):
         self.assertIn("--prerelease=false", edits[1])
         self.assertIn("--latest=false", edits[1])
 
+    def test_release_cmd_notes_lost_holder_title_comments_fails(self):
+        held = published([stated("0.7.0.1"), stated("0.7.0.2")], "0.7.0.1")[0]
+        rows = [
+            release_row("0.7.0.1", "renamed by hand", held.body, False),
+            release_row("0.7.0.2", body=rel.render_notes_block(None)),
+        ]
+        runner = self._runner(releases=rows)
+        args = argparse.Namespace(
+            issue=42,
+            comment="/notes 0.7.0.2\nUrgency: High",
+            actor="alice",
+            run_url=None,
+            dry_run=False,
+        )
+        self.assertEqual(rel.cmd_notes(args, rel.Git(runner), rel.Gh(runner)), 1)
+        self.assertFalse(runner.ran("gh", "release", "edit"))
+        comment = next(c for c in runner.calls if c[:3] == ["gh", "issue", "comment"])
+        self.assertIn("/notes failed:", comment[-1])
+        self.assertIn("0.7.0.1", comment[-1])
+
 
 class NetworkIndex(unittest.TestCase):
     HISTORY: ClassVar[list] = [

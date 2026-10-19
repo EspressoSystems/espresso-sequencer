@@ -1876,6 +1876,11 @@ def cmd_notes(args: argparse.Namespace, git: Git, gh: Gh) -> int:
         else r
         for r in releases
     ]
+    try:
+        for network in NETWORKS:
+            _require_no_lost_holder(releases, network)
+    except ValueError as error:
+        return fail(str(error))
     repo = gh.repo()
     rerendered = rerender_blocks(
         releases,
