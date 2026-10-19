@@ -4758,16 +4758,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "espresso-node-sqlite"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "espresso-node",
- "espresso-utils",
- "tokio",
-]
-
-[[package]]
 name = "espresso-safe-tx-builder"
 version = "0.1.0"
 dependencies = [

@@ -119,7 +119,9 @@ impl TryFrom<SqlPool> for sqlx::SqlitePool {
 #[derivative(Debug)]
 pub struct Options {
     /// Store data in an embedded SQLite database instead of Postgres.
-    #[clap(skip = cfg!(feature = "embedded-db"))]
+    ///
+    /// The database lives under ESPRESSO_NODE_STORAGE_PATH, and the Postgres options are ignored.
+    #[clap(long, env = "ESPRESSO_NODE_EMBEDDED_DB")]
     pub embedded_db: bool,
 
     #[clap(flatten)]
@@ -656,6 +658,17 @@ pub(crate) fn within_gap_fill_horizon(view: u64, watermark: u64) -> bool {
 #[cfg(test)]
 mod test {
     use super::*;
+
+    #[test]
+    fn embedded_db_selects_sqlite_under_the_storage_path() {
+        let opt =
+            Options::try_parse_from(["storage-sql", "--embedded-db", "--path", "/data"]).unwrap();
+        assert!(opt.embedded_db);
+        assert_eq!(
+            opt.sqlite_options.path,
+            Some(PathBuf::from("/data/sqlite/database"))
+        );
+    }
 
     #[test]
     fn parsing_the_sqlite_path_creates_no_directory() {
