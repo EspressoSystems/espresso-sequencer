@@ -122,8 +122,8 @@ first and mainnet later. Only `/publish` turns a pre-release into a release.
 4. Validate the tag on devnet, or push an experimental branch for ad hoc changes. Fix the notes with `/notes X.Y.Z.N`.
 5. Optionally preview with `just release-notes X.Y.Z.N decaf`. Once a tag is validated, comment
    `/publish X.Y.Z.N decaf`, with network-specific deadlines on lines 2..n. Only releases are meant for operators. A
-   later mainnet promotion of the same tag is `/publish X.Y.Z.N mainnet` on the same tracker. `just release-publish`
-   still turns a pre-release into a release but sets no network. Announce with the release link.
+   later mainnet promotion of the same tag is `/publish X.Y.Z.N mainnet` on the same tracker. Announce with the release
+   link.
 6. Delete the release branch when it is no longer needed, shipped or abandoned. The tracker is closed with a final tag
    list and labelled `release-closed`.
 
