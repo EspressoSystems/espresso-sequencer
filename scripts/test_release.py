@@ -241,24 +241,13 @@ class CommandParse(unittest.TestCase):
             rel.parse_command("/tag\r\nUrgency: High\n\n- env X\n"),
             rel.Command("tag", None, "Urgency: High\n\n- env X"),
         )
-        self.assertEqual(
-            rel.parse_command("/notes 0.6.0.4\nnone"),
-            rel.Command("notes", "0.6.0.4", "none"),
-        )
-        self.assertEqual(
-            rel.parse_command("/notes 0.6.0.4"), rel.Command("notes", "0.6.0.4")
-        )
 
     def test_release_command_bot_marker_fails(self):
         for body in (
             "/publish 0.7.0.4 decaf\n<!-- /publish:decaf -->",
             "/tag\nUrgency: High <!-- operator-notes -->",
-            "/notes 0.6.0.4\n<!-- /operator-notes -->",
         ):
             self.assertIsNone(rel.parse_command(body), body)
-
-    def test_release_command_notes_needs_tag_fails(self):
-        self.assertIsNone(rel.parse_command("/notes\nnone"))
 
     def test_release_command_parse_mid_text_fails(self):
         self.assertIsNone(rel.parse_command("please /tag this"))
@@ -920,7 +909,8 @@ class CmdTagHappyPath(unittest.TestCase):
         )
         create = next(c for c in runner.calls if c[:3] == ["gh", "release", "create"])
         notes = create[create.index("--notes") + 1]
-        self.assertEqual(rel.tag_notes(notes), "### B\n\nUrgency: High")
+        self.assertTrue(notes.startswith(rel.NOTES_OPEN))
+        self.assertIn("### B\n\nUrgency: High", notes)
         self.assertIn("--generate-notes", create)
 
     def test_release_cmd_tag_text_is_ignored_ok(self):
@@ -1396,135 +1386,6 @@ class Fragments(unittest.TestCase):
         self.assertIsNone(rel.publish_base(t("0.7.0.1"), t("0.6.3.14"), tags))
 
 
-class OperatorNotes(unittest.TestCase):
-    def test_release_notes_block_roundtrip_ok(self):
-        block = rel.render_notes_block("Urgency: High\n- env X")
-        self.assertEqual(
-            rel.tag_notes(f"{block}\n\n## What's Changed"), "Urgency: High\n- env X"
-        )
-        self.assertEqual(
-            rel.tag_notes(block.replace("\n", "\r\n")), "Urgency: High\n- env X"
-        )
-
-    def test_release_notes_none_renders_no_action_ok(self):
-        self.assertEqual(rel.tag_notes(rel.render_notes_block(" None ")), rel.NO_ACTION)
-
-    def test_release_notes_unstated_ok(self):
-        self.assertIsNone(rel.tag_notes(rel.render_notes_block(None)))
-        self.assertIn(rel.NOT_STATED, rel.render_notes_block(None))
-        self.assertIsNone(rel.tag_notes("## What's Changed"))
-
-    def test_release_with_tag_notes_replaces_block_ok(self):
-        old = f"{rel.render_notes_block(None)}\n\nhand written\n\n## What's Changed"
-        new = rel.with_tag_notes(old, "none")
-        self.assertEqual(rel.tag_notes(new), rel.NO_ACTION)
-        self.assertEqual(new.count(rel.NOTES_OPEN), 1)
-        self.assertIn("hand written\n\n## What's Changed", new)
-
-    def test_release_with_tag_notes_reinserts_deleted_markers_ok(self):
-        new = rel.with_tag_notes("hand written", "Urgency: Low")
-        self.assertTrue(new.startswith(rel.NOTES_OPEN))
-        self.assertTrue(new.endswith("\n\nhand written"))
-        self.assertEqual(rel.tag_notes(new), "Urgency: Low")
-        self.assertEqual(rel.tag_notes(rel.with_tag_notes("", "none")), rel.NO_ACTION)
-
-
-class CmdNotes(unittest.TestCase):
-    def _runner(self, body: str = "") -> FakeRunner:
-        row = {
-            "tag_name": "0.6.0.4",
-            "name": "0.6.0.4",
-            "body": body,
-            "prerelease": True,
-        }
-        return FakeRunner(
-            {
-                ("gh", "issue", "view"): json.dumps(
-                    {"title": "Release 0.6.0", "body": ""}
-                ),
-                ("gh", "repo", "view"): REPO,
-                ("gh", "api", "repos/{owner}/{repo}/releases?per_page=100"): json.dumps(
-                    row
-                ),
-                ("gh", "release", "edit"): "",
-                ("gh", "workflow", "run"): "",
-                ("gh", "issue", "comment"): "",
-                PERMISSION: "write",
-            }
-        )
-
-    def _args(self, comment: str, actor="alice", dry_run=False):
-        return argparse.Namespace(
-            issue=42, comment=comment, actor=actor, run_url=None, dry_run=dry_run
-        )
-
-    def test_release_cmd_notes_ok(self):
-        runner = self._runner(rel.render_notes_block(None) + "\n\n## What's Changed")
-        code = rel.cmd_notes(
-            self._args("/notes 0.6.0.4\nUrgency: High"), rel.Git(runner), rel.Gh(runner)
-        )
-        self.assertEqual(code, 0)
-        edit = next(c for c in runner.calls if c[:3] == ["gh", "release", "edit"])
-        self.assertEqual(edit[3], "0.6.0.4")
-        self.assertIn("--latest=false", edit)
-        self.assertIn("--prerelease=true", edit)
-        self.assertTrue(
-            runner.ran("gh", "workflow", "run", "update-release-tracker.yml")
-        )
-        comment = next(c for c in runner.calls if c[:3] == ["gh", "issue", "comment"])
-        self.assertIn("`0.6.0.4`", comment[-1])
-
-    def test_release_cmd_notes_without_text_fails(self):
-        runner = self._runner()
-        code = rel.cmd_notes(
-            self._args("/notes 0.6.0.4"), rel.Git(runner), rel.Gh(runner)
-        )
-        self.assertEqual(code, 1)
-        self.assertFalse(runner.ran("gh", "release", "edit"))
-        comment = next(c for c in runner.calls if c[:3] == ["gh", "issue", "comment"])
-        self.assertIn("/notes failed", comment[-1])
-
-    def test_release_cmd_notes_other_version_fails(self):
-        runner = self._runner()
-        code = rel.cmd_notes(
-            self._args("/notes 0.7.0.1\nnone"), rel.Git(runner), rel.Gh(runner)
-        )
-        self.assertEqual(code, 1)
-        self.assertFalse(runner.ran("gh", "release", "edit"))
-
-    def test_release_cmd_notes_dry_run_writes_nothing_ok(self):
-        runner = self._runner()
-        out = io.StringIO()
-        with contextlib.redirect_stdout(out):
-            code = rel.cmd_notes(
-                self._args("/notes 0.6.0.4\nnone", actor=None, dry_run=True),
-                rel.Git(runner),
-                rel.Gh(runner),
-            )
-        self.assertEqual(code, 0)
-        self.assertIn(rel.NO_ACTION, out.getvalue())
-        for write in (("gh", "release", "edit"), ("gh", "issue", "comment")):
-            self.assertFalse(runner.ran(*write))
-
-    def test_release_cmd_notes_non_writer_fails(self):
-        runner = FakeRunner(
-            {
-                (
-                    "gh",
-                    "api",
-                    "repos/{owner}/{repo}/collaborators/mallory/permission",
-                ): "read"
-            }
-        )
-        code = rel.cmd_notes(
-            self._args("/notes 0.6.0.4\nnone", actor="mallory"),
-            rel.Git(runner),
-            rel.Gh(runner),
-        )
-        self.assertEqual(code, 1)
-        self.assertEqual(len(runner.calls), 1)
-
-
 # REQ:release-publish
 
 
@@ -1532,13 +1393,6 @@ def t(text: str) -> "rel.Tag":
     parsed = rel.parse_tag(text)
     assert parsed is not None
     return parsed
-
-
-def stated(
-    tag: str, text="none", title=None, prerelease=True, extra=""
-) -> "rel.ReleaseInfo":
-    body = f"{extra}{rel.render_notes_block(text)}\n\n## What's Changed"
-    return release(tag, title, body, prerelease)
 
 
 def plan(
@@ -1790,7 +1644,7 @@ class PublishBlock(unittest.TestCase):
 
 class PlanPublish(unittest.TestCase):
     def test_release_plan_bootstrap_ok(self):
-        releases = [stated("0.7.0.0"), stated("0.7.0.1")]
+        releases = [release("0.7.0.0"), release("0.7.0.1")]
         prev, edits = plan(releases, "0.7.0.1", collect=lambda *_: [frag()])
         self.assertIsNone(prev)
         (edit,) = edits
@@ -1802,7 +1656,11 @@ class PlanPublish(unittest.TestCase):
 
     def test_release_plan_supersedes_previous_ok(self):
         releases = published(
-            [stated("0.7.0.1"), stated("0.7.0.2"), stated("0.7.0.3", "Urgency: High")],
+            [
+                release("0.7.0.1"),
+                release("0.7.0.2"),
+                release("0.7.0.3"),
+            ],
             "0.7.0.1",
         )
         prev, edits = plan(releases, "0.7.0.3", date="2026-10-23")
@@ -1820,8 +1678,8 @@ class PlanPublish(unittest.TestCase):
     def test_release_plan_mainnet_takes_latest_ok(self):
         releases = [
             release("0.6.3.12", "0.6.3.12 [decaf, mainnet]", prerelease=False),
-            stated("0.7.0.0"),
-            stated("0.7.0.1"),
+            release("0.7.0.0"),
+            release("0.7.0.1"),
         ]
         prev, edits = plan(
             releases, "0.7.0.1", "mainnet", tags=[t("0.7.0.0"), t("0.7.0.1")]
@@ -1836,7 +1694,7 @@ class PlanPublish(unittest.TestCase):
     def test_release_plan_old_holder_keeps_latest_on_other_network_ok(self):
         releases = [
             release("0.6.3.12", "0.6.3.12 [decaf, mainnet]", prerelease=False),
-            stated("0.6.3.13"),
+            release("0.6.3.13"),
         ]
         _prev, edits = plan(releases, "0.6.3.13", "decaf", tags=[t("0.6.3.13")])
         new, old = edits
@@ -1845,22 +1703,22 @@ class PlanPublish(unittest.TestCase):
 
     def test_release_plan_none_clears_network_notes_ok(self):
         releases = published(
-            [stated("0.7.0.1"), stated("0.7.0.2")], "0.7.0.2", notes="Deadline view 5"
+            [release("0.7.0.1"), release("0.7.0.2")], "0.7.0.2", notes="Deadline view 5"
         )
         _prev, (cleared,) = plan(releases, "0.7.0.2", notes="none")
         self.assertNotIn("Deadline view 5", cleared.body)
         self.assertNotIn("network-notes", cleared.body)
         self.assertIsNone(rel.publish_block_notes(cleared.body, "decaf"))
-        _prev, (fresh,) = plan([stated("0.7.0.1")], "0.7.0.1", notes="none")
+        _prev, (fresh,) = plan([release("0.7.0.1")], "0.7.0.1", notes="none")
         self.assertNotIn("network-notes", fresh.body)
 
     def test_release_plan_missing_release_fails(self):
         with self.assertRaises(ValueError):
-            plan([stated("0.7.0.0")], "0.7.0.5")
+            plan([release("0.7.0.0")], "0.7.0.5")
 
     def test_release_plan_rerun_keeps_prev_date_and_notes_ok(self):
         releases = published(
-            [stated("0.7.0.1"), stated("0.7.0.2"), stated("0.7.0.3")],
+            [release("0.7.0.1"), release("0.7.0.2"), release("0.7.0.3")],
             "0.7.0.1",
         )
         releases = published(releases, "0.7.0.2", notes="Deadline view 5")
@@ -1876,14 +1734,18 @@ class PlanPublish(unittest.TestCase):
     def test_release_plan_rerun_supersedes_leftover_holder_ok(self):
         releases = [
             release("0.7.0.1", "0.7.0.1 [decaf]", prerelease=False),
-            stated("0.7.0.2", title="0.7.0.2 [decaf]", prerelease=False),
+            release("0.7.0.2", title="0.7.0.2 [decaf]", prerelease=False),
         ]
         _prev, edits = plan(releases, "0.7.0.2")
         self.assertEqual([e.tag for e in edits], ["0.7.0.2", "0.7.0.1"])
 
     def test_release_plan_rerun_after_first_edit_only_ok(self):
         releases = published(
-            [stated("0.7.0.1"), stated("0.7.0.2"), stated("0.7.0.3", "Urgency: High")],
+            [
+                release("0.7.0.1"),
+                release("0.7.0.2"),
+                release("0.7.0.3"),
+            ],
             "0.7.0.1",
         )
         prev, edits = plan(releases, "0.7.0.3", notes="Deadline view 5")
@@ -1894,7 +1756,7 @@ class PlanPublish(unittest.TestCase):
         self.assertEqual(again, edits)
 
     def test_release_plan_lost_holder_title_fails(self):
-        releases = published([stated("0.7.0.1"), stated("0.7.0.2")], "0.7.0.1")
+        releases = published([release("0.7.0.1"), release("0.7.0.2")], "0.7.0.1")
         releases[0] = release("0.7.0.1", "renamed by hand", releases[0].body, False)
         with self.assertRaises(ValueError) as caught:
             plan(releases, "0.7.0.2")
@@ -1902,14 +1764,14 @@ class PlanPublish(unittest.TestCase):
         self.assertIn("title", str(caught.exception))
 
     def test_release_plan_superseded_block_is_not_lost_ok(self):
-        releases = published([stated("0.7.0.1"), stated("0.7.0.2")], "0.7.0.1")
+        releases = published([release("0.7.0.1"), release("0.7.0.2")], "0.7.0.1")
         releases = published(releases, "0.7.0.2")
-        releases[1] = stated("0.7.0.2")
+        releases[1] = release("0.7.0.2")
         prev, _edits = plan(releases, "0.7.0.1")
         self.assertIsNone(prev)
 
     def test_release_plan_rollback_ok(self):
-        releases = published([stated("0.7.0.1"), stated("0.7.0.2")], "0.7.0.2")
+        releases = published([release("0.7.0.1"), release("0.7.0.2")], "0.7.0.2")
         prev, edits = plan(releases, "0.7.0.1")
         self.assertEqual(prev, t("0.7.0.2"))
         self.assertIn("Rollback from 0.7.0.2.", edits[0].body)
@@ -1917,7 +1779,7 @@ class PlanPublish(unittest.TestCase):
 
     def test_release_plan_republish_drops_stale_block_ok(self):
         releases = published(
-            [stated("0.7.0.1"), stated("0.7.0.2")], "0.7.0.1", notes="Old deadline"
+            [release("0.7.0.1"), release("0.7.0.2")], "0.7.0.1", notes="Old deadline"
         )
         releases = published(releases, "0.7.0.2")
         self.assertIn("Superseded", releases[0].body)
@@ -1985,8 +1847,8 @@ class PublishComment(unittest.TestCase):
 class CmdPublish(unittest.TestCase):
     def _runner(self, build='[{"databaseId": 1}]', releases=None, perm="write"):
         rows = releases or [
-            release_row("0.7.0.1", body=rel.render_notes_block("none")),
-            release_row("0.7.0.2", body=rel.render_notes_block("Urgency: High")),
+            release_row("0.7.0.1"),
+            release_row("0.7.0.2"),
         ]
         return FakeRunner(
             {
@@ -2107,10 +1969,10 @@ class CmdPublish(unittest.TestCase):
         self.assertNotIn("<!-- /publish", comment[-1])
 
     def test_release_cmd_publish_lost_holder_title_comments_fails(self):
-        held = published([stated("0.7.0.1"), stated("0.7.0.2")], "0.7.0.1")[0]
+        held = published([release("0.7.0.1"), release("0.7.0.2")], "0.7.0.1")[0]
         rows = [
             release_row("0.7.0.1", "renamed by hand", held.body, False),
-            release_row("0.7.0.2", body=rel.render_notes_block("none")),
+            release_row("0.7.0.2"),
         ]
         runner = self._runner(releases=rows)
         code = rel.cmd_publish(self._args(), rel.Git(runner), rel.Gh(runner))

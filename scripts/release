@@ -13,7 +13,6 @@ Commands, fed from GitHub Actions `env:` (never interpolated into `run:` text) o
     scripts/release cut --version 0.6.0 --source-ref main
     scripts/release tag --issue 1234 --comment "/tag"
     scripts/release backport --issue 1234 --comment "/backport #123"
-    scripts/release notes --issue 1234 --comment "/notes 0.6.0.4"
     scripts/release publish --issue 1234 --comment "/publish 0.6.0.4 decaf"
     scripts/release publish --dry-run --comment "/publish 0.6.0.4 mainnet"   # preview, no writes
     scripts/release refresh --ref refs/heads/main
@@ -33,7 +32,7 @@ import tempfile
 import urllib.parse
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from functools import partial
 from pathlib import Path
@@ -45,7 +44,6 @@ SENTINEL = "<!-- HUMAN NOTES BELOW -->"
 NOTES_OPEN = "<!-- operator-notes -->"
 NOTES_CLOSE = "<!-- /operator-notes -->"
 NOTES_HEADING = "## Operator notes"
-NOT_STATED = "_Not yet stated._"
 NO_ACTION = "No operator action required."
 FRAGMENT_DIR = "doc/operator-notes"
 FRAGMENT_README = f"{FRAGMENT_DIR}/README.md"
@@ -61,9 +59,8 @@ COMMANDS_LEGEND = """## Commands
 
 | Comment | Effect |
 |---|---|
-| `/tag` | Tag the branch tip with the next patch and create a pre-release. Lines 2..n are the tag's operator notes. |
+| `/tag` | Tag the branch tip with the next patch and create a pre-release. |
 | `/tag X.Y.Z.N` | Same with an explicit tag. |
-| `/notes X.Y.Z.N` | Replace the tag's operator notes with lines 2..n; `none` for no operator action. |
 | `/publish X.Y.Z.N decaf` | Make the tag the release for the network (`decaf` or `mainnet`). Lines 2..n are notes for that network; `none` clears them. |
 | `/backport 123` | Open a backport PR for merged PR 123 against this branch. |
 | `/done <sha>` | Mark a commit ported by hand (☑️). |
@@ -76,7 +73,7 @@ _VERSION_RE = re.compile(r"^(?:Release\s+)?(\d+)\.(\d+)\.(\d+)$")
 _BRANCH_RE = re.compile(r"^release-(\d+)\.(\d+)\.(\d+)(--.+)?$")
 _TAG_RE = re.compile(r"^(\d+)\.(\d+)\.(\d+)\.(\d+)$")
 _COMMAND_RE = re.compile(
-    r"\A/(tag|done|skip|unmark|backport|notes|publish)"
+    r"\A/(tag|done|skip|unmark|backport|publish)"
     r"(?:[ \t]+(\S+))?(?:[ \t]+(\S+))?[ \t]*(?:\r?\n|\Z)"
 )
 _TITLE_RE = re.compile(r"^\S+ \[([^\]]+)\]$")
@@ -86,9 +83,6 @@ _NETWORK_NOTES_RE = re.compile(
 )
 _HISTORY_ROW_RE = re.compile(
     r"^\| \[`([^`]+)`\]\([^)]*\) \| (\S+) \| (\S+) \| (?:`([^`]+)`|-) \|$", re.MULTILINE
-)
-_NOTES_RE = re.compile(
-    rf"{re.escape(NOTES_OPEN)}\n(.*?)\n{re.escape(NOTES_CLOSE)}", re.DOTALL
 )
 _SHA_RE = re.compile(r"^[0-9a-fA-F]{7,40}$")
 _PR_ARG_RE = re.compile(r"^#?(\d+)$")
@@ -156,7 +150,7 @@ class Comment:
 
 Network = Literal["decaf", "mainnet"]
 NETWORKS: tuple[Network, ...] = ("decaf", "mainnet")
-CommandName = Literal["tag", "done", "skip", "unmark", "backport", "notes", "publish"]
+CommandName = Literal["tag", "done", "skip", "unmark", "backport", "publish"]
 
 
 @dataclass(frozen=True)
@@ -320,8 +314,6 @@ def parse_command(body: str) -> Command | None:
         return None
     if kind == "tag":
         return Command(kind, arg, text)
-    if kind == "notes":
-        return Command(kind, arg, text) if arg else None
     if kind == "backport":
         pr = _PR_ARG_RE.match(arg) if arg else None
         return Command(kind, pr.group(1)) if pr else None
@@ -496,12 +488,7 @@ def build_runs_url(repo: str, tag: str) -> str:
     )
 
 
-def render_notes_block(text: str | None) -> str:
-    """`None` renders the unstated placeholder; `none` renders the no-action line."""
-    if text is None:
-        text = NOT_STATED
-    elif text.strip().lower() == "none":
-        text = NO_ACTION
+def render_notes_block(text: str) -> str:
     return f"{NOTES_OPEN}\n{NOTES_HEADING}\n\n{text.strip()}\n{NOTES_CLOSE}"
 
 
@@ -541,24 +528,6 @@ def publish_base(prev: Tag | None, target: Tag, line_tags: list[Tag]) -> Tag | N
     if prev is None:
         return tag_base(target, line_tags)
     return prev if prev < target else None
-
-
-def tag_notes(body: str) -> str | None:
-    """The stated notes text, or None when the block is missing or still the placeholder."""
-    match = _NOTES_RE.search(normalize_newlines(body))
-    if match is None:
-        return None
-    text = match.group(1).removeprefix(NOTES_HEADING).strip()
-    return None if text in ("", NOT_STATED) else text
-
-
-def with_tag_notes(body: str, text: str) -> str:
-    """Replaces the notes block, or puts a new one on top if the markers are gone."""
-    block = render_notes_block(text)
-    body = normalize_newlines(body)
-    if _NOTES_RE.search(body):
-        return _NOTES_RE.sub(lambda _match: block, body, count=1)
-    return f"{block}\n\n{body}" if body else f"{block}\n"
 
 
 def find_release(releases: list[ReleaseInfo], tag: str) -> ReleaseInfo | None:
@@ -1079,20 +1048,6 @@ def render_tag_comment(
         f"Tagged `{tag}` at [`{sha[:8]}`]({commit_url}){requested_by}.",
         "",
         f"[Pre-release]({pre_release}) · [Build runs]({build_runs})",
-    ]
-    if run_url:
-        lines.append(f"[Workflow run]({run_url})")
-    return "\n".join(lines) + "\n"
-
-
-def render_notes_comment(
-    tag: Tag, repo: str, actor: str | None, run_url: str | None
-) -> str:
-    requested_by = f", requested by @{actor}" if actor else ""
-    lines = [
-        f"Updated the operator notes of `{tag}`{requested_by}.",
-        "",
-        f"[Release]({release_url(repo, str(tag))})",
     ]
     if run_url:
         lines.append(f"[Workflow run]({run_url})")
@@ -1825,52 +1780,6 @@ def _tag_notes(git: Git, tag: Tag, existing: list[str], sha: str) -> str:
     return render_notes_block(render_fragments(git.fragments(str(base), sha)))
 
 
-def cmd_notes(args: argparse.Namespace, git: Git, gh: Gh) -> int:
-    if not args.dry_run and not require_writer(gh, args.actor):
-        return 1
-    version = tracker_version(gh, args.issue)
-    if version is None:
-        return 1
-
-    fail = partial(report_failure, gh, args.issue, "/notes", dry_run=args.dry_run)
-    command = parse_command(args.comment)
-    if command is None or command.name != "notes" or command.arg is None:
-        return fail(bad_command(args.comment, "`/notes X.Y.Z.N`"))
-    tag = parse_tag(command.arg)
-    if tag is None or tag.version != version:
-        return fail(f"tag {command.arg} does not belong to {version}")
-    if command.text is None:
-        return fail("put the notes on lines 2..n, or `none`")
-    releases = gh.release_list()
-    if find_release(releases, command.arg) is None:
-        return fail(f"no release for {tag}")
-
-    releases = [
-        replace(r, body=with_tag_notes(r.body, command.text))
-        if r.tag == command.arg
-        else r
-        for r in releases
-    ]
-    repo = gh.repo()
-    edits = [
-        ReleaseEdit(r.tag, r.title, r.body, r.prerelease)
-        for r in releases
-        if r.tag == command.arg
-    ]
-    if args.dry_run:
-        for edit in edits:
-            print(f"# {edit.tag}\n")
-            print(edit.body)
-        return 0
-    for edit in edits:
-        gh.release_edit(edit)
-    gh.workflow_run("update-release-tracker.yml", None, {"issue": str(args.issue)})
-    gh.issue_comment(
-        args.issue, render_notes_comment(tag, repo, args.actor, args.run_url)
-    )
-    return 0
-
-
 def _promotion(
     gh: Gh, number: int | None, target: Tag, prev: Tag | None, actor: str | None
 ) -> tuple[History, bool]:
@@ -2185,20 +2094,6 @@ def main(argv: list[str]) -> int:
     backport.add_argument("--actor", required=True)
     backport.add_argument("--run-url")
     backport.set_defaults(func=cmd_backport)
-
-    notes = sub.add_parser(
-        "notes", help="replace a tag's operator notes for a `/notes X.Y.Z.N` comment"
-    )
-    notes.add_argument("--issue", type=int, required=True)
-    notes.add_argument("--comment", required=True, help="full comment body")
-    notes.add_argument("--actor", help="GitHub login credited in the tracker comment")
-    notes.add_argument("--run-url")
-    notes.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="print the new release body instead of writing",
-    )
-    notes.set_defaults(func=cmd_notes)
 
     publish = sub.add_parser(
         "publish", help="make a tag the release for a network, for a `/publish` comment"

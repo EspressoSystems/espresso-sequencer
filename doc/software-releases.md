@@ -151,12 +151,12 @@ comment.
 
 ## Workflows
 
-| Workflow                     | Trigger                                                                | Runs                                                  |
-| ---------------------------- | ---------------------------------------------------------------------- | ----------------------------------------------------- |
-| `release-branch.yml`         | `workflow_dispatch`, branch `delete`                                   | `scripts/release cut`, `teardown`                     |
-| `tag-release.yml`            | `/tag`, `/backport`, `/notes`, `/publish` comment, `workflow_dispatch` | `scripts/release tag`, `backport`, `notes`, `publish` |
-| `update-release-tracker.yml` | push to `main`/`release-*`, mark comments, dispatch                    | `scripts/release refresh`                             |
-| `build.yml`                  | dispatched by `cut` and `tag` for the new tag                          | docker images                                         |
+| Workflow                     | Trigger                                                      | Runs                                         |
+| ---------------------------- | ------------------------------------------------------------ | -------------------------------------------- |
+| `release-branch.yml`         | `workflow_dispatch`, branch `delete`                         | `scripts/release cut`, `teardown`            |
+| `tag-release.yml`            | `/tag`, `/backport`, `/publish` comment, `workflow_dispatch` | `scripts/release tag`, `backport`, `publish` |
+| `update-release-tracker.yml` | push to `main`/`release-*`, mark comments, dispatch          | `scripts/release refresh`                    |
+| `build.yml`                  | dispatched by `cut` and `tag` for the new tag                | docker images                                |
 
 Tags pushed by workflows do not fire `push` events, so `cut` and `tag` dispatch `build.yml` and the tracker refresh
 explicitly.
@@ -213,10 +213,9 @@ gh workflow run release-branch.yml -f version=X.Y.Z -f source_ref=$(git rev-pars
   collaborators API, and mark replay ignores commands by users without write access.
 - Trackers are only recognized when opened by `github-actions[bot]`. They are not locked: the workflow token cannot
   comment on locked issues.
-- `/notes` and `/publish` need the same write access as `/tag`. There is no environment approval: the decision stays on
-  the tracker.
+- `/publish` needs the same write access as `/tag`. There is no environment approval: the decision stays on the tracker.
 - Concurrency groups are job-level, so skipped runs from outside comments or fork PRs never cancel a pending run. The
-  `notes` and `publish` jobs share the group `release-publish`, because a run edits releases of more than one line.
+  `publish` job uses the group `release-publish`, because a run edits releases of more than one line.
 - GitHub allows one running and one pending run per concurrency group; a newer pending run replaces the older one. Send
   tracker commands one at a time and wait for the bot reply. If the reply is missing, the command was probably replaced
   or failed: check the Actions tab and repost it.
