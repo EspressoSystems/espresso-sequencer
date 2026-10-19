@@ -99,7 +99,9 @@ first and mainnet later. Only `/publish` turns a pre-release into a release.
   | no P (first publish)      | added or edited in X's `/tag` range (none for a `.0`) |
   | X older than P (rollback) | none; the block says `Rollback from P`                |
 
-  No fragments render `No operator action required.`
+  A first publish prefixes the fragments with the line
+  `No previous release recorded on <network>; operator actions since <base> only.` The base is the tag before X; a `.0`
+  has none and the line ends after `<network>`. No fragments render `No operator action required.`
 
 - Do not edit release titles or the bot's markers by hand. The title marker is the record of the current holder. If it
   is lost while the block remains, `/publish` fails naming the release; restore the title (`<tag> [<network>]`) and

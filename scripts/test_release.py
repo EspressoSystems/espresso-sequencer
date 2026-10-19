@@ -1595,8 +1595,12 @@ class FragmentRange(unittest.TestCase):
 
     def test_release_plan_bootstrap_uses_tag_range_ok(self):
         releases = [release("0.7.0.0"), release("0.7.0.1"), release("0.7.0.2")]
-        calls, _edit = self._plan(releases, "0.7.0.2")
+        calls, edit = self._plan(releases, "0.7.0.2")
         self.assertEqual(calls, [("0.7.0.1", "0.7.0.2")])
+        self.assertIn(
+            "No previous release recorded on decaf; operator actions since 0.7.0.1 only.",
+            edit.body,
+        )
 
     def test_release_plan_bootstrap_dot_zero_is_empty_ok(self):
         calls, edit = self._plan([release("0.7.0.0")], "0.7.0.0")
@@ -1627,9 +1631,16 @@ class FragmentRange(unittest.TestCase):
 
 
 class PublishBlock(unittest.TestCase):
-    def _block(self, prev, target, fragments, notes=None):
+    def _block(self, prev, target, fragments, notes=None, base=None):
         return rel.render_publish_block(
-            "decaf", prev and t(prev), t(target), "2026-10-21", notes, fragments, REPO
+            "decaf",
+            prev and t(prev),
+            t(target),
+            "2026-10-21",
+            notes,
+            fragments,
+            REPO,
+            base and t(base),
         )
 
     def test_release_publish_block_header_ok(self):
@@ -1667,6 +1678,25 @@ class PublishBlock(unittest.TestCase):
         self.assertIn("## Operator actions for decaf\n", block)
         self.assertNotIn("Supersedes", block)
         self.assertNotIn("Compare", block)
+
+    def test_release_publish_block_first_publish_says_so_ok(self):
+        block = self._block(None, "0.6.3.12", [frag()], base="0.6.3.11")
+        message = "No previous release recorded on decaf; operator actions since 0.6.3.11 only."
+        self.assertIn(message, block)
+        self.assertLess(block.index(message), block.index("### A"))
+
+    def test_release_publish_block_first_publish_empty_says_so_ok(self):
+        block = self._block(None, "0.6.3.12", [], base="0.6.3.11")
+        self.assertIn("No previous release recorded on decaf;", block)
+        self.assertIn(rel.NO_ACTION, block)
+
+    def test_release_publish_block_first_dot_zero_says_so_ok(self):
+        block = self._block(None, "0.6.3.0", [])
+        self.assertIn("No previous release recorded on decaf.", block)
+
+    def test_release_publish_block_with_prev_has_no_first_message_ok(self):
+        block = self._block("0.7.0.1", "0.7.0.3", [], base="0.7.0.1")
+        self.assertNotIn("No previous release", block)
 
     def test_release_publish_block_rollback_ok(self):
         block = self._block("0.7.0.4", "0.7.0.2", [])
@@ -1718,6 +1748,7 @@ class PublishBlock(unittest.TestCase):
             "Superseded on decaf by the ops team",
             [],
             REPO,
+            None,
         )
         once = rel.mark_superseded(block, "decaf", "0.7.0.4", "2026-10-23")
         twice = rel.mark_superseded(once, "decaf", "0.7.0.5", "2026-10-24")

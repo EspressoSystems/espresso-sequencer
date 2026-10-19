@@ -615,7 +615,9 @@ def render_publish_block(
     network_notes: str | None,
     fragments: list[Fragment],
     repo: str,
+    base: Tag | None,
 ) -> str:
+    """`base` is where the fragment range starts; it is only named when there is no `prev`."""
     rollback = prev is not None and target < prev
     image = f"ghcr.io/{repo.lower()}/espresso-node:{target}"
     status = f"Deployable on **{network}** since {date}."
@@ -624,6 +626,8 @@ def render_publish_block(
     sections = []
     if network_notes:
         sections.append(f"{NETWORK_NOTES_OPEN}\n{network_notes}\n{NETWORK_NOTES_CLOSE}")
+    if prev is None:
+        sections.append(_no_previous_line(network, base))
     if not rollback:
         sections.append(render_fragments(fragments))
     if prev is not None and not rollback:
@@ -643,6 +647,11 @@ def render_publish_block(
             f"<!-- /publish:{network} -->",
         ]
     )
+
+
+def _no_previous_line(network: Network, base: Tag | None) -> str:
+    line = f"No previous release recorded on {network}"
+    return f"{line}; operator actions since {base} only." if base else f"{line}."
 
 
 def with_block(body: str, network: Network, block: str) -> str:
@@ -705,7 +714,7 @@ def plan_publish(
     base = publish_base(prev, target, line_tags)
     fragments = collect(base, target) if base is not None else []
     block = render_publish_block(
-        network, prev, target, since, network_notes, fragments, repo
+        network, prev, target, since, network_notes, fragments, repo, base
     )
     edit = ReleaseEdit(
         release.tag,
