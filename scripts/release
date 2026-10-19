@@ -604,6 +604,14 @@ def publish_block_prev(body: str, network: Network) -> tuple[str | None, str] | 
     return (None if prev == "none" else prev), match.group("date")
 
 
+def has_active_block(body: str, network: Network) -> bool:
+    """A publish block that was never superseded."""
+    match = _block_re(network).search(normalize_newlines(body))
+    return match is not None and f"<!-- superseded:{network} -->" not in match.group(
+        "inner"
+    )
+
+
 def publish_block_notes(body: str, network: Network) -> str | None:
     match = _block_re(network).search(normalize_newlines(body))
     notes = _NETWORK_NOTES_RE.search(match.group("inner")) if match else None
@@ -716,6 +724,7 @@ def plan_publish(
         for r in releases
         if r.tag != release.tag and network in title_networks(r.title)
     ]
+    _require_no_lost_holder(releases, network)
     stored = (
         publish_block_prev(release.body, network)
         if network in title_networks(release.title)
@@ -748,6 +757,19 @@ def plan_publish(
     )
     superseded = [_supersede(other, network, release.tag, date) for other in others]
     return prev, [edit, *superseded]
+
+
+def _require_no_lost_holder(releases: list[ReleaseInfo], network: Network) -> None:
+    """A live block without a title marker means the title was edited by hand; the previous
+    holder is unknown, so publishing now would lose it."""
+    if any(network in title_networks(r.title) for r in releases):
+        return
+    lost = [r.tag for r in releases if has_active_block(r.body, network)]
+    if lost:
+        raise ValueError(
+            f"{', '.join(lost)} has a {network} publish block but its title lost the "
+            f"`[{network}]` marker; restore the title to `<tag> [{network}]`, then rerun"
+        )
 
 
 def _supersede(

@@ -97,6 +97,9 @@ first and mainnet later. Only `/publish` turns a pre-release into a release.
 
   Tags with a stated action get a subsection, newest first. Tags with `none` fold into one `<tags>: no action` line.
 
+- Do not edit release titles or the bot's markers by hand. The title marker is the record of the current holder. If it
+  is lost while the block remains, `/publish` fails naming the release; restore the title (`<tag> [<network>]`) and
+  rerun.
 - Command text (lines 2..n) must not contain `<!--`; the command fails with a tracker comment otherwise.
 - `/notes X.Y.Z.N` re-renders every current block, so the per-tag notes and the cumulative view stay in step.
 - Gates, each reported as a tracker comment without changing anything: the tag belongs to the tracker's version, the

@@ -1782,6 +1782,21 @@ class PlanPublish(unittest.TestCase):
         self.assertEqual(again_prev, prev)
         self.assertEqual(again, edits)
 
+    def test_release_plan_lost_holder_title_fails(self):
+        releases = published([stated("0.7.0.1"), stated("0.7.0.2")], "0.7.0.1")
+        releases[0] = release("0.7.0.1", "renamed by hand", releases[0].body, False)
+        with self.assertRaises(ValueError) as caught:
+            plan(releases, "0.7.0.2")
+        self.assertIn("0.7.0.1", str(caught.exception))
+        self.assertIn("title", str(caught.exception))
+
+    def test_release_plan_superseded_block_is_not_lost_ok(self):
+        releases = published([stated("0.7.0.1"), stated("0.7.0.2")], "0.7.0.1")
+        releases = published(releases, "0.7.0.2")
+        releases[1] = stated("0.7.0.2")
+        prev, _edits = plan(releases, "0.7.0.1")
+        self.assertIsNone(prev)
+
     def test_release_plan_rollback_ok(self):
         releases = published([stated("0.7.0.1"), stated("0.7.0.2")], "0.7.0.2")
         prev, edits = plan(releases, "0.7.0.1")
@@ -2012,6 +2027,20 @@ class CmdPublish(unittest.TestCase):
         self.assertIn("/publish failed:", comment[-1])
         self.assertIn("must not contain `<!--`", comment[-1])
         self.assertNotIn("<!-- /publish", comment[-1])
+
+    def test_release_cmd_publish_lost_holder_title_comments_fails(self):
+        held = published([stated("0.7.0.1"), stated("0.7.0.2")], "0.7.0.1")[0]
+        rows = [
+            release_row("0.7.0.1", "renamed by hand", held.body, False),
+            release_row("0.7.0.2", body=rel.render_notes_block("none")),
+        ]
+        runner = self._runner(releases=rows)
+        code = rel.cmd_publish(self._args(), rel.Git(runner), rel.Gh(runner))
+        self.assertEqual(code, 1)
+        self.assertFalse(runner.ran("gh", "release", "edit"))
+        comment = next(c for c in runner.calls if c[:3] == ["gh", "issue", "comment"])
+        self.assertIn("/publish failed:", comment[-1])
+        self.assertIn("0.7.0.1", comment[-1])
 
     def test_release_cmd_publish_build_gate_fails(self):
         runner = self._runner(build="[]")
