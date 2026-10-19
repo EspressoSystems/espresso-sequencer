@@ -91,7 +91,7 @@ first and mainnet later. Only `/publish` turns a pre-release into a release.
   | Case                      | Range                                   |
   | ------------------------- | --------------------------------------- |
   | P on the same line as X   | tags after P up to X                    |
-  | P on another line         | `X.Y.Z.0` up to X                       |
+  | P on another line         | every tag of each later line, up to X   |
   | no P (first publish)      | X only                                  |
   | X older than P (rollback) | empty; the block says `Rollback from P` |
 

@@ -549,15 +549,42 @@ def current_release(
 
 
 def notes_range(prev: Tag | None, target: Tag, line_tags: list[Tag]) -> list[Tag]:
-    """Tags whose notes an operator moving from `prev` to `target` must read. Empty on rollback."""
+    """Tags whose notes an operator moving from `prev` to `target` must read. Empty on rollback.
+
+    Across lines: every tag of every line after `prev`'s, up to `target`.
+    """
     if prev is None:
         return [target]
     if target <= prev:
         return []
-    tags = sorted(tag for tag in line_tags if tag.version == target.version)
     if prev.version == target.version:
-        return [tag for tag in tags if prev < tag <= target]
-    return [tag for tag in tags if tag <= target]
+        return sorted(tag for tag in line_tags if prev < tag <= target)
+    return sorted(
+        tag for tag in line_tags if prev.version < tag.version and tag <= target
+    )
+
+
+def scope_versions(
+    releases: list[ReleaseInfo], target: Tag, network: Network
+) -> list[Version]:
+    """The lines whose tags `notes_range` can need: from the oldest possible previous holder
+    (a marked release or the target's stored prev) up to the target's line."""
+    release = find_release(releases, str(target))
+    stored = publish_block_prev(release.body, network) if release else None
+    candidates = [r.tag for r in releases if network in title_networks(r.title)]
+    if stored is not None and stored[0] is not None:
+        candidates.append(stored[0])
+    floor = min(
+        (tag.version for text in candidates if (tag := parse_tag(text))),
+        default=target.version,
+    )
+    floor = min(floor, target.version)
+    lines = {
+        tag.version
+        for r in releases
+        if (tag := parse_tag(r.tag)) and floor <= tag.version <= target.version
+    }
+    return sorted(lines | {target.version})
 
 
 def _block_re(network: Network) -> re.Pattern[str]:
@@ -1820,11 +1847,13 @@ def cmd_notes(args: argparse.Namespace, git: Git, gh: Gh) -> int:
 
 
 def line_tags(git: Git, releases: list[ReleaseInfo]) -> list[Tag]:
-    """Tags of every line that has a release holding a network."""
+    """Tags of every line a current publish block can draw notes from."""
     versions = {
-        tag.version
+        version
         for release in releases
-        if title_networks(release.title) and (tag := parse_tag(release.tag))
+        if (target := parse_tag(release.tag))
+        for network in title_networks(release.title)
+        for version in scope_versions(releases, target, network)
     }
     return [tag for version in sorted(versions) for tag in _version_tags(git, version)]
 
@@ -1832,6 +1861,13 @@ def line_tags(git: Git, releases: list[ReleaseInfo]) -> list[Tag]:
 def _version_tags(git: Git, version: Version) -> list[Tag]:
     git.fetch(version, [])
     return [tag for name in git.tag_list(f"{version}.*") if (tag := parse_tag(name))]
+
+
+def publish_tags(
+    git: Git, releases: list[ReleaseInfo], target: Tag, network: Network
+) -> list[Tag]:
+    versions = scope_versions(releases, target, network)
+    return [tag for version in versions for tag in _version_tags(git, version)]
 
 
 def _promotion(
@@ -1879,12 +1915,13 @@ def cmd_publish(args: argparse.Namespace, git: Git, gh: Gh) -> int:
 
     repo, network = gh.repo(), command.network
     try:
+        releases = gh.release_list()
         prev, edits = plan_publish(
-            gh.release_list(),
+            releases,
             target,
             network,
             command.text,
-            _version_tags(git, target.version),
+            publish_tags(git, releases, target, network),
             datetime.now(UTC).date().isoformat(),
             repo,
         )

@@ -1488,6 +1488,73 @@ class NotesRange(unittest.TestCase):
         )
 
 
+class CrossLineRange(unittest.TestCase):
+    TAGS: ClassVar[list] = [
+        *(t(f"0.6.3.{n}") for n in (12, 13)),
+        *(t(f"0.7.0.{n}") for n in range(6)),
+        *(t(f"0.7.1.{n}") for n in range(4)),
+    ]
+
+    def test_release_notes_range_every_intermediate_line_ok(self):
+        scope = rel.notes_range(t("0.6.3.12"), t("0.7.1.2"), self.TAGS)
+        self.assertEqual(scope, [*self.TAGS[2:8], *self.TAGS[8:11]])
+
+    def test_release_scope_versions_ok(self):
+        releases = [
+            release("0.6.3.12", "0.6.3.12 [mainnet]"),
+            *(release(f"0.7.0.{n}") for n in range(3)),
+            release("0.7.1.2"),
+            release("0.8.0.0"),
+        ]
+        self.assertEqual(
+            rel.scope_versions(releases, t("0.7.1.2"), "mainnet"),
+            [version(0, 6, 3), version(0, 7, 0), version(0, 7, 1)],
+        )
+        self.assertEqual(
+            rel.scope_versions(releases, t("0.7.1.2"), "decaf"), [version(0, 7, 1)]
+        )
+
+    def test_release_cmd_publish_cross_line_collects_every_line_ok(self):
+        releases = [
+            release_row(
+                "0.6.3.12", "0.6.3.12 [mainnet]", rel.render_notes_block("none")
+            ),
+            release_row("0.7.0.0", body=rel.render_notes_block("Urgency: High")),
+            release_row("0.7.0.1", body=rel.render_notes_block("none")),
+            release_row("0.7.1.0", body=rel.render_notes_block("none")),
+            release_row("0.7.1.1", body=rel.render_notes_block("none")),
+        ]
+        runner = CmdPublish()._runner(releases=releases)
+        tag_lists = {
+            "0.6.3.*": "0.6.3.12\n0.6.3.13\n",
+            "0.7.0.*": "0.7.0.0\n0.7.0.1\n",
+            "0.7.1.*": "0.7.1.0\n0.7.1.1\n",
+        }
+        for pattern, out in tag_lists.items():
+            runner.responses[("git", "tag", "--list", pattern)] = out
+        runner.responses[("gh", "issue", "view")] = json.dumps(
+            {"title": "Release 0.7.1", "body": ""}
+        )
+        args = CmdPublish()._args("/publish 0.7.1.1 mainnet")
+        self.assertEqual(rel.cmd_publish(args, rel.Git(runner), rel.Gh(runner)), 0)
+        self.assertTrue(runner.ran("git", "tag", "--list", "0.7.0.*"))
+        self.assertTrue(runner.ran("gh", "release", "edit", "0.7.1.1"))
+
+    def test_release_plan_cross_line_body_ok(self):
+        releases = [
+            release("0.6.3.12", "0.6.3.12 [mainnet]"),
+            stated("0.7.0.0", "Urgency: High"),
+            stated("0.7.0.1"),
+            stated("0.7.1.0", "Config X"),
+            stated("0.7.1.1"),
+        ]
+        prev, (edit, _old) = plan(releases, "0.7.1.1", "mainnet")
+        self.assertEqual(prev, t("0.6.3.12"))
+        self.assertIn("### 0.7.0.0\n\nUrgency: High", edit.body)
+        self.assertIn("### 0.7.1.0\n\nConfig X", edit.body)
+        self.assertNotIn("0.6.3.13", edit.body)
+
+
 class PublishBlock(unittest.TestCase):
     def _block(self, prev, target, entries, notes=None):
         return rel.render_publish_block(
