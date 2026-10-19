@@ -678,9 +678,13 @@ CLOUDWATCH_PERIOD_S = 60
 # Delay before CloudWatch has published the datapoints of the last minute of the load.
 CLOUDWATCH_LAG_S = 120.0
 EFS_WRITE_METRICS = {
-    "data": ("DataWriteIOBytes", "Sum"),
-    "metadata": ("MetadataWriteIOBytes", "Sum"),
+    "data_sum": ("DataWriteIOBytes", "Sum"),
+    "data_ops": ("DataWriteIOBytes", "SampleCount"),
+    "metadata_sum": ("MetadataWriteIOBytes", "Sum"),
+    "metadata_ops": ("MetadataWriteIOBytes", "SampleCount"),
 }
+# Elastic throughput bills each operation at least this many bytes.
+EFS_MIN_OP_BYTES = {"data": 32 * 1024, "metadata": 4 * 1024}
 
 # RDS query database. `tofu apply` returns once the instance is `available` (RDS_CREATE_S
 # typical, RDS_CREATE_MAX_S is the timeout); a delete takes about RDS_DELETE_S. The EventBridge
@@ -5240,12 +5244,16 @@ def exit_code(
     return EXIT_OK if result["validity"]["valid"] else EXIT_INVALID
 
 
+# Errors of `actual_cost` that leave the cost unavailable instead of failing the command.
+COST_ERRORS = (RemoteError, Refused, ValueError)
+
+
 def final_cost(fleet: FleetState) -> dict[str, float] | None:
     try:
         cost = actual_cost(
             fleet.system.run, fleet.manifest, utc_now(fleet.system.clock)
         )
-    except (RemoteError, Refused, ValueError) as exc:
+    except COST_ERRORS as exc:
         log.warning("actual cost unavailable: %s", exc)
         return None
     nb.write_json(fleet.fleet_dir / "cost.json", cost)
@@ -8052,7 +8060,11 @@ def status_cost(
     if not instances:
         return f"no instances, {bound}"
     if all(i["state"] == "terminated" for i in instances):
-        return f"${actual_cost(run, manifest, now)['actual']:.2f} actual, {bound}"
+        try:
+            usd = actual_cost(run, manifest, now)["actual"]
+        except COST_ERRORS as exc:
+            return f"actual unavailable ({exc}), {bound}"
+        return f"${usd:.2f} actual, {bound}"
     launched = min(datetime.fromisoformat(i["launch"]) for i in instances)
     usd = manifest_cost(manifest, (now - launched).total_seconds())
     return f"${usd:.2f} so far, {bound}"
@@ -10061,30 +10073,46 @@ def actual_cost(
     }
     efs_gb = None
     if fargate_specs(manifest["hosts"]):
-        efs_gb = efs_written_gb(run, manifest, min(launches), now)
+        efs_gb = efs_written_gb(run, manifest, region, min(launches), now)
         cost["efs_write_gb"] = efs_gb
     cost["actual"] = manifest_cost(manifest, duration_s, rds_s, efs_gb)
     return cost
 
 
 def efs_written_gb(
-    run: Runner, manifest: FleetManifest, first_launch: datetime, now: datetime
+    run: Runner,
+    manifest: FleetManifest,
+    region: str,
+    first_launch: datetime,
+    now: datetime,
 ) -> float:
-    """GiB written to the fleet's file system since the first launch: data and metadata writes,
-    which Elastic throughput bills alike. CloudWatch keeps the metrics of a deleted file
-    system. Raises when there is no data write datapoint."""
+    """GB written to the fleet's file system since the first launch, as Elastic throughput
+    bills it: data and metadata writes, each operation at least `EFS_MIN_OP_BYTES`. The
+    metrics give bytes and operation count per period, so `max(Sum, SampleCount * minimum)`
+    per period is a lower bound of the billed bytes. A GB is 2^30 bytes, as in AWS billing.
+    CloudWatch keeps the metrics of a deleted file system; no data write datapoint raises."""
+    efs_id = manifest["fargate"]["efs_id"]
     start, end = metric_window(first_launch.timestamp(), now.timestamp())
-    queries = metric_queries(
-        "AWS/EFS", ("FileSystemId", manifest["fargate"]["efs_id"]), EFS_WRITE_METRICS
-    )
-    stdout = get_metric_data(run, manifest_region(manifest), queries, start, end)
-    names = {query_id: metric for query_id, (metric, _) in EFS_WRITE_METRICS.items()}
+    queries = metric_queries("AWS/EFS", ("FileSystemId", efs_id), EFS_WRITE_METRICS)
+    stdout = get_metric_data(run, region, queries, start, end)
+    names = {i: f"{metric} {stat}" for i, (metric, stat) in EFS_WRITE_METRICS.items()}
     series = parse_metric_results(stdout, names)
-    if not series["DataWriteIOBytes"]["values"]:
-        raise RemoteError(
-            f"no DataWriteIOBytes datapoints for {manifest['fargate']['efs_id']}"
-        )
-    return sum(sum(s["values"]) for s in series.values()) / 2**30
+    by_id = {i: series[name] for i, name in names.items()}
+    if not by_id["data_sum"]["values"]:
+        raise RemoteError(f"no DataWriteIOBytes datapoints for {efs_id}")
+    billed = sum(
+        billed_bytes(by_id[f"{kind}_sum"], by_id[f"{kind}_ops"], minimum)
+        for kind, minimum in EFS_MIN_OP_BYTES.items()
+    )
+    return billed / 2**30
+
+
+def billed_bytes(sums: MetricSeries, ops: MetricSeries, minimum: int) -> float:
+    count = dict(zip(ops["timestamps"], ops["values"]))
+    return sum(
+        max(value, count[ts] * minimum)
+        for ts, value in zip(sums["timestamps"], sums["values"])
+    )
 
 
 def rds_billed_s(

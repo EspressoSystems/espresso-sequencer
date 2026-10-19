@@ -953,7 +953,7 @@ def test_collect_ebs_queries_node0_over_the_padded_window(tmp_path: Path) -> Non
     assert argv[argv.index("--end-time") + 1] == "1970-01-01T00:03:40+00:00"
     assert saved["instance_id"] == "i-000000000002"
     assert saved["metrics"]["EBSByteBalance%"] == {
-        "timestamps": [60.0, 120.0, 180.0],
+        "timestamps": [180.0, 120.0, 60.0],
         "values": [100.0, 100.0, 100.0],
     }
 

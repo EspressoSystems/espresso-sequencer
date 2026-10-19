@@ -773,11 +773,12 @@ def metric_results(series: dict[str, list[float | None]], first: float = 60.0) -
     None item is a period without datapoint."""
 
     def result(query_id: str, values: list[float | None]) -> dict:
+        # The API lists the newest datapoint first.
         points = [
             (datetime.fromtimestamp(first + 60.0 * i, UTC).isoformat(), v)
             for i, v in enumerate(values)
             if v is not None
-        ]
+        ][::-1]
         return {
             "Id": query_id,
             "Label": query_id,
@@ -801,11 +802,30 @@ def metric_data(
 
 
 def efs_write_data(
-    data: list[float | None], metadata: list[float | None], first: float = 60.0
+    data: list[float | None],
+    metadata: list[float | None],
+    data_ops: list[float | None] | None = None,
+    metadata_ops: list[float | None] | None = None,
+    first: float = 60.0,
 ) -> str:
-    """`get-metric-data` of the `Sum` of `DataWriteIOBytes` and `MetadataWriteIOBytes` of an
-    EFS file system, in bytes per period."""
-    return metric_results({"data": data, "metadata": metadata}, first)
+    """`get-metric-data` of the `Sum` and `SampleCount` of `DataWriteIOBytes` and
+    `MetadataWriteIOBytes` of an EFS file system: bytes and number of operations per period.
+    Operations default to 1 MiB each, far above the billed minimum."""
+
+    def default_ops(sums: list[float | None]) -> list[float | None]:
+        return [None if v is None else max(v / 2**20, 1.0) for v in sums]
+
+    return metric_results(
+        {
+            "data_sum": data,
+            "data_ops": default_ops(data) if data_ops is None else data_ops,
+            "metadata_sum": metadata,
+            "metadata_ops": default_ops(metadata)
+            if metadata_ops is None
+            else metadata_ops,
+        },
+        first,
+    )
 
 
 GIB = 2**30

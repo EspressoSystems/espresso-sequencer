@@ -1362,19 +1362,48 @@ def priced_fargate_manifest() -> tuple[Any, dict]:
     return cfg, manifest
 
 
+def efs_line(manifest: dict, cost: dict) -> dict:
+    lines = awsb.fargate_cost_lines(
+        manifest["hosts"],
+        awsb.config_from_manifest(manifest["config"]),
+        cost["duration_s"],
+        cost["efs_write_gb"],
+    )
+    (line,) = [line for line in lines if line["item"] == "efs elastic writes"]
+    return line
+
+
 def test_the_actual_cost_bills_the_metered_efs_writes_not_the_estimate():
     cfg, manifest = priced_fargate_manifest()
     runner = FakeRunner(states=[DONE_STATE], describe=DESCRIBE)
     cost = awsb.actual_cost(runner, manifest, NOW)
-    assert cost["efs_write_gb"] == 4.0  # 3 GiB data and 1 GiB metadata, see EFS_WRITES
+    # 3 GiB data and 1 GiB metadata, see EFS_WRITES
+    assert cost["efs_write_gb"] == 4.0
+    line = efs_line(manifest, cost)
+    assert line["usd"] == pytest.approx(4.0 * awsb.PRICES["efs_write_gb_usd"])
     estimated_gb = 2 * awsb.payload_factor(cfg.nodes) * awsb.offered_gb(cfg)
-    assert estimated_gb != cost["efs_write_gb"]
-    estimated = awsb.manifest_cost(manifest, cost["duration_s"])
-    price = awsb.PRICES["efs_write_gb_usd"]
+    estimate = awsb.manifest_cost(manifest, cost["duration_s"])
     assert cost["actual"] == pytest.approx(
-        estimated + (cost["efs_write_gb"] - estimated_gb) * price
+        estimate + line["usd"] - estimated_gb * awsb.PRICES["efs_write_gb_usd"]
     )
     assert cost["bound"] == manifest["estimate"]["bound_usd"]
+
+
+def test_small_operations_are_billed_at_their_minimum_size():
+    _, manifest = priced_fargate_manifest()
+    runner = FakeRunner(
+        states=[DONE_STATE],
+        describe=DESCRIBE,
+        efs_writes=efs_write_data(
+            [GIB, GIB],
+            [2**20, 2**20],
+            data_ops=[2**20, 1.0],  # 1 KiB operations, then one 1 GiB operation
+            metadata_ops=[1000.0, 1.0],
+        ),
+    )
+    billed = GIB * 32 + GIB + 1000 * 4096 + 2**20
+    cost = awsb.actual_cost(runner, manifest, NOW)
+    assert cost["efs_write_gb"] == pytest.approx(billed / GIB)
 
 
 def test_the_efs_writes_are_queried_by_file_system_over_the_billed_window():
@@ -1385,8 +1414,10 @@ def test_the_efs_writes_are_queried_by_file_system_over_the_billed_window():
     queries = json.loads(call[call.index("--metric-data-queries") + 1])
     metrics = {q["MetricStat"]["Metric"]["MetricName"] for q in queries}
     assert metrics == {"DataWriteIOBytes", "MetadataWriteIOBytes"}
+    stats = {q["MetricStat"]["Stat"] for q in queries}
+    assert stats == {"Sum", "SampleCount"}
+    assert len(queries) == 4
     for query in queries:
-        assert query["MetricStat"]["Stat"] == "Sum"
         assert query["MetricStat"]["Metric"]["Dimensions"] == [
             {"Name": "FileSystemId", "Value": manifest["fargate"]["efs_id"]}
         ]
@@ -1413,7 +1444,7 @@ def test_metadata_writes_may_be_absent_but_data_writes_may_not():
 
 def test_a_failed_efs_query_fails_the_actual_cost():
     _, manifest = priced_fargate_manifest()
-    forbidden = {"MetricDataResults": [{"Id": "data", "StatusCode": "Forbidden"}]}
+    forbidden = {"MetricDataResults": [{"Id": "data_sum", "StatusCode": "Forbidden"}]}
     runner = FakeRunner(
         states=[DONE_STATE], describe=DESCRIBE, efs_writes=json.dumps(forbidden)
     )
@@ -1429,3 +1460,22 @@ def test_the_metered_efs_writes_are_recorded_in_the_run_and_fleet_cost(
     fleet_cost = netbench.read_json(harness.fleet_dir / "cost.json")
     run_cost = netbench.read_json(harness.run_dir / "cost.json")
     assert fleet_cost["efs_write_gb"] == run_cost["efs_write_gb"] == 4.0
+
+
+def test_status_prints_actual_unavailable_when_the_efs_query_fails():
+    _, manifest = priced_fargate_manifest()
+    manifest["estimate"]["bound_usd"] = 12.0
+    instance = {
+        "id": "i-1",
+        "state": "terminated",
+        "launch": "2026-09-29T15:00:00+00:00",
+        "reason": "User initiated (2026-09-29 15:30:00 GMT)",
+    }
+    runner = FakeRunner(
+        states=[DONE_STATE],
+        describe=DESCRIBE,
+        efs_writes=efs_write_data([None], [None]),
+    )
+    text = awsb.status_cost(runner, manifest, [instance], NOW)
+    assert text.startswith("actual unavailable (")
+    assert text.endswith("bound $12.00")
