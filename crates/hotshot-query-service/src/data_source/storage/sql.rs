@@ -53,99 +53,31 @@ use crate::{
 pub extern crate sqlx;
 pub use sqlx::{Database, Sqlite};
 
+// Loaded through `#[path]` by each backend module, so its children are named from here.
+#[path = "sql/data_source.rs"]
+pub mod data_source;
+#[path = "sql/db.rs"]
 mod db;
+#[path = "sql/migrate.rs"]
 mod migrate;
-#[cfg(not(feature = "embedded-db"))]
-mod postgres;
-mod queries;
-#[cfg(feature = "embedded-db")]
-mod sqlite;
+#[path = "sql/migration.rs"]
+pub mod migration;
+#[path = "sql/queries.rs"]
+pub(in crate::data_source::storage::sql) mod queries;
+#[path = "sql/transaction.rs"]
 mod transaction;
 
 pub use anyhow::Error;
+pub use data_source::{Builder, SqlDataSource};
 pub use db::*;
 pub use include_dir::include_dir;
-#[cfg(not(feature = "embedded-db"))]
-use postgres as backend;
 pub use queries::QueryBuilder;
 pub use refinery::Migration;
-#[cfg(feature = "embedded-db")]
-use sqlite as backend;
 pub use transaction::*;
 
 use self::{migrate::Migrator, transaction::PoolMetrics};
-use super::{AvailabilityStorage, NodeStorage};
-// This needs to be reexported so that we can reference it by absolute path relative to this crate
-// in the expansion of `include_migrations`, even when `include_migrations` is invoked from another
-// crate which doesn't have `include_dir` as a dependency.
-pub use crate::include_migrations;
-
-/// Embed migrations from the given directory into the current binary for PostgreSQL or SQLite.
-///
-/// The macro invocation `include_migrations!(path)` evaluates to an expression of type `impl
-/// Iterator<Item = Migration>`. Each migration must be a text file which is an immediate child of
-/// `path`, and there must be no non-migration files in `path`. The migration files must have names
-/// of the form `V${version}__${name}.sql`, where `version` is a positive integer indicating how the
-/// migration is to be ordered relative to other migrations, and `name` is a descriptive name for
-/// the migration.
-///
-/// `path` should be an absolute path. It is possible to give a path relative to the root of the
-/// invoking crate by using environment variable expansions and the `CARGO_MANIFEST_DIR` environment
-/// variable.
-///
-/// As an example, this is the invocation used to load the default migrations from the
-/// `hotshot-query-service` crate. The migrations are located in a directory called `migrations` at
-/// - PostgreSQL migrations are in `/migrations/postgres`.
-/// - SQLite migrations are in `/migrations/sqlite`.
-///
-/// ```
-/// # use hotshot_query_service::data_source::sql::{include_migrations, Migration};
-/// // For PostgreSQL
-/// #[cfg(not(feature = "embedded-db"))]
-///  let mut migrations: Vec<Migration> =
-///     include_migrations!("$CARGO_MANIFEST_DIR/migrations/postgres").collect();
-/// // For SQLite
-/// #[cfg(feature = "embedded-db")]
-/// let mut migrations: Vec<Migration> =
-///     include_migrations!("$CARGO_MANIFEST_DIR/migrations/sqlite").collect();
-///
-///     migrations.sort();
-///     assert_eq!(migrations[0].version(), 10);
-///     assert_eq!(migrations[0].name(), "init_schema");
-/// ```
-///
-/// Note that a similar macro is available from Refinery:
-/// [embed_migrations](https://docs.rs/refinery/0.8.11/refinery/macro.embed_migrations.html). This
-/// macro differs in that it evaluates to an iterator of [migrations](Migration), making it an
-/// expression macro, while `embed_migrations` is a statement macro that defines a module which
-/// provides access to the embedded migrations only indirectly via a
-/// [`Runner`](https://docs.rs/refinery/0.8.11/refinery/struct.Runner.html). The direct access to
-/// migrations provided by [`include_migrations`] makes this macro easier to use with
-/// [`Config::migrations`], for combining custom migrations with [`default_migrations`].
-#[macro_export]
-macro_rules! include_migrations {
-    ($dir:tt) => {
-        $crate::data_source::storage::sql::include_dir!($dir)
-            .files()
-            .map(|file| {
-                let path = file.path();
-                let name = path
-                    .file_name()
-                    .and_then(std::ffi::OsStr::to_str)
-                    .unwrap_or_else(|| {
-                        panic!(
-                            "migration file {} must have a non-empty UTF-8 name",
-                            path.display()
-                        )
-                    });
-                let sql = file
-                    .contents_utf8()
-                    .unwrap_or_else(|| panic!("migration file {name} must use UTF-8 encoding"));
-                $crate::data_source::storage::sql::Migration::unapplied(name, sql)
-                    .expect("invalid migration")
-            })
-    };
-}
+use super::Db;
+use crate::data_source::storage::{AvailabilityStorage, NodeStorage, sql::StorageConnectionType};
 
 /// The migrations required to build the default schema for this version of [`SqlStorage`].
 pub fn default_migrations() -> Vec<Migration> {
@@ -218,7 +150,7 @@ fn add_custom_migrations(
 
 #[derive(Clone)]
 pub struct Config {
-    db_opt: <Db as Backend>::ConnectOptions,
+    pub(super) db_opt: <Db as Backend>::ConnectOptions,
 
     pool_opt: PoolOptions<Db>,
 
@@ -226,7 +158,7 @@ pub struct Config {
     /// SQLite shares one pool between both connection types, so it ignores this.
     pool_opt_query: PoolOptions<Db>,
 
-    schema: String,
+    pub(super) schema: String,
     reset: bool,
     migrations: Vec<Migration>,
     no_migrations: bool,
@@ -246,7 +178,7 @@ impl Config {
     // Each backend implements `From` for its own connect options in its own module. A `From` over
     // the projection `<Db as Backend>::ConnectOptions` would not be normalized by coherence, and
     // would then conflict with every other `From` and `TryFrom` impl for `Config`.
-    fn with_connect_options(db_opt: <Db as Backend>::ConnectOptions) -> Self {
+    pub(super) fn with_connect_options(db_opt: <Db as Backend>::ConnectOptions) -> Self {
         Self {
             db_opt,
             pool_opt: PoolOptions::default(),
@@ -289,10 +221,9 @@ impl Config {
 
     /// Reset the schema on connection.
     ///
-    /// When this [`Config`] is used to [`connect`](Self::connect) a
-    /// [`SqlDataSource`](crate::data_source::SqlDataSource), if this option is set, the relevant
-    /// [`schema`](Self::schema) will first be dropped and then recreated, yielding a completely
-    /// fresh instance of the query service.
+    /// When this [`Config`] is used to [`connect`](Self::connect) a [`SqlDataSource`], if this
+    /// option is set, the Postgres schema or the SQLite file will first be dropped and then
+    /// recreated, yielding a completely fresh instance of the query service.
     ///
     /// This is a particularly useful capability for development and staging environments. Still, it
     /// must be used with extreme caution, as using this will irrevocably delete any data pertaining
@@ -529,12 +460,6 @@ impl<'a> Pruner<'a> {
             PruneCategory::Data => self.data.min_height = height + 1,
         }
     }
-}
-
-#[derive(PartialEq)]
-pub enum StorageConnectionType {
-    Sequencer,
-    Query,
 }
 
 impl SqlStorage {
@@ -1590,7 +1515,7 @@ impl VersionedDataSource for SqlStorage {
 pub mod testing {
     use refinery::Migration;
 
-    pub use super::backend::tmp_db::TmpDb;
+    pub use super::super::tmp_db::TmpDb;
     use super::{Backend as _, Db};
 
     /// The migrations a [`TmpDb`] applies on top of the default schema.

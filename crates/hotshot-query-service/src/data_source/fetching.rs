@@ -3020,8 +3020,8 @@ mod test {
     use super::{leaf::RangeRequest, *};
     use crate::{
         data_source::{
-            sql::testing::TmpDb,
-            storage::{SqlStorage, StorageConnectionType},
+            sql::postgres::{SqlStorage, testing::TmpDb},
+            storage::StorageConnectionType,
         },
         fetching::provider::NoFetching,
         testing::{

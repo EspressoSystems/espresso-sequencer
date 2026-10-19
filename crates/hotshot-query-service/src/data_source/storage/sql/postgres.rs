@@ -21,10 +21,14 @@ use sqlx::{
     postgres::{PgConnectOptions, PgRow, PgSslMode},
 };
 
-use super::{
-    Backend, Config, Db, Migration, QueryBuilder, StateQueries, Transaction, Write,
-    queries::state::Node,
-};
+pub type Db = sqlx::Postgres;
+
+#[path = "../sql.rs"]
+mod imp;
+
+use imp::queries::state::Node;
+pub use imp::*;
+
 use crate::{QueryError, QueryResult, include_migrations};
 
 impl Backend for Db {
@@ -262,7 +266,7 @@ impl Config {
 }
 
 #[cfg(all(any(test, feature = "testing"), not(target_os = "windows")))]
-pub(super) mod tmp_db {
+mod tmp_db {
     use std::{
         env,
         process::{Child, Command, Stdio},
@@ -272,7 +276,7 @@ pub(super) mod tmp_db {
     use test_utils::reserve_tcp_port;
     use tokio::time::timeout;
 
-    use super::super::{Config, testing::test_migrations};
+    use super::{Config, testing::test_migrations};
     use crate::testing::sleep;
 
     #[derive(Debug)]
@@ -436,7 +440,8 @@ mod test {
     use futures::FutureExt as _;
     use sqlx::{Connection as _, Executor as _, Row as _};
 
-    use super::super::{Config, SqlStorage, StorageConnectionType, testing::TmpDb};
+    use super::{Config, SqlStorage, testing::TmpDb};
+    use crate::data_source::storage::StorageConnectionType;
 
     #[test]
     fn test_config_from_str() {

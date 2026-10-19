@@ -42,7 +42,6 @@ use url::Url;
 use super::{
     AccountQueryData, BlocksFrontier, fs,
     options::{Options, Query},
-    sql,
 };
 use crate::{
     SeqTypes, U256,
@@ -55,14 +54,6 @@ pub trait DataSourceOptions: PersistenceOptions {
     type DataSource: SequencerDataSource<Options = Self>;
 
     fn enable_query_module(&self, opt: Options, query: Query) -> Options;
-}
-
-impl DataSourceOptions for persistence::sql::Options {
-    type DataSource = sql::DataSource;
-
-    fn enable_query_module(&self, opt: Options, query: Query) -> Options {
-        opt.query_sql(query, self.clone())
-    }
 }
 
 impl DataSourceOptions for persistence::fs::Options {

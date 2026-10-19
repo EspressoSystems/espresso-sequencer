@@ -1,9 +1,9 @@
 use std::{cmp::max, fs, path::PathBuf, process::ExitCode, sync::Arc, time::Duration};
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, ensure};
 use clap::Parser;
 use espresso_node::{
-    api::{data_source::SequencerDataSource, sql::DataSource},
+    api::{data_source::SequencerDataSource, sql::postgres::DataSource},
     persistence::sql,
 };
 use espresso_types::parse_duration;
@@ -175,7 +175,12 @@ async fn run() -> Result<()> {
 
     // Initialize query service.
     let provider = AnyProvider::default().with_provider(lc.clone());
-    let ds = DataSource::create(opt.ds_opt, provider, false)
+    ensure!(
+        !opt.ds_opt.embedded_db,
+        "the light client query service stores data in Postgres only; unset \
+         ESPRESSO_NODE_EMBEDDED_DB"
+    );
+    let ds = DataSource::create(sql::postgres::Options(opt.ds_opt), provider, false)
         .await
         .context("connecting to API data source")?;
 
