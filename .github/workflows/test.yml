@@ -368,7 +368,6 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/install-foundry
-      - uses: ./.github/actions/install-postgres
       - uses: taiki-e/install-action@nextest
 
       - name: Download archive

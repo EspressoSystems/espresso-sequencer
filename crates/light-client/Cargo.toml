@@ -72,7 +72,6 @@ rand = { workspace = true, optional = true }
 espresso-node = { workspace = true, default-features = false, features = [
     "testing",
 ] }
-hotshot-query-service = { workspace = true, features = ["testing"] }
 itertools = { workspace = true }
 light-client = { path = ".", features = ["rlp", "testing"] }
 pretty_assertions = { workspace = true }

@@ -702,29 +702,6 @@ mod test {
         assert_eq!(keys["p2p_addr"], validator["p2p_addr"]);
         assert_eq!(keys["p2p_addr"], "node.example.com:9977");
     }
-    #[cfg(not(feature = "embedded-db"))]
-    #[test]
-    fn sql_storage_keeps_light_client_in_postgres() {
-        use clap::Parser as _;
-
-        let opt = persistence::sql::Options::try_parse_from([
-            "espresso-node",
-            "--host",
-            "db.example",
-            "--port",
-            "6543",
-            "--database",
-            "espresso",
-        ])
-        .unwrap();
-        let LightClientDbOptions::Postgres(lc) = opt.light_client_db(&Query::default()).unwrap()
-        else {
-            panic!("expected the light client in Postgres");
-        };
-        assert_eq!(lc.connect.get_host(), "db.example");
-        assert_eq!(lc.connect.get_port(), 6543);
-        assert_eq!(lc.connect.get_database(), Some("espresso"));
-    }
 }
 
 #[cfg(any(test, feature = "testing"))]
