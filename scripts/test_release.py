@@ -52,6 +52,10 @@ class FakeRunner:
         return any(tuple(call[: len(prefix)]) == prefix for call in self.calls)
 
 
+def ls_remote(*tags: str) -> str:
+    return "".join(f"{'a' * 40}\trefs/tags/{tag}\n" for tag in tags)
+
+
 def version(major=0, minor=6, phase=0) -> "rel.Version":
     return rel.Version(major, minor, phase)
 
@@ -251,6 +255,17 @@ class CommandParse(unittest.TestCase):
             "/tag\nUrgency: High <!-- operator-notes -->",
         ):
             self.assertIsNone(rel.parse_command(body), body)
+
+    def test_release_bad_command_marker_message_only_for_tag_publish_text(self):
+        usage = "`/backport <PR>`"
+        self.assertEqual(
+            rel.bad_command("/backport bad\n<!-- x -->", usage),
+            f"comment '/backport bad\\n<!-- x -->' is not {usage}",
+        )
+        self.assertIn(
+            "must not contain",
+            rel.bad_command("/tag\nUrgency <!-- x -->", "a /tag command"),
+        )
 
     def test_release_command_parse_mid_text_fails(self):
         self.assertIsNone(rel.parse_command("please /tag this"))
@@ -638,7 +653,7 @@ class TagRefusesPushWithoutRemote(unittest.TestCase):
                 ("gh", "repo", "view"): REPO,
                 ("gh", "issue", "list"): "[]",
                 ("git", "tag", "--list", "0.6.0.*"): "",
-                ("git", "tag", "--list", "[0-9]*.[0-9]*.[0-9]*.[0-9]*"): "0.5.9.1\n",
+                ("git", "tag", "--list", "[0-9]*"): "0.5.9.1\n",
                 ("git", "diff"): "",
                 ("git", "rev-parse", "release-0.6.0"): "c" * 40,
             }
@@ -938,8 +953,8 @@ class CmdTagHappyPath(unittest.TestCase):
 
     def test_release_cmd_tag_dot_zero_notes_since_previous_cut_ok(self):
         runner = self._fragment_runner("doc/operator-notes/a.md\0", "### A\n", tags="")
-        runner.responses[("git", "tag", "--list", "[0-9]*.[0-9]*.[0-9]*.[0-9]*")] = (
-            "0.5.2.3\n0.5.2.1\n"
+        runner.responses[("git", "ls-remote", "--tags")] = ls_remote(
+            "0.5.2.3", "0.5.2.1"
         )
         self.assertEqual(
             rel.cmd_tag(self._tag_args(), rel.Git(runner), rel.Gh(runner)), 0
@@ -951,7 +966,7 @@ class CmdTagHappyPath(unittest.TestCase):
 
     def test_release_cmd_tag_dot_zero_no_ancestor_fails(self):
         runner = self._fragment_runner("", "", tags="")
-        runner.responses[("git", "tag", "--list", "[0-9]*.[0-9]*.[0-9]*.[0-9]*")] = ""
+        runner.responses[("git", "ls-remote", "--tags")] = ls_remote()
         self.assertEqual(
             rel.cmd_tag(self._tag_args(), rel.Git(runner), rel.Gh(runner)), 1
         )
@@ -1045,7 +1060,7 @@ class TagFailurePostsComment(unittest.TestCase):
             ("gh", "issue", "view"): json.dumps({"title": "Release 0.6.0", "body": ""}),
             ("git", "fetch"): "",
             ("git", "tag", "--list", "0.6.0.*"): "",
-            ("git", "tag", "--list", "[0-9]*.[0-9]*.[0-9]*.[0-9]*"): "0.5.9.1\n",
+            ("git", "ls-remote", "--tags"): ls_remote("0.5.9.1"),
             ("git", "diff"): "",
             ("git", "rev-parse", "origin/release-0.6.0"): sha,
             ("git", "tag", "-a"): "",
@@ -1534,12 +1549,35 @@ class Fragments(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "no earlier version tag"):
             rel.publish_base(None, t("0.7.0.0"), [t("0.7.0.0")])
 
-    def test_release_git_version_tags_ok(self):
-        runner = FakeRunner(
-            {("git", "fetch"): "", ("git", "tag"): "0.6.3.9\n0.7.0.0\n"}
-        )
+    def test_release_git_version_tags_remote_no_fetch_ok(self):
+        out = f"{'a' * 40}\trefs/tags/0.6.3.9\n{'b' * 40}\trefs/tags/0.7.0.0\n"
+        runner = FakeRunner({("git", "ls-remote"): out})
         self.assertEqual(rel.Git(runner).version_tags(), [t("0.6.3.9"), t("0.7.0.0")])
-        self.assertTrue(runner.ran("git", "fetch"))
+        self.assertFalse(runner.ran("git", "fetch"))
+
+    def test_release_git_version_tags_local_no_fetch_ok(self):
+        runner = FakeRunner({("git", "tag"): "0.6.3.9\nnightly\n0.7.0.0\n"})
+        git = rel.Git(runner, remote=None)
+        self.assertEqual(git.version_tags(), [t("0.6.3.9"), t("0.7.0.0")])
+        git.fetch_tag(t("0.6.3.9"))
+        self.assertFalse(runner.ran("git", "fetch"))
+        self.assertFalse(runner.ran("git", "ls-remote"))
+
+    def test_release_git_fetch_tag_refspec_ok(self):
+        runner = FakeRunner({("git", "fetch"): ""})
+        rel.Git(runner).fetch_tag(t("0.6.3.14"))
+        self.assertEqual(
+            runner.calls,
+            [
+                [
+                    "git",
+                    "fetch",
+                    "--quiet",
+                    "origin",
+                    "+refs/tags/0.6.3.14:refs/tags/0.6.3.14",
+                ]
+            ],
+        )
 
     def test_release_publish_base_ok(self):
         tags = [t(f"0.7.0.{n}") for n in range(5)]
@@ -1550,9 +1588,6 @@ class Fragments(unittest.TestCase):
             rel.publish_base(t("0.6.3.12"), t("0.7.0.3"), tags), t("0.6.3.12")
         )
         self.assertEqual(rel.publish_base(None, t("0.7.0.3"), tags), t("0.7.0.2"))
-        self.assertEqual(
-            rel.publish_base(None, t("0.7.0.0"), [t("0.6.3.14")]), t("0.6.3.14")
-        )
         self.assertIsNone(rel.publish_base(t("0.7.0.4"), t("0.7.0.2"), tags))
         self.assertIsNone(rel.publish_base(t("0.7.0.1"), t("0.6.3.14"), tags))
 
@@ -1581,7 +1616,7 @@ def plan(
         t(target),
         network,
         notes,
-        tags,
+        lambda: tags,
         collect or (lambda *_: []),
         date,
         REPO,
@@ -1708,11 +1743,13 @@ class FragmentRange(unittest.TestCase):
                 collect=lambda *_: [frag("bad", "### X\n<!-- y -->")],
             )
 
-    def test_release_collect_fragments_fetches_both_lines_ok(self):
+    def test_release_collect_fragments_fetches_base_tag_only_ok(self):
         runner = FakeRunner({("git", "fetch"): "", ("git", "diff"): ""})
         rel._collect_fragments(rel.Git(runner), t("0.6.3.12"), t("0.7.0.3"))
         fetched = [c for c in runner.calls if c[:2] == ["git", "fetch"]]
-        self.assertEqual(len(fetched), 2)
+        self.assertEqual(
+            [c[-1] for c in fetched], ["+refs/tags/0.6.3.12:refs/tags/0.6.3.12"]
+        )
 
 
 class PublishBlock(unittest.TestCase):
@@ -2259,8 +2296,8 @@ class CmdPublish(unittest.TestCase):
 
     def test_release_cmd_publish_first_dot_zero_lists_fragments_ok(self):
         runner = self._runner(releases=[release_row("0.7.0.0")])
-        runner.responses[("git", "tag", "--list", "[0-9]*.[0-9]*.[0-9]*.[0-9]*")] = (
-            "0.6.3.9\n0.7.0.0\n"
+        runner.responses[("git", "ls-remote", "--tags")] = ls_remote(
+            "0.6.3.9", "0.7.0.0"
         )
         runner.responses[("git", "diff")] = "doc/operator-notes/a.md\0"
         out = io.StringIO()
@@ -2280,9 +2317,7 @@ class CmdPublish(unittest.TestCase):
 
     def test_release_cmd_publish_dot_zero_no_ancestor_fails(self):
         runner = self._runner(releases=[release_row("0.7.0.0")])
-        runner.responses[("git", "tag", "--list", "[0-9]*.[0-9]*.[0-9]*.[0-9]*")] = (
-            "0.7.0.0\n"
-        )
+        runner.responses[("git", "ls-remote", "--tags")] = ls_remote("0.7.0.0")
         code = rel.cmd_publish(
             self._args("/publish 0.7.0.0 decaf"), rel.Git(runner), rel.Gh(runner)
         )

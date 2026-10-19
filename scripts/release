@@ -334,7 +334,8 @@ def parse_command(body: str) -> Command | None:
 
 def bad_command(comment: str, usage: str) -> str:
     """The failure message for a comment `parse_command` rejected; never echoes bot markers."""
-    if BOT_MARKER in comment:
+    match = _COMMAND_RE.match(comment)
+    if match and BOT_MARKER in comment and parse_command(comment[: match.end()]):
         return f"command text must not contain `{BOT_MARKER}`"
     return f"comment {comment!r} is not {usage}"
 
@@ -707,7 +708,7 @@ def plan_publish(
     target: Tag,
     network: Network,
     network_notes: str | None,
-    tags: list[Tag],
+    tags: Callable[[], list[Tag]],
     collect: Collect,
     date: str,
     repo: str,
@@ -729,7 +730,7 @@ def plan_publish(
     prev, since, network_notes = _previous_holder(
         release, others, network, network_notes, date
     )
-    base = publish_base(prev, target, tags)
+    base = publish_base(prev, target, tags() if prev is None else [])
     fragments = collect(base, target) if base is not None else []
     block = render_publish_block(
         network, prev, target, since, network_notes, fragments, repo, base
@@ -1140,13 +1141,18 @@ class Git:
             self._run(["git", "fetch", "--quiet", self.remote, *branches, tags])
 
     def version_tags(self) -> list[Tag]:
-        """All version tags, fetched first so earlier release lines are present."""
-        if self.remote is not None:
-            self._run(
-                ["git", "fetch", "--quiet", self.remote, "+refs/tags/*:refs/tags/*"]
-            )
-        names = self.tag_list("[0-9]*.[0-9]*.[0-9]*.[0-9]*")
+        """All version tags, listed without fetching: on the remote, or local with no remote."""
+        names = (
+            self.tag_list("[0-9]*")
+            if self.remote is None
+            else self.ls_remote_tags("[0-9]*")
+        )
         return [tag for name in names if (tag := parse_tag(name))]
+
+    def fetch_tag(self, tag: Tag) -> None:
+        if self.remote is not None:
+            ref = f"+refs/tags/{tag}:refs/tags/{tag}"
+            self._run(["git", "fetch", "--quiet", self.remote, ref])
 
     def tag_list(self, pattern: str) -> list[str]:
         return [
@@ -1763,7 +1769,7 @@ def _tag(
     tag_name = str(tag)
     sha = git.rev_parse(git.ref(branch))
     try:
-        notes = _tag_notes(git, tag, existing_for_version, sha)
+        notes = _tag_notes(git, tag, sha)
     except ValueError as error:
         return fail(str(error))
     comment = render_tag_comment(tag, sha, repo, args.actor, args.run_url)
@@ -1787,12 +1793,13 @@ def _tag(
     return 0
 
 
-def _tag_notes(git: Git, tag: Tag, existing: list[str], sha: str) -> str:
+def _tag_notes(git: Git, tag: Tag, sha: str) -> str:
     """The operator-notes block for the new tag. Raises ValueError for a bad fragment or a `.0`
     without a previous line."""
-    base = fragment_base(tag, _base_tags(git, tag, existing))
+    base = fragment_base(tag, _base_tags(git, tag))
     if base is None:
         return ""
+    git.fetch_tag(base)
     return render_notes_block(render_fragments(git.fragments(str(base), sha)))
 
 
@@ -1862,7 +1869,7 @@ def _plan_publish(
         target,
         network,
         command.text,
-        _base_tags(git, target, git.tag_list(f"{target.version}.*")),
+        partial(_base_tags, git, target),
         partial(_collect_fragments, git),
         datetime.now(UTC).date().isoformat(),
         repo,
@@ -1873,16 +1880,16 @@ def _plan_publish(
     return PublishPlan(network, target, prev, edits, comment, repo)
 
 
-def _base_tags(git: Git, target: Tag, line: list[str]) -> list[Tag]:
+def _base_tags(git: Git, target: Tag) -> list[Tag]:
     """The line's tags; all version tags for a `.0`, whose base is on the previous line."""
     if target.patch == 0:
         return git.version_tags()
-    return [tag for name in line if (tag := parse_tag(name))]
+    names = git.tag_list(f"{target.version}.*")
+    return [tag for name in names if (tag := parse_tag(name))]
 
 
 def _collect_fragments(git: Git, base: Tag, target: Tag) -> list[Fragment]:
-    for version in {base.version, target.version}:
-        git.fetch(version, [])
+    git.fetch_tag(base)
     return git.fragments(str(base), str(target))
 
 
