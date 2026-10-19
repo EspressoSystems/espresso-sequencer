@@ -2119,6 +2119,20 @@ class CmdPublish(unittest.TestCase):
         self.assertIn("/publish failed:", comment[-1])
         self.assertIn("could not resolve host", comment[-1])
 
+    def test_release_cmd_publish_unreadable_token_reported_fails(self):
+        runner = self._runner()
+        runner.responses[("curl", "-fsS")] = "<html>"
+        self.assertEqual(
+            rel.cmd_publish(self._args(), rel.Git(runner), rel.Gh(runner)), 1
+        )
+        self.assertFalse(runner.ran("gh", "release", "edit"))
+        comment = next(c for c in runner.calls if c[:3] == ["gh", "issue", "comment"])
+        self.assertIn("/publish failed:", comment[-1])
+        self.assertIn(
+            "ghcr.io token response for espressosystems/espresso-network/espresso-node unreadable",
+            comment[-1],
+        )
+
     def test_release_cmd_publish_gate_error_dry_run_no_comment_fails(self):
         run, runner = self._failing_gate_runner()
         args = self._args(dry_run=True)
@@ -2130,6 +2144,8 @@ class CmdPublish(unittest.TestCase):
         with self.assertRaises(RuntimeError) as caught:
             rel._run(argv)
         self.assertNotIn("s3cret", str(caught.exception))
+        self.assertIsNone(caught.exception.__cause__)
+        self.assertTrue(caught.exception.__suppress_context__)
         self.assertIn("exited 3", str(caught.exception))
 
     def test_release_cmd_publish_fragments_in_block_ok(self):

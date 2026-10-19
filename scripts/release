@@ -1086,7 +1086,7 @@ def _run(argv: list[str]) -> str:
         ]
         raise RuntimeError(
             f"`{' '.join(shown)}` exited {error.returncode}: {(error.stderr or '').strip()}"
-        ) from error
+        ) from None
 
 
 def gh_error(message: str) -> None:
@@ -1446,7 +1446,12 @@ class Gh:
         anonymous pull token is enough and the workflow token needs no `packages` permission."""
         image = f"{repo.lower()}/espresso-node"
         token_url = f"https://ghcr.io/token?scope=repository:{image}:pull"
-        token = json.loads(self._run(["curl", "-fsS", token_url]))["token"]
+        try:
+            token = json.loads(self._run(["curl", "-fsS", token_url]))["token"]
+        except (ValueError, KeyError):
+            raise RuntimeError(
+                f"ghcr.io token response for {image} unreadable"
+            ) from None
         status = self._run(
             [
                 "curl",
