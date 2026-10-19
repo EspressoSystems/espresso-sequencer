@@ -6,8 +6,7 @@ use async_lock::Mutex;
 use committable::Committable;
 use either::Either;
 use espresso_types::{
-    BackoffParams, BlockMerkleTree, EpochRewardsCalculator, FeeAccount, FeeMerkleTree, Leaf2,
-    ValidatedState,
+    BlockMerkleTree, EpochRewardsCalculator, FeeAccount, FeeMerkleTree, Leaf2, ValidatedState,
     traits::StateCatchup,
     v0_3::{ChainConfig, RewardMerkleTreeV1},
     v0_4::Delta,
@@ -35,7 +34,7 @@ use versions::{DRB_AND_HEADER_UPGRADE_VERSION, EPOCH_REWARD_VERSION, EPOCH_VERSI
 use crate::{
     NodeState, SeqTypes,
     api::{LightClientProvider, RewardMerkleTreeDataSource, context::ApiContext},
-    catchup::{CatchupStorage, ParallelStateCatchup, SingleAttemptCatchup, SqlStateCatchup},
+    catchup::{CatchupStorage, SingleAttemptCatchup},
     persistence::ChainConfigPersistence,
 };
 
@@ -364,11 +363,6 @@ const PRUNED_LEAF_CHECK_INTERVAL: Duration = Duration::from_secs(10);
 
 /// How long the loop waits before it tries again to start from a recent epoch boundary.
 const BOUNDARY_RETRY_INTERVAL: Duration = Duration::from_secs(10);
-
-/// How long a state update waits on this database before it asks peers. A local read answers or
-/// fails quickly, so this only keeps a stuck read from stalling the loop. It is long, so that a
-/// slow read does not send requests to peers for nothing.
-const LOCAL_CATCHUP_TIMEOUT: Duration = Duration::from_secs(60);
 
 /// Where the state loop starts when it has no state of its own.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -838,23 +832,15 @@ async fn apply_leaf<T>(
     T: SequencerStateDataSource,
     for<'a> T::Transaction<'a>: SequencerStateUpdate,
 {
-    // The parent snapshot is the state head, which this database always keeps, so read it from
-    // here first: peers may have pruned it. When the data pruner has deleted the parent's leaf and
-    // header, the local catchup reads the snapshot by the roots in the parent state. What the
-    // snapshot lacks comes from the node's catchup, which asks peers: a loop that started from a
-    // boundary snapshot holds only the fee accounts it has touched since. Reward accounts do not
-    // use this catchup; `apply_header` reads them through the node's catchup. Each request is sent
-    // once, because the loop below retries: peers never answer a request for a height they have
-    // pruned, and the next try then starts from this database again. Each try passes its number
-    // on, so that peers get longer to answer, as they would on retries of the request itself.
-    let local: Arc<dyn StateCatchup> = Arc::new(SqlStateCatchup::new(
-        storage.clone(),
-        BackoffParams::disabled(),
-    ));
-    let catchup = ParallelStateCatchup::new(
-        &[local, instance.state_catchup.clone()],
-        LOCAL_CATCHUP_TIMEOUT,
-    );
+    // The node's catchup reads this database first, through the node's SQL persistence, and asks
+    // peers only for what the parent snapshot lacks: a loop that started from a boundary snapshot
+    // holds only the fee accounts it has touched since. The parent snapshot is the state head,
+    // which this database always keeps, while peers may have pruned it. When the data pruner has
+    // deleted the parent's leaf and header, the local read finds the snapshot by the roots in the
+    // parent state. Each request is sent once, because the loop below retries: peers never answer
+    // a request for a height they have pruned, and the next try then starts from this database
+    // again. Each try passes its number on, so that peers get longer to answer, as they would on
+    // retries of the request itself.
     for retry in 0.. {
         tracing::debug!(
             height = leaf.height(),
@@ -866,7 +852,7 @@ async fn apply_leaf<T>(
             parent_state,
             storage,
             instance,
-            &SingleAttemptCatchup::new(catchup.clone(), retry),
+            &SingleAttemptCatchup::new(instance.state_catchup.clone(), retry),
             parent_leaf,
             &leaf,
         )
