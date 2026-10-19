@@ -19,7 +19,7 @@
 //! REST APIs provided by this crate.
 //!
 //! This module also comes with a few pre-built persistence implementations:
-//! * [`SqlStorage`]
+//! * [`sql::postgres::SqlStorage`] and [`sql::sqlite::SqlStorage`]
 //! * [`FileSystemStorage`]
 //!
 //! # Storage Traits vs Data Source Traits
@@ -151,7 +151,7 @@ pub use fail_storage::FailStorage;
 #[cfg(feature = "file-system-data-source")]
 pub use fs::FileSystemStorage;
 #[cfg(feature = "sql-data-source")]
-pub use sql::{SqlStorage, StorageConnectionType};
+pub use sql::StorageConnectionType;
 
 /// Persistent storage for a HotShot blockchain.
 ///

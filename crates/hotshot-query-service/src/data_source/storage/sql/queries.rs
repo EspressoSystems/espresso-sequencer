@@ -30,7 +30,7 @@ use crate::{Header, QueryError, QueryResult, availability::BlockId};
 pub(super) mod availability;
 pub(super) mod explorer;
 pub(super) mod node;
-pub(super) mod state;
+pub(crate) mod state;
 
 /// Helper type for programmatically constructing queries.
 ///

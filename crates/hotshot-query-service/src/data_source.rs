@@ -16,7 +16,7 @@
 //! retrieves data in answer to queries. We call this implementation a _data source_. This module
 //! defines a data source and provides several pre-built implementations:
 //! * [`FileSystemDataSource`]
-//! * [`SqlDataSource`]
+//! * [`sql::postgres::SqlDataSource`] and [`sql::sqlite::SqlDataSource`]
 //! * [`FetchingDataSource`], a generalization of the above
 //! * [`MetricsDataSource`]
 //!
@@ -41,8 +41,6 @@ pub use fetching::{AvailabilityProvider, FetchingDataSource};
 pub use fs::FileSystemDataSource;
 #[cfg(feature = "metrics-data-source")]
 pub use metrics::MetricsDataSource;
-#[cfg(feature = "sql-data-source")]
-pub use sql::SqlDataSource;
 pub use update::{Transaction, UpdateDataSource, VersionedDataSource};
 
 #[cfg(any(test, feature = "testing"))]
