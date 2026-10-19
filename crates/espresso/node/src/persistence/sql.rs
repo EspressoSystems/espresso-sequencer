@@ -40,8 +40,8 @@ use hotshot_query_service::{
             SerializableRetry,
             pruning::PrunerCfg,
             sql::{
-                Config, Db, Read, SerializableRetryConfig, SqlStorage, StorageConnectionType,
-                Transaction, Write, include_migrations, query_as, syntax_helpers::MAX_FN,
+                Backend as _, Config, Db, Read, SerializableRetryConfig, SqlStorage,
+                StorageConnectionType, Transaction, Write, include_migrations, query_as,
             },
         },
     },
@@ -1574,17 +1574,15 @@ impl Persistence {
     /// Measured in a read transaction: on SQLite it scans every page of the pruned tables, and
     /// holding the write lock that long stalls the vote and proposal writes consensus waits on.
     async fn consensus_storage_usage(&self) -> anyhow::Result<u64> {
-        #[cfg(feature = "embedded-db")]
-        let usage_query = format!(
-            "SELECT sum(pgsize) FROM dbstat WHERE name IN ({})",
-            PRUNE_TABLES
-                .iter()
-                .map(|table| format!("'{table}'"))
-                .join(",")
-        );
-
-        #[cfg(not(feature = "embedded-db"))]
-        let usage_query = {
+        let usage_query = if Db::EMBEDDED {
+            format!(
+                "SELECT sum(pgsize) FROM dbstat WHERE name IN ({})",
+                PRUNE_TABLES
+                    .iter()
+                    .map(|table| format!("'{table}'"))
+                    .join(",")
+            )
+        } else {
             let table_sizes = PRUNE_TABLES
                 .iter()
                 .map(|table| format!("pg_table_size('{table}')"))
@@ -2028,7 +2026,8 @@ impl SequencerPersistence for Persistence {
             let stmt = format!(
                 "INSERT INTO highest_voted_view (id, view) VALUES (0, $1)
                 ON CONFLICT (id) DO UPDATE SET view = {MAX_FN}(highest_voted_view.view, \
-                 excluded.view)"
+                 excluded.view)",
+                MAX_FN = Db::MAX_FN,
             );
 
             let mut tx = self.db.write().await?;
@@ -2039,7 +2038,8 @@ impl SequencerPersistence for Persistence {
                 let stmt = format!(
                     "INSERT INTO restart_view (id, view) VALUES (0, $1)
                     ON CONFLICT (id) DO UPDATE SET view = {MAX_FN}(restart_view.view, \
-                     excluded.view)"
+                     excluded.view)",
+                    MAX_FN = Db::MAX_FN,
                 );
                 tx.execute(query(&stmt).bind(restart_view.u64() as i64))
                     .await?;
@@ -2960,15 +2960,14 @@ impl MembershipPersistence for Persistence {
     async fn delete_stake_tables(&self) -> anyhow::Result<()> {
         serializable_retry!(self, || async {
             let mut tx = self.db.write().await?;
-            #[cfg(not(feature = "embedded-db"))]
-            query(
-                "TRUNCATE stake_table_events, stake_table_events_l1_block, epoch_drb_and_root, \
-                 stake_table_validators",
-            )
-            .execute(tx.as_mut())
-            .await?;
-            #[cfg(feature = "embedded-db")]
-            {
+            if !Db::EMBEDDED {
+                query(
+                    "TRUNCATE stake_table_events, stake_table_events_l1_block, \
+                     epoch_drb_and_root, stake_table_validators",
+                )
+                .execute(tx.as_mut())
+                .await?;
+            } else {
                 query("DELETE FROM stake_table_events")
                     .execute(tx.as_mut())
                     .await?;
