@@ -24,3 +24,9 @@ Perform a comprehensive code review with the following focus areas:
    - Ensure code is properly documented
    - Verify README updates for new features
    - Check API documentation accuracy
+
+6. **Operator notes**
+   - If the PR changes env vars, CLI flags, config or genesis files, DB migrations, ports, storage layout, restart
+     requirements or upgrade timing, and adds no `doc/operator-notes/*.md` fragment, flag it and suggest the fragment
+     text (`### <title>`, urgency, what operators must do). See `doc/operator-notes/README.md`.
+   - Stay silent otherwise.
