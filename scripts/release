@@ -657,9 +657,10 @@ def plan_publish(
     date: str,
     repo: str,
 ) -> tuple[Tag | None, list[ReleaseEdit]]:
-    """Edits that make `target` the release for `network`: the superseded holders first, so the
-    target is written last and ends up Latest. Returns the previous holder and the edits.
-    Rerunning for the current holder keeps its prev and date, and its notes unless new ones are given.
+    """Edits that make `target` the release for `network`: the target first, so its block carries
+    prev before any holder is superseded and a rerun after a partial failure finds it. Returns the
+    previous holder and the edits. Rerunning for the current holder keeps its prev and date, and its
+    notes unless new ones are given.
     """
     release = find_release(releases, str(target))
     if release is None:
@@ -701,7 +702,7 @@ def plan_publish(
         "mainnet" in networks,
     )
     superseded = [_supersede(other, network, release.tag, date) for other in others]
-    return prev, [*superseded, edit]
+    return prev, [edit, *superseded]
 
 
 def _supersede(
@@ -1891,7 +1892,7 @@ def cmd_publish(args: argparse.Namespace, git: Git, gh: Gh) -> int:
         for edit in edits:
             flags = f"prerelease={edit.prerelease}, make_latest={edit.make_latest}"
             print(f"# {edit.tag}: {edit.title} ({flags})\n")
-        print(f"{edits[-1].body}\n\n---\n{comment}", end="")
+        print(f"{edits[0].body}\n\n---\n{comment}", end="")
         history, _promoted = _promotion(
             gh, gh.find_network_issue(network), target, prev, args.actor
         )
@@ -1905,9 +1906,9 @@ def cmd_publish(args: argparse.Namespace, git: Git, gh: Gh) -> int:
             gh.release_edit(edit)
         number = gh.network_issue(network)
         history, promoted = _promotion(gh, number, target, prev, args.actor)
-        if promoted:
-            gh.issue_edit_body(number, render_network_index(network, history, repo))
+        if promoted:  # comment first: a failure before the row lands is retried with a notification
             gh.issue_comment(number, comment)
+            gh.issue_edit_body(number, render_network_index(network, history, repo))
         gh.workflow_run("update-release-tracker.yml", None, {})
         if issue is not None:
             gh.issue_comment(issue, comment)

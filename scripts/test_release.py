@@ -1572,7 +1572,7 @@ class PlanPublish(unittest.TestCase):
         )
         prev, edits = plan(releases, "0.7.0.3", date="2026-10-23")
         self.assertEqual(prev, t("0.7.0.1"))
-        old, new = edits
+        new, old = edits
         self.assertEqual(
             (old.tag, old.title, old.prerelease, old.make_latest),
             ("0.7.0.1", "0.7.0.1", False, False),
@@ -1594,7 +1594,7 @@ class PlanPublish(unittest.TestCase):
             releases, "0.7.0.1", "mainnet", tags=[t("0.7.0.0"), t("0.7.0.1")]
         )
         self.assertEqual(prev, t("0.6.3.12"))
-        old, new = edits
+        new, old = edits
         self.assertEqual((old.title, old.make_latest), ("0.6.3.12 [decaf]", False))
         self.assertEqual((new.title, new.make_latest), ("0.7.0.1 [mainnet]", True))
         self.assertIn("## Operator actions for mainnet since 0.6.3.12", new.body)
@@ -1606,7 +1606,7 @@ class PlanPublish(unittest.TestCase):
             stated("0.6.3.13"),
         ]
         _prev, edits = plan(releases, "0.6.3.13", "decaf", tags=[t("0.6.3.13")])
-        old, new = edits
+        new, old = edits
         self.assertEqual((old.title, old.make_latest), ("0.6.3.12 [mainnet]", True))
         self.assertEqual((new.title, new.make_latest), ("0.6.3.13 [decaf]", False))
 
@@ -1647,14 +1647,26 @@ class PlanPublish(unittest.TestCase):
             stated("0.7.0.2", title="0.7.0.2 [decaf]", prerelease=False),
         ]
         _prev, edits = plan(releases, "0.7.0.2")
-        self.assertEqual([e.tag for e in edits], ["0.7.0.1", "0.7.0.2"])
+        self.assertEqual([e.tag for e in edits], ["0.7.0.2", "0.7.0.1"])
+
+    def test_release_plan_rerun_after_first_edit_only_ok(self):
+        releases = published(
+            [stated("0.7.0.1"), stated("0.7.0.2"), stated("0.7.0.3", "Urgency: High")],
+            "0.7.0.1",
+        )
+        prev, edits = plan(releases, "0.7.0.3", notes="Deadline view 5")
+        self.assertEqual(len(edits), 2)
+        partial = apply(releases, edits[:1])
+        again_prev, again = plan(partial, "0.7.0.3")
+        self.assertEqual(again_prev, prev)
+        self.assertEqual(again, edits)
 
     def test_release_plan_rollback_ok(self):
         releases = published([stated("0.7.0.1"), stated("0.7.0.2")], "0.7.0.2")
         prev, edits = plan(releases, "0.7.0.1")
         self.assertEqual(prev, t("0.7.0.2"))
-        self.assertIn("Rollback from 0.7.0.2.", edits[-1].body)
-        self.assertEqual(edits[0].title, "0.7.0.2")
+        self.assertIn("Rollback from 0.7.0.2.", edits[0].body)
+        self.assertEqual(edits[1].title, "0.7.0.2")
 
     def test_release_plan_republish_drops_stale_block_ok(self):
         releases = published(
@@ -1663,9 +1675,9 @@ class PlanPublish(unittest.TestCase):
         releases = published(releases, "0.7.0.2")
         self.assertIn("Superseded", releases[0].body)
         _prev, edits = plan(releases, "0.7.0.1")
-        self.assertNotIn("Old deadline", edits[-1].body)
-        self.assertNotIn("Superseded", edits[-1].body)
-        self.assertEqual(edits[-1].body.count("<!-- publish:decaf"), 1)
+        self.assertNotIn("Old deadline", edits[0].body)
+        self.assertNotIn("Superseded", edits[0].body)
+        self.assertEqual(edits[0].body.count("<!-- publish:decaf"), 1)
 
 
 class RerenderBlocks(unittest.TestCase):
@@ -1825,6 +1837,17 @@ class CmdPublish(unittest.TestCase):
         edit = next(c for c in runner.calls if c[:3] == ["gh", "issue", "edit"])
         self.assertEqual(edit[3], "9")
         self.assertTrue(runner.ran("gh", "issue", "create"))
+
+    def test_release_cmd_publish_comments_before_history_row_ok(self):
+        runner = self._runner()
+        code = rel.cmd_publish(self._args(), rel.Git(runner), rel.Gh(runner))
+        self.assertEqual(code, 0)
+        kinds = [
+            c[2]
+            for c in runner.calls
+            if c[:2] == ["gh", "issue"] and c[2] in ("comment", "edit") and c[3] == "9"
+        ]
+        self.assertEqual(kinds, ["comment", "edit"])
 
     def test_release_cmd_publish_rerun_skips_network_comment_ok(self):
         history = [("0.7.0.2", "2026-10-21", "@alice", None)]

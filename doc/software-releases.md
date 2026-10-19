@@ -104,7 +104,8 @@ first and mainnet later. Only `/publish` turns a pre-release into a release.
 - Network issue: the bot comments the same text on the issue `Releases: <network>` (see below).
 - Rollback: `/publish <older tag> <network>`.
 - Rerunning `/publish` for the current holder only re-renders its block, keeping its date and previous tag. It is also
-  the recovery after a partial failure. Notes given on lines 2..n replace the stored ones.
+  the recovery after a partial failure: the target release is written first, so a rerun still finds its previous tag.
+  Notes given on lines 2..n replace the stored ones.
 - `just release-notes X.Y.Z.N decaf` previews the edits and the tracker comment without writing.
 
 ### Following a network
