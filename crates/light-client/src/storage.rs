@@ -923,6 +923,7 @@ mod test {
     #[cfg(unix)]
     use std::os::unix::fs::PermissionsExt;
 
+    use hotshot_query_service::data_source::storage::sql::testing::TmpPostgres;
     use pretty_assertions::assert_eq;
     use sqlx::sqlite::SqliteConnectOptions;
     use tempfile::tempdir;
@@ -930,6 +931,199 @@ mod test {
 
     use super::*;
     use crate::testing::{leaf_chain, random_validator};
+
+    trait Backend {
+        type Guard;
+        async fn open(num_leaves: u32) -> (SqlStorage, Self::Guard);
+    }
+
+    struct Sqlite;
+
+    impl Backend for Sqlite {
+        type Guard = ();
+
+        async fn open(num_leaves: u32) -> (SqlStorage, ()) {
+            let db = LightClientSqliteOptions {
+                num_leaves,
+                ..Default::default()
+            }
+            .connect()
+            .await
+            .unwrap();
+            (db, ())
+        }
+    }
+
+    macro_rules! backend_tests {
+        ($module:ident, $backend:ty) => {
+            mod $module {
+                #[tokio::test]
+                #[test_log::test]
+                async fn test_block_height() {
+                    super::test_block_height::<$backend>().await
+                }
+
+                #[tokio::test]
+                #[test_log::test]
+                async fn test_leaf_upper_bound_exact() {
+                    super::test_leaf_upper_bound_exact::<$backend>().await
+                }
+
+                #[tokio::test]
+                #[test_log::test]
+                async fn test_leaf_upper_bound_loose() {
+                    super::test_leaf_upper_bound_loose::<$backend>().await
+                }
+
+                #[tokio::test]
+                #[test_log::test]
+                async fn test_leaf_upper_bound_least_upper_bound() {
+                    super::test_leaf_upper_bound_least_upper_bound::<$backend>().await
+                }
+
+                #[tokio::test]
+                #[test_log::test]
+                async fn test_leaf_upper_bound_not_found() {
+                    super::test_leaf_upper_bound_not_found::<$backend>().await
+                }
+
+                #[tokio::test]
+                #[test_log::test]
+                async fn test_gc_last_inserted() {
+                    super::test_gc_last_inserted::<$backend>().await
+                }
+
+                #[tokio::test]
+                #[test_log::test]
+                async fn test_gc_evicts_least_recently_used() {
+                    super::test_gc_evicts_least_recently_used::<$backend>().await
+                }
+
+                #[tokio::test]
+                #[test_log::test]
+                async fn test_get_leaves_in_range() {
+                    super::test_get_leaves_in_range::<$backend>().await
+                }
+
+                #[tokio::test]
+                #[test_log::test]
+                async fn test_get_leaves_in_range_not_found() {
+                    super::test_get_leaves_in_range_not_found::<$backend>().await
+                }
+
+                #[tokio::test]
+                #[test_log::test]
+                async fn test_insert_stake_table_idempotent() {
+                    super::test_insert_stake_table_idempotent::<$backend>().await
+                }
+
+                #[tokio::test]
+                #[test_log::test]
+                async fn test_stake_table_lower_bound_exact() {
+                    super::test_stake_table_lower_bound_exact::<$backend>().await
+                }
+
+                #[tokio::test]
+                #[test_log::test]
+                async fn test_stake_table_lower_bound_loose() {
+                    super::test_stake_table_lower_bound_loose::<$backend>().await
+                }
+
+                #[tokio::test]
+                #[test_log::test]
+                async fn test_stake_table_lower_bound_greatest_lower_bound() {
+                    super::test_stake_table_lower_bound_greatest_lower_bound::<$backend>().await
+                }
+
+                #[tokio::test]
+                #[test_log::test]
+                async fn test_stake_table_lower_bound_not_found() {
+                    super::test_stake_table_lower_bound_not_found::<$backend>().await
+                }
+
+                #[tokio::test]
+                #[test_log::test]
+                async fn test_stake_table_keeps_every_epoch() {
+                    super::test_stake_table_keeps_every_epoch::<$backend>().await
+                }
+
+                #[tokio::test]
+                #[test_log::test]
+                async fn test_stake_table_insert_out_of_order() {
+                    super::test_stake_table_insert_out_of_order::<$backend>().await
+                }
+
+                #[tokio::test]
+                #[test_log::test]
+                async fn test_stake_table_epoch_root_protocol_version_roundtrip() {
+                    super::test_stake_table_epoch_root_protocol_version_roundtrip::<$backend>()
+                        .await
+                }
+
+                #[tokio::test]
+                #[test_log::test]
+                async fn test_stake_table_x25519_keys_round_trip() {
+                    super::test_stake_table_x25519_keys_round_trip::<$backend>().await
+                }
+            }
+        };
+    }
+
+    backend_tests!(sqlite, super::Sqlite);
+
+    struct Postgres;
+
+    impl Backend for Postgres {
+        type Guard = TmpPostgres;
+
+        async fn open(num_leaves: u32) -> (SqlStorage, TmpPostgres) {
+            let tmp = TmpPostgres::init().await;
+            let db = postgres_options(&tmp, num_leaves).connect().await.unwrap();
+            (db, tmp)
+        }
+    }
+
+    fn postgres_options(tmp: &TmpPostgres, num_leaves: u32) -> LightClientPostgresOptions {
+        LightClientPostgresOptions {
+            connect: PgConnectOptions::new()
+                .host(&tmp.host())
+                .port(tmp.port())
+                .username("postgres")
+                .password("password"),
+            num_connections: 5,
+            num_leaves,
+        }
+    }
+
+    backend_tests!(postgres, super::Postgres);
+
+    #[tokio::test]
+    #[test_log::test]
+    async fn test_postgres_survives_reconnect() {
+        let tmp = TmpPostgres::init().await;
+        let leaf = leaf_chain(0..1, EPOCH_VERSION).await.remove(0);
+        let state = random_stake_table();
+        {
+            let db = postgres_options(&tmp, 10).connect().await.unwrap();
+            db.insert_leaf(leaf.clone()).await.unwrap();
+            db.insert_stake_table(EpochNumber::new(3), &state, EPOCH_VERSION, EPOCH_VERSION)
+                .await
+                .unwrap();
+        }
+
+        let db = postgres_options(&tmp, 10).connect().await.unwrap();
+        assert_eq!(
+            db.leaf_upper_bound(LeafId::Number(0)).await.unwrap(),
+            Some(leaf)
+        );
+        assert_eq!(
+            db.stake_table_lower_bound(EpochNumber::new(5))
+                .await
+                .unwrap()
+                .unwrap(),
+            (EpochNumber::new(3), state, EPOCH_VERSION, EPOCH_VERSION)
+        );
+    }
 
     #[tokio::test]
     #[test_log::test]
@@ -1060,10 +1254,8 @@ mod test {
         assert!(path.exists(), "sqlite file should have been created");
     }
 
-    #[tokio::test]
-    #[test_log::test]
-    async fn test_block_height() {
-        let db = SqlStorage::default().await.unwrap();
+    async fn test_block_height<B: Backend>() {
+        let (db, _guard) = B::open(100).await;
 
         // Test with empty db.
         assert_eq!(db.block_height().await.unwrap(), 0);
@@ -1074,10 +1266,8 @@ mod test {
         assert_eq!(db.block_height().await.unwrap(), 101);
     }
 
-    #[tokio::test]
-    #[test_log::test]
-    async fn test_leaf_upper_bound_exact() {
-        let db = SqlStorage::default().await.unwrap();
+    async fn test_leaf_upper_bound_exact<B: Backend>() {
+        let (db, _guard) = B::open(100).await;
 
         let leaf = leaf_chain(0..1, EPOCH_VERSION).await.remove(0);
         db.insert_leaf(leaf.clone()).await.unwrap();
@@ -1119,10 +1309,8 @@ mod test {
         );
     }
 
-    #[tokio::test]
-    #[test_log::test]
-    async fn test_leaf_upper_bound_loose() {
-        let db = SqlStorage::default().await.unwrap();
+    async fn test_leaf_upper_bound_loose<B: Backend>() {
+        let (db, _guard) = B::open(100).await;
 
         let leaves = leaf_chain(0..=1, EPOCH_VERSION).await;
         db.insert_leaf(leaves[1].clone()).await.unwrap();
@@ -1149,10 +1337,8 @@ mod test {
         );
     }
 
-    #[tokio::test]
-    #[test_log::test]
-    async fn test_leaf_upper_bound_least_upper_bound() {
-        let db = SqlStorage::default().await.unwrap();
+    async fn test_leaf_upper_bound_least_upper_bound<B: Backend>() {
+        let (db, _guard) = B::open(100).await;
 
         let leaves = leaf_chain(0..=2, EPOCH_VERSION).await;
         db.insert_leaf(leaves[2].clone()).await.unwrap();
@@ -1166,10 +1352,8 @@ mod test {
         );
     }
 
-    #[tokio::test]
-    #[test_log::test]
-    async fn test_leaf_upper_bound_not_found() {
-        let db = SqlStorage::default().await.unwrap();
+    async fn test_leaf_upper_bound_not_found<B: Backend>() {
+        let (db, _guard) = B::open(100).await;
 
         let leaves = leaf_chain(0..=1, EPOCH_VERSION).await;
         db.insert_leaf(leaves[0].clone()).await.unwrap();
@@ -1182,16 +1366,8 @@ mod test {
         );
     }
 
-    #[tokio::test]
-    #[test_log::test]
-    async fn test_gc_last_inserted() {
-        let db = LightClientSqliteOptions {
-            num_leaves: 1,
-            ..Default::default()
-        }
-        .connect()
-        .await
-        .unwrap();
+    async fn test_gc_last_inserted<B: Backend>() {
+        let (db, _guard) = B::open(1).await;
 
         let leaves = leaf_chain(0..=1, EPOCH_VERSION).await;
         db.insert_leaf(leaves[1].clone()).await.unwrap();
@@ -1208,16 +1384,8 @@ mod test {
     }
 
     // LRU GC: leaf touched by a read is kept; untouched leaf is evicted.
-    #[tokio::test]
-    #[test_log::test]
-    async fn test_gc_evicts_least_recently_used() {
-        let db = LightClientSqliteOptions {
-            num_leaves: 2,
-            ..Default::default()
-        }
-        .connect()
-        .await
-        .unwrap();
+    async fn test_gc_evicts_least_recently_used<B: Backend>() {
+        let (db, _guard) = B::open(2).await;
 
         let leaves = leaf_chain(0..=2, EPOCH_VERSION).await;
         db.insert_leaf(leaves[0].clone()).await.unwrap();
@@ -1377,10 +1545,8 @@ mod test {
         }
     }
 
-    #[tokio::test]
-    #[test_log::test]
-    async fn test_get_leaves_in_range() {
-        let db = SqlStorage::default().await.unwrap();
+    async fn test_get_leaves_in_range<B: Backend>() {
+        let (db, _guard) = B::open(100).await;
 
         let leaves = leaf_chain(0..5, EPOCH_VERSION).await;
         for leaf in &leaves {
@@ -1391,10 +1557,8 @@ mod test {
         assert_eq!(fetched, leaves[1..4]);
     }
 
-    #[tokio::test]
-    #[test_log::test]
-    async fn test_get_leaves_in_range_not_found() {
-        let db = SqlStorage::default().await.unwrap();
+    async fn test_get_leaves_in_range_not_found<B: Backend>() {
+        let (db, _guard) = B::open(100).await;
 
         let leaves = leaf_chain(0..3, EPOCH_VERSION).await;
         for leaf in &leaves {
@@ -1405,10 +1569,8 @@ mod test {
         assert!(fetched.is_empty());
     }
 
-    #[tokio::test]
-    #[test_log::test]
-    async fn test_insert_stake_table_idempotent() {
-        let db = SqlStorage::default().await.unwrap();
+    async fn test_insert_stake_table_idempotent<B: Backend>() {
+        let (db, _guard) = B::open(100).await;
 
         let epoch = EpochNumber::new(1);
         let state = random_stake_table();
@@ -1425,10 +1587,8 @@ mod test {
         );
     }
 
-    #[tokio::test]
-    #[test_log::test]
-    async fn test_stake_table_lower_bound_exact() {
-        let db = SqlStorage::default().await.unwrap();
+    async fn test_stake_table_lower_bound_exact<B: Backend>() {
+        let (db, _guard) = B::open(100).await;
 
         let epoch = EpochNumber::new(1);
         let state = random_stake_table();
@@ -1441,10 +1601,8 @@ mod test {
         );
     }
 
-    #[tokio::test]
-    #[test_log::test]
-    async fn test_stake_table_lower_bound_loose() {
-        let db = SqlStorage::default().await.unwrap();
+    async fn test_stake_table_lower_bound_loose<B: Backend>() {
+        let (db, _guard) = B::open(100).await;
 
         let epoch = EpochNumber::new(1);
         let state = random_stake_table();
@@ -1460,10 +1618,8 @@ mod test {
         );
     }
 
-    #[tokio::test]
-    #[test_log::test]
-    async fn test_stake_table_lower_bound_greatest_lower_bound() {
-        let db = SqlStorage::default().await.unwrap();
+    async fn test_stake_table_lower_bound_greatest_lower_bound<B: Backend>() {
+        let (db, _guard) = B::open(100).await;
 
         let state1 = random_stake_table();
         let state2 = chain_stake_table(&state1);
@@ -1483,10 +1639,8 @@ mod test {
         );
     }
 
-    #[tokio::test]
-    #[test_log::test]
-    async fn test_stake_table_lower_bound_not_found() {
-        let db = SqlStorage::default().await.unwrap();
+    async fn test_stake_table_lower_bound_not_found<B: Backend>() {
+        let (db, _guard) = B::open(100).await;
         db.insert_stake_table(
             EpochNumber::new(2),
             &random_stake_table(),
@@ -1503,10 +1657,8 @@ mod test {
         );
     }
 
-    #[tokio::test]
-    #[test_log::test]
-    async fn test_stake_table_keeps_every_epoch() {
-        let db = SqlStorage::default().await.unwrap();
+    async fn test_stake_table_keeps_every_epoch<B: Backend>() {
+        let (db, _guard) = B::open(100).await;
 
         let mut states = Vec::from([random_stake_table()]);
         for _ in 1..150 {
@@ -1529,10 +1681,8 @@ mod test {
         }
     }
 
-    #[tokio::test]
-    #[test_log::test]
-    async fn test_stake_table_insert_out_of_order() {
-        let db = SqlStorage::default().await.unwrap();
+    async fn test_stake_table_insert_out_of_order<B: Backend>() {
+        let (db, _guard) = B::open(100).await;
 
         let state1 = random_stake_table();
         let state2 = chain_stake_table(&state1);
@@ -1559,10 +1709,8 @@ mod test {
         );
     }
 
-    #[tokio::test]
-    #[test_log::test]
-    async fn test_stake_table_epoch_root_protocol_version_roundtrip() {
-        let db = SqlStorage::default().await.unwrap();
+    async fn test_stake_table_epoch_root_protocol_version_roundtrip<B: Backend>() {
+        let (db, _guard) = B::open(100).await;
 
         let epoch = EpochNumber::new(1);
         let state = random_stake_table();
@@ -1580,12 +1728,10 @@ mod test {
     /// Regression: storage previously dropped `used_x25519_keys` on round trip,
     /// so a reloaded `StakeTableState::commit()` diverged from the proposer's
     /// hash once any V3 events had been applied.
-    #[tokio::test]
-    #[test_log::test]
-    async fn test_stake_table_x25519_keys_round_trip() {
+    async fn test_stake_table_x25519_keys_round_trip<B: Backend>() {
         use committable::Committable;
 
-        let db = SqlStorage::default().await.unwrap();
+        let (db, _guard) = B::open(100).await;
         let epoch = EpochNumber::new(1);
         let state = random_stake_table();
         assert!(

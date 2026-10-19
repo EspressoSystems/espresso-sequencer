@@ -4176,4 +4176,55 @@ mod postgres_tests {
         let latest = storage.load_latest_acted_view().await.unwrap();
         assert_eq!(latest, Some(ViewNumber::new(19)));
     }
+
+    #[test_log::test(tokio::test(flavor = "multi_thread"))]
+    async fn test_light_client_shares_the_node_database() {
+        use hotshot_query_service::availability::LeafId;
+        use light_client::storage::{LightClientPostgresOptions, Storage as _};
+
+        let tmp = Persistence::tmp_storage().await;
+        let mut opt = Persistence::options(&tmp);
+        let _persistence = opt.create().await.unwrap();
+
+        let db = LightClientPostgresOptions {
+            connect: Config::try_from(&opt).unwrap().connect_options().clone(),
+            num_connections: 1,
+            num_leaves: 10,
+        }
+        .connect()
+        .await
+        .unwrap();
+        let leaf = light_client::testing::leaf_chain(0..1, versions::EPOCH_VERSION)
+            .await
+            .remove(0);
+        db.insert_leaf(leaf.clone()).await.unwrap();
+        assert_eq!(
+            db.leaf_upper_bound(LeafId::Number(0)).await.unwrap(),
+            Some(leaf)
+        );
+    }
+
+    #[test_log::test(tokio::test(flavor = "multi_thread"))]
+    async fn test_reset_drops_light_client_cache() {
+        use light_client::storage::{LightClientPostgresOptions, Storage as _};
+
+        let tmp = Persistence::tmp_storage().await;
+        let opt = Persistence::options(&tmp);
+        let light_client = || LightClientPostgresOptions {
+            connect: Config::try_from(&opt).unwrap().connect_options().clone(),
+            num_connections: 1,
+            num_leaves: 10,
+        };
+        let leaf = light_client::testing::leaf_chain(0..1, versions::EPOCH_VERSION)
+            .await
+            .remove(0);
+        let db = light_client().connect().await.unwrap();
+        db.insert_leaf(leaf).await.unwrap();
+        drop(db);
+
+        opt.clone().reset().await.unwrap();
+
+        let db = light_client().connect().await.unwrap();
+        assert_eq!(db.block_height().await.unwrap(), 0);
+    }
 }
