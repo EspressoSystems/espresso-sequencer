@@ -793,13 +793,15 @@ mod test {
     use jf_advz::VidScheme;
     use pretty_assertions::assert_eq;
 
-    use super::*;
+    use super::{
+        super::super::{SqlStorage, testing::TmpDb},
+        *,
+    };
     use crate::{
         availability::{BlockQueryData, LeafQueryData, VidCommonQueryData},
         data_source::{
             Transaction as _, VersionedDataSource,
-            sql::testing::TmpDb,
-            storage::{SqlStorage, StorageConnectionType, UpdateAvailabilityStorage},
+            storage::{StorageConnectionType, UpdateAvailabilityStorage},
         },
         testing::mocks::MockTypes,
     };
