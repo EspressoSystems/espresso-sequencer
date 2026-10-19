@@ -45,6 +45,7 @@ NOTES_CLOSE = "<!-- /operator-notes -->"
 NOTES_HEADING = "## Operator notes"
 NOT_STATED = "_Not yet stated._"
 NO_ACTION = "No operator action required."
+NETWORK_LABEL = "release-network"
 NETWORK_NOTES_OPEN = "<!-- network-notes -->"
 NETWORK_NOTES_CLOSE = "<!-- /network-notes -->"
 LOCAL_HELP = "read the release branch from the checkout instead of origin/*, skip fetch"
@@ -76,6 +77,9 @@ _TITLE_RE = re.compile(r"^\S+ \[([^\]]+)\]$")
 _NETWORK_NOTES_RE = re.compile(
     rf"{re.escape(NETWORK_NOTES_OPEN)}\n(.*?)\n{re.escape(NETWORK_NOTES_CLOSE)}",
     re.DOTALL,
+)
+_HISTORY_ROW_RE = re.compile(
+    r"^\| \[`([^`]+)`\]\([^)]*\) \| (\S+) \| (\S+) \| (?:`([^`]+)`|-) \|$", re.MULTILINE
 )
 _NOTES_RE = re.compile(
     rf"{re.escape(NOTES_OPEN)}\n(.*?)\n{re.escape(NOTES_CLOSE)}", re.DOTALL
@@ -778,6 +782,40 @@ def render_publish_comment(
     return "\n".join(lines) + "\n"
 
 
+History = list[tuple[str, str, str, str | None]]  # tag, date, by, prev; newest first
+
+
+def render_network_index(network: Network, history: History, repo: str) -> str:
+    rows = [
+        f"| [`{tag}`]({release_url(repo, tag)}) | {date} | {by} | "
+        f"{f'`{prev}`' if prev else '-'} |"
+        for tag, date, by, prev in history
+    ]
+    current, since = history[0][0], history[0][1]
+    return "\n".join(
+        [
+            f"Release on **{network}**: [`{current}`]({release_url(repo, current)}), since {since}.",
+            "",
+            f"`docker pull ghcr.io/{repo.lower()}/espresso-node:{current}`",
+            "",
+            f"The bot comments here on every `/publish` for {network}. Subscribe to this issue to be notified.",
+            "",
+            "## History",
+            "",
+            "| Tag | Date | By | Previous |",
+            "|---|---|---|---|",
+            *rows,
+        ]
+    )
+
+
+def parse_network_history(body: str) -> History:
+    return [
+        (tag, date, by, prev or None)
+        for tag, date, by, prev in _HISTORY_ROW_RE.findall(normalize_newlines(body))
+    ]
+
+
 def render_notes_cell(tag: str, releases: list[ReleaseInfo]) -> str:
     release = find_release(releases, tag)
     if release is None:
@@ -1395,6 +1433,39 @@ class Gh:
                 ]
             )
 
+    def find_network_issue(self, network: Network) -> int | None:
+        data = json.loads(
+            self._run(
+                [
+                    "gh",
+                    "issue",
+                    "list",
+                    "--label",
+                    NETWORK_LABEL,
+                    "--author",
+                    "app/github-actions",
+                    "--state",
+                    "open",
+                    "--json",
+                    "number,title",
+                ]
+            )
+        )
+        title = f"Releases: {network}"
+        return next((item["number"] for item in data if item["title"] == title), None)
+
+    def network_issue(self, network: Network) -> int:
+        """Finds the open `Releases: <network>` issue, or opens it."""
+        number = self.find_network_issue(network)
+        if number is not None:
+            return number
+        self.label_create(NETWORK_LABEL, "Releases published on a network", "0E8A16")
+        return self.issue_create(
+            f"Releases: {network}",
+            NETWORK_LABEL,
+            f"_No release published on {network} yet._",
+        )
+
     def build_succeeded(self, tag: str) -> bool:
         runs = json.loads(
             self._run(
@@ -1754,6 +1825,23 @@ def _version_tags(git: Git, version: Version) -> list[Tag]:
     return [tag for name in git.tag_list(f"{version}.*") if (tag := parse_tag(name))]
 
 
+def _promotion(
+    gh: Gh, number: int | None, target: Tag, prev: Tag | None, actor: str | None
+) -> tuple[History, bool]:
+    """The network issue's history with this promotion on top; False when a rerun finds it already there."""
+    history = parse_network_history(gh.issue(number)[1]) if number is not None else []
+    if history and history[0][0] == str(target):
+        return history, False
+    date = datetime.now(UTC).date().isoformat()
+    row = (
+        str(target),
+        date,
+        f"@{actor}" if actor else "-",
+        str(prev) if prev else None,
+    )
+    return [row, *history], True
+
+
 def cmd_publish(args: argparse.Namespace, git: Git, gh: Gh) -> int:
     if not args.dry_run and not require_writer(gh, args.actor):
         return 1
@@ -1804,11 +1892,22 @@ def cmd_publish(args: argparse.Namespace, git: Git, gh: Gh) -> int:
             flags = f"prerelease={edit.prerelease}, make_latest={edit.make_latest}"
             print(f"# {edit.tag}: {edit.title} ({flags})\n")
         print(f"{edits[-1].body}\n\n---\n{comment}", end="")
+        history, _promoted = _promotion(
+            gh, gh.find_network_issue(network), target, prev, args.actor
+        )
+        print(
+            f"\n---\n# Releases: {network}\n\n{render_network_index(network, history, repo)}"
+        )
         return 0
 
     try:
         for edit in edits:
             gh.release_edit(edit)
+        number = gh.network_issue(network)
+        history, promoted = _promotion(gh, number, target, prev, args.actor)
+        if promoted:
+            gh.issue_edit_body(number, render_network_index(network, history, repo))
+            gh.issue_comment(number, comment)
         gh.workflow_run("update-release-tracker.yml", None, {})
         if issue is not None:
             gh.issue_comment(issue, comment)

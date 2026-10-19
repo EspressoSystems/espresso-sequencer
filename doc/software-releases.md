@@ -101,10 +101,26 @@ first and mainnet later. Only `/publish` turns a pre-release into a release.
 - Gates, each reported as a tracker comment without changing anything: the tag belongs to the tracker's version, the
   release exists, a `build.yml` run for the tag succeeded, and every tag in the range has stated notes (the comment
   lists the missing tags; `/notes <tag> none` fixes a quiet one).
+- Network issue: the bot comments the same text on the issue `Releases: <network>` (see below).
 - Rollback: `/publish <older tag> <network>`.
 - Rerunning `/publish` for the current holder only re-renders its block, keeping its date and previous tag. It is also
   the recovery after a partial failure. Notes given on lines 2..n replace the stored ones.
 - `just release-notes X.Y.Z.N decaf` previews the edits and the tracker comment without writing.
+
+### Following a network
+
+Operators get one notification per promotion from the issue `Releases: decaf` or `Releases: mainnet` (label
+`release-network`). The bot opens each issue on the first `/publish` for the network. Its body holds the current tag,
+the `docker pull` line and the promotion history (tag, date, who, previous tag, release link), and `/publish` adds one
+comment. Subscribe to the issue on its page (sidebar, Subscribe). A rerun of `/publish` for the current holder adds no
+comment.
+
+- Do not rely on Watch > Releases or `releases.atom`: both include pre-releases, so every `/tag` notifies, and the feed
+  also lists bare tags.
+- Anyone can comment on the issue, and a comment notifies all subscribers. Issues cannot be locked, because the workflow
+  token cannot comment on locked issues.
+- Pinning is a one-time manual step per issue: a maintainer runs `gh issue pin <number>`. The bot does not pin, since a
+  pin with the workflow token is unverified.
 
 ## Process
 
