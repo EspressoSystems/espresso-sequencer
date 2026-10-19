@@ -759,10 +759,8 @@ class CmdTagHappyPath(unittest.TestCase):
                 ("git", "fetch"): "",
                 ("git", "tag", "--list", "0.6.0.*"): "0.6.0.0\n0.6.0.1\n",
                 ("git", "rev-parse", "origin/release-0.6.0"): sha,
-                ("git", "diff"): "",
                 ("git", "tag", "-a"): "",
                 ("git", "push", "origin", "refs/tags/0.6.0.2"): "",
-                ("gh", "release", "create"): "https://example/releases/0.6.0.2",
                 ("gh", "workflow", "run"): "",
                 ("gh", "issue", "comment"): "",
             }
@@ -783,15 +781,16 @@ class CmdTagHappyPath(unittest.TestCase):
             ["git", "tag", "-a", "0.6.0.2", sha, "-m", "Release 0.6.0.2"], runner.calls
         )
         self.assertIn(["git", "push", "origin", "refs/tags/0.6.0.2"], runner.calls)
-        release_call = next(
-            call for call in runner.calls if call[:3] == ["gh", "release", "create"]
+        self.assertFalse(runner.ran("gh", "release"))
+        self.assertFalse(runner.ran("git", "diff"))
+        self.assertTrue(runner.ran("gh", "workflow", "run", "build.yml"))
+        self.assertTrue(
+            runner.ran("gh", "workflow", "run", "update-release-tracker.yml")
         )
-        self.assertIn("--prerelease", release_call)
-        self.assertNotIn("--latest=true", release_call)
-        notes = release_call[release_call.index("--notes") + 1]
-        self.assertIn(rel.NO_ACTION, notes)
-        self.assertTrue(runner.ran("gh", "workflow", "run"))
-        self.assertTrue(runner.ran("gh", "issue", "comment"))
+        comment = next(c for c in runner.calls if c[:3] == ["gh", "issue", "comment"])
+        self.assertIn("Tagged `0.6.0.2`", comment[-1])
+        self.assertIn("Build runs", comment[-1])
+        self.assertNotIn("release", comment[-1].lower())
 
     def test_release_cmd_tag_dry_run_ok(self):
         runner = FakeRunner(
@@ -803,7 +802,6 @@ class CmdTagHappyPath(unittest.TestCase):
                 ("git", "fetch"): "",
                 ("git", "tag", "--list"): "0.6.0.0\n",
                 ("git", "rev-parse", "origin/release-0.6.0"): "c" * 40,
-                ("git", "diff"): "",
                 PERMISSION: "write",
             }
         )
@@ -908,39 +906,6 @@ class CmdTagHappyPath(unittest.TestCase):
             dry_run=False,
         )
 
-    def test_release_cmd_tag_fragments_in_release_ok(self):
-        diff = "doc/operator-notes/b.md\0doc/operator-notes/README.md\0"
-        runner = self._fragment_runner(diff, "### B\n\nUrgency: High\n")
-        self.assertEqual(
-            rel.cmd_tag(self._tag_args(), rel.Git(runner), rel.Gh(runner)), 0
-        )
-        self.assertIn(
-            [
-                "git",
-                "diff",
-                "--no-renames",
-                "--diff-filter=AM",
-                "--name-only",
-                "-z",
-                "0.6.0.0",
-                "c" * 40,
-                "--",
-                "doc/operator-notes/",
-            ],
-            runner.calls,
-        )
-        self.assertIn(
-            ["git", "show", f"{'c' * 40}:doc/operator-notes/b.md"], runner.calls
-        )
-        self.assertFalse(
-            runner.ran("git", "show", f"{'c' * 40}:doc/operator-notes/README.md")
-        )
-        create = next(c for c in runner.calls if c[:3] == ["gh", "release", "create"])
-        notes = create[create.index("--notes") + 1]
-        self.assertTrue(notes.startswith(rel.NOTES_OPEN))
-        self.assertIn("### B\n\nUrgency: High", notes)
-        self.assertIn("--generate-notes", create)
-
     def test_release_cmd_tag_text_fails(self):
         runner = self._fragment_runner("", "")
         args = self._tag_args("/tag\nUrgency: High")
@@ -950,50 +915,6 @@ class CmdTagHappyPath(unittest.TestCase):
         comment = next(c for c in runner.calls if c[:3] == ["gh", "issue", "comment"])
         self.assertIn("/tag failed:", comment[-1])
         self.assertIn("doc/operator-notes/", comment[-1])
-
-    def test_release_cmd_tag_dot_zero_notes_since_previous_cut_ok(self):
-        runner = self._fragment_runner("doc/operator-notes/a.md\0", "### A\n", tags="")
-        runner.responses[("git", "ls-remote", "--tags")] = ls_remote(
-            "0.5.2.3", "0.5.2.1"
-        )
-        self.assertEqual(
-            rel.cmd_tag(self._tag_args(), rel.Git(runner), rel.Gh(runner)), 0
-        )
-        diff = next(c for c in runner.calls if c[:2] == ["git", "diff"])
-        self.assertEqual(diff[6:8], ["0.5.2.3", "c" * 40])
-        create = next(c for c in runner.calls if c[:3] == ["gh", "release", "create"])
-        self.assertIn("### A", create[create.index("--notes") + 1])
-
-    def test_release_cmd_tag_dot_zero_no_ancestor_fails(self):
-        runner = self._fragment_runner("", "", tags="")
-        runner.responses[("git", "ls-remote", "--tags")] = ls_remote()
-        self.assertEqual(
-            rel.cmd_tag(self._tag_args(), rel.Git(runner), rel.Gh(runner)), 1
-        )
-        self.assertFalse(runner.ran("git", "tag", "-a"))
-        comment = next(c for c in runner.calls if c[:3] == ["gh", "issue", "comment"])
-        self.assertIn("no earlier version tag", comment[-1])
-
-    def test_release_cmd_tag_bad_fragment_fails(self):
-        diff = "doc/operator-notes/b.md\0"
-        runner = self._fragment_runner(diff, "### B\n<!-- /operator-notes -->")
-        self.assertEqual(
-            rel.cmd_tag(self._tag_args(), rel.Git(runner), rel.Gh(runner)), 1
-        )
-        self.assertFalse(runner.ran("git", "tag", "-a"))
-        self.assertFalse(runner.ran("gh", "release", "create"))
-        comment = next(c for c in runner.calls if c[:3] == ["gh", "issue", "comment"])
-        self.assertIn("doc/operator-notes/b.md", comment[-1])
-
-    def test_release_cmd_tag_nested_fragment_path_fails(self):
-        runner = self._fragment_runner("doc/operator-notes/sub/a.md\0", "### A\n")
-        self.assertEqual(
-            rel.cmd_tag(self._tag_args(), rel.Git(runner), rel.Gh(runner)), 1
-        )
-        self.assertFalse(runner.ran("git", "tag", "-a"))
-        comment = next(c for c in runner.calls if c[:3] == ["gh", "issue", "comment"])
-        self.assertIn("/tag failed:", comment[-1])
-        self.assertIn("doc/operator-notes/sub/a.md", comment[-1])
 
 
 # REQ:release-tag-failure-reported
@@ -1061,7 +982,6 @@ class TagFailurePostsComment(unittest.TestCase):
             ("git", "fetch"): "",
             ("git", "tag", "--list", "0.6.0.*"): "",
             ("git", "ls-remote", "--tags"): ls_remote("0.5.9.1"),
-            ("git", "diff"): "",
             ("git", "rev-parse", "origin/release-0.6.0"): sha,
             ("git", "tag", "-a"): "",
             ("git", "push", "origin", "refs/tags/0.6.0.0"): "",
@@ -1071,8 +991,8 @@ class TagFailurePostsComment(unittest.TestCase):
 
         def runner(argv: list[str]) -> str:
             calls.append(argv)
-            if argv[:3] == ["gh", "release", "create"]:
-                raise RuntimeError("gh release create boom")
+            if argv[:3] == ["gh", "workflow", "run"]:
+                raise RuntimeError("gh workflow run boom")
             for prefix, output in responses.items():
                 if tuple(argv[: len(prefix)]) == prefix:
                     return output
@@ -1362,14 +1282,11 @@ class TagLogReleases(unittest.TestCase):
         body = rel.render_tag_log(tags, [release("0.6.3.1")], {}, REPO)
         self.assertIn("| GitHub release | Notes | Build |", body)
         self.assertIn(
-            f"[pre-release](https://github.com/{REPO}/releases/tag/0.6.3.1)", body
+            f"[release](https://github.com/{REPO}/releases/tag/0.6.3.1)", body
         )
+        self.assertNotIn("pre-release", body)
         self.assertIn("build.yml?query=branch%3A0.6.3.0", body)
         self.assertIn("| - |", body)
-        self.assertIn(
-            "[release](",
-            rel.render_tag_log(tags, [release("0.6.3.1", prerelease=False)], {}, REPO),
-        )
 
     def test_release_tag_log_notes_column_ok(self):
         tags = [(f"0.6.3.{n}", "2026-09-21", "c" * 40) for n in range(3)]
@@ -1953,9 +1870,39 @@ class PlanPublish(unittest.TestCase):
         _prev, (fresh,) = plan([release("0.7.0.1")], "0.7.0.1", notes="none")
         self.assertNotIn("network-notes", fresh.body)
 
-    def test_release_plan_missing_release_fails(self):
-        with self.assertRaises(ValueError):
-            plan([release("0.7.0.0")], "0.7.0.5")
+    def test_release_plan_missing_release_creates_ok(self):
+        prev, (create,) = plan([release("0.7.0.0")], "0.7.0.5")
+        self.assertIsNone(prev)
+        self.assertTrue(create.create)
+        self.assertEqual(create.title, "0.7.0.5 [decaf]")
+        self.assertEqual(create.start_tag, "0.7.0.0")
+        self.assertTrue(create.body.startswith("<!-- publish:decaf prev=none"))
+
+    def test_release_plan_create_starts_at_previous_holder_ok(self):
+        releases = published([release("0.7.0.1")], "0.7.0.1")
+        prev, (create, old) = plan(releases, "0.7.0.3", tags=[t("0.7.0.2")])
+        self.assertEqual(prev, t("0.7.0.1"))
+        self.assertTrue(create.create)
+        self.assertEqual(create.start_tag, "0.7.0.1")
+        self.assertFalse(old.create)
+        self.assertIsNone(old.start_tag)
+
+    def test_release_plan_create_rollback_has_no_start_tag_ok(self):
+        releases = published([release("0.7.0.3")], "0.7.0.3")
+        prev, (create, _old) = plan(releases, "0.7.0.1")
+        self.assertEqual(prev, t("0.7.0.3"))
+        self.assertTrue(create.create)
+        self.assertIsNone(create.start_tag)
+
+    def test_release_plan_create_mainnet_takes_latest_ok(self):
+        _prev, (create,) = plan([release("0.7.0.0")], "0.7.0.5", "mainnet")
+        self.assertTrue(create.make_latest)
+
+    def test_release_plan_existing_release_is_edited_ok(self):
+        _prev, (edit,) = plan([release("0.7.0.1")], "0.7.0.1")
+        self.assertFalse(edit.create)
+        self.assertIsNone(edit.start_tag)
+        self.assertFalse(edit.prerelease)
 
     def test_release_plan_rerun_keeps_prev_date_and_notes_ok(self):
         releases = published(
@@ -2152,6 +2099,21 @@ class CmdPublish(unittest.TestCase):
         self.assertEqual([c[3] for c in comments], ["42"])
         self.assertIn("Published `0.7.0.2` on `decaf`", comments[0][-1])
         self.assertFalse(runner.ran("gh", "issue", "create"))
+
+    def test_release_cmd_publish_creates_missing_release_ok(self):
+        runner = self._runner(releases=[release_row("0.7.0.1")])
+        runner.responses[("gh", "release", "create")] = ""
+        code = rel.cmd_publish(
+            self._args("/publish 0.7.0.2 decaf"), rel.Git(runner), rel.Gh(runner)
+        )
+        self.assertEqual(code, 0, runner.calls)
+        create = next(c for c in runner.calls if c[:3] == ["gh", "release", "create"])
+        self.assertEqual(create[3], "0.7.0.2")
+        self.assertIn("--verify-tag", create)
+        self.assertEqual(create[create.index("--notes-start-tag") + 1], "0.7.0.1")
+        self.assertFalse(runner.ran("gh", "release", "edit"))
+        comments = [c for c in runner.calls if c[:3] == ["gh", "issue", "comment"]]
+        self.assertIn("Published `0.7.0.2` on `decaf`", comments[0][-1])
 
     def test_release_cmd_publish_mainnet_sends_latest_ok(self):
         runner = self._runner()
@@ -2375,12 +2337,13 @@ class CmdPublish(unittest.TestCase):
             )
         self.assertEqual(code, 0)
         self.assertIn(
-            "# 0.7.0.2: 0.7.0.2 [decaf] (prerelease=False, make_latest=False)",
+            "# 0.7.0.2: 0.7.0.2 [decaf] (edit, prerelease=False, make_latest=False)",
             out.getvalue(),
         )
         self.assertIn("docker pull", out.getvalue())
         for write in (
             ("gh", "release", "edit"),
+            ("gh", "release", "create"),
             ("gh", "issue", "comment"),
             ("gh", "issue", "create"),
             ("gh", "issue", "edit"),
@@ -2435,6 +2398,34 @@ class GhReleaseEdit(unittest.TestCase):
         edit = rel.ReleaseEdit("0.7.0.1", "0.7.0.1 [mainnet]", "body", False)
         rel.Gh(runner).release_edit(edit)
         self.assertIn("--latest=true", runner.calls[-1])
+
+
+class GhReleaseCreate(unittest.TestCase):
+    def test_release_gh_release_create_flags_ok(self):
+        runner = FakeRunner({("gh", "release", "create"): ""})
+        edit = rel.ReleaseEdit(
+            "0.7.0.1", "0.7.0.1 [mainnet]", "body", False, True, "0.7.0.0"
+        )
+        rel.Gh(runner).release_create(edit)
+        call = runner.calls[-1]
+        self.assertEqual(call[:4], ["gh", "release", "create", "0.7.0.1"])
+        for flag in (
+            "--verify-tag",
+            "--generate-notes",
+            "--notes-file",
+            "--latest=true",
+        ):
+            self.assertIn(flag, call)
+        self.assertEqual(call[call.index("--notes-start-tag") + 1], "0.7.0.0")
+        self.assertEqual(call[call.index("--title") + 1], "0.7.0.1 [mainnet]")
+        self.assertNotIn("--prerelease", call)
+
+    def test_release_gh_release_create_omits_start_tag_ok(self):
+        runner = FakeRunner({("gh", "release", "create"): ""})
+        edit = rel.ReleaseEdit("0.7.0.1", "0.7.0.1 [decaf]", "body", False, True)
+        rel.Gh(runner).release_create(edit)
+        self.assertNotIn("--notes-start-tag", runner.calls[-1])
+        self.assertIn("--latest=false", runner.calls[-1])
 
 
 # EDGE:release-no-tags
@@ -2600,8 +2591,6 @@ class CmdCutRerun(unittest.TestCase):
                 ("git", "ls-remote", "--heads"): f"{sha}\trefs/heads/release-0.6.0\n",
                 ("git", "ls-remote", "--tags"): f"{sha}\trefs/tags/0.6.0.0\n",
                 ("gh", "label", "create"): "",
-                ("gh", "api", "repos/{owner}/{repo}/releases?per_page=100"): "",
-                ("gh", "release", "create"): "https://example/releases/0.6.0.0",
                 ("git", "tag", "--list", "0.6.0.*"): "",
                 ("gh", "repo", "view"): REPO,
                 ("gh", "issue", "list"): "[]",
@@ -2683,8 +2672,6 @@ class CmdCutFirstRun(unittest.TestCase):
                 ("git", "ls-remote", "--tags"): "",
                 ("git", "push"): "",
                 ("gh", "label", "create"): "",
-                ("gh", "api", "repos/{owner}/{repo}/releases?per_page=100"): "",
-                ("gh", "release", "create"): "https://example/releases/0.6.0.0",
                 ("git", "tag", "-a"): "",
                 ("git", "tag", "--list", "0.6.0.*"): "",
                 ("gh", "repo", "view"): REPO,
@@ -2708,11 +2695,7 @@ class CmdCutFirstRun(unittest.TestCase):
         )
         self.assertIn("--title", create_call)
         self.assertIn("Release 0.6.0", create_call)
-        release_call = next(
-            call for call in runner.calls if call[:3] == ["gh", "release", "create"]
-        )
-        self.assertEqual(release_call[3:5], ["0.6.0.0", "--target"])
-        self.assertIn("--prerelease", release_call)
+        self.assertFalse(runner.ran("gh", "release"))
         workflow_calls = [
             call for call in runner.calls if call[:3] == ["gh", "workflow", "run"]
         ]
@@ -2737,32 +2720,6 @@ class CmdCutInvalidBump(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertFalse(runner.ran("git", "push"))
         self.assertFalse(runner.ran("gh", "issue", "create"))
-
-
-class CmdCutSkipsExistingRelease(unittest.TestCase):
-    def test_release_cmd_cut_skips_existing_release_ok(self):
-        sha = "d" * 40
-        runner = FakeRunner(
-            {
-                ("git", "rev-parse", "main^{commit}"): sha,
-                ("git", "ls-remote", "--heads"): f"{sha}\trefs/heads/release-0.6.0\n",
-                ("git", "ls-remote", "--tags"): f"{sha}\trefs/tags/0.6.0.0\n",
-                ("gh", "label", "create"): "",
-                ("gh", "api", "repos/{owner}/{repo}/releases?per_page=100"): (
-                    release_row("0.6.0.0") + "\n"
-                ),
-                ("git", "tag", "--list", "0.6.0.*"): "",
-                ("gh", "repo", "view"): REPO,
-                ("gh", "issue", "list"): "[]",
-                ("gh", "issue", "create"): "https://example/issues/9",
-                ("gh", "workflow", "run"): "",
-            }
-        )
-        git, gh = rel.Git(runner), rel.Gh(runner)
-        args = argparse.Namespace(version="0.6.0", source_ref="main")
-        code = rel.cmd_cut(args, git, gh)
-        self.assertEqual(code, 0)
-        self.assertFalse(runner.ran("gh", "release", "create"))
 
 
 # REQ:release-teardown-happy-path
