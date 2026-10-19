@@ -803,6 +803,16 @@ impl<T: NodeType> Consensus<T> {
         )
     }
 
+    /// Whether `view` is decided or at or below the decide floor, so that no
+    /// block of it is wanted any more.
+    ///
+    /// A view between the floor and the last decided view that is not decided
+    /// is a gap, and its block is still wanted: a later decide fills it in
+    /// (`maybe_decide_at`).
+    fn decided_or_past(&self, view: ViewNumber) -> bool {
+        view <= self.decide_floor() || self.decided_views.contains(&view)
+    }
+
     /// Apply consensus to the given input and collect protocol outputs.
     #[instrument(level = "debug", skip_all, fields(node = %self.node_id, view = %input.view_number()))]
     pub fn apply(&mut self, input: ConsensusInput<T>, outbox: &mut Outbox<ConsensusOutput<T>>) {
@@ -1402,7 +1412,17 @@ impl<T: NodeType> Consensus<T> {
         };
         let key = (view, Some(proposal.proposal.data.epoch), commit);
         let Some(vid_share) = self.unpaired_vid_shares.remove(&key) else {
+            let leaf_commit = proposal_commitment(&proposal.proposal.data);
             self.unpaired_proposals.insert(key, (sender, proposal));
+            // Under the certificate rule, a `Certificate2` that arrived first
+            // vouches for it as one arriving later would (`handle_certificate2`).
+            if self.upgrade_lock.certificate_rule(view)
+                && !self.decided_or_past(view)
+                && self.cert2_over(view, leaf_commit).is_some()
+                && self.adopt_unpaired_proposal(view, leaf_commit, outbox)
+            {
+                return Protocol::Continue;
+            }
             return Protocol::Abort;
         };
         self.on_proposal_paired(sender, proposal, vid_share, outbox)
@@ -1644,7 +1664,7 @@ impl<T: NodeType> Consensus<T> {
             let parent_view = proposal.justify_qc.view_number();
             let leaf_commit = proposal.justify_qc.data().leaf_commit;
             if parent_view >= view
-                || parent_view <= self.last_decided_view
+                || self.decided_or_past(parent_view)
                 || self.proposals.contains(parent_view, leaf_commit)
             {
                 break;
@@ -1665,8 +1685,8 @@ impl<T: NodeType> Consensus<T> {
         let signed_proposal = message.proposal;
         let proposal = signed_proposal.data.clone();
         let view = proposal.view_number;
-        if view <= self.last_decided_view {
-            debug!(%view, "certified proposal at or below decided view; discarding");
+        if self.decided_or_past(view) {
+            debug!(%view, "certified proposal of a decided view or one past the floor; discarding");
             return;
         }
         let commit = proposal_commitment(&proposal);
@@ -1853,9 +1873,7 @@ impl<T: NodeType> Consensus<T> {
     ) {
         let parent_view = proposal.justify_qc.view_number();
         let leaf_commit = proposal.justify_qc.data().leaf_commit;
-        if parent_view <= self.last_decided_view
-            || self.proposals.contains(parent_view, leaf_commit)
-        {
+        if self.decided_or_past(parent_view) || self.proposals.contains(parent_view, leaf_commit) {
             return;
         }
         // Only a parent behind the proposal is adopted; adopting for a forward
@@ -1920,7 +1938,7 @@ impl<T: NodeType> Consensus<T> {
         let leaf_commit = certificate.data.leaf_commit;
         let block_number = Some(certificate.data.block_number);
         self.insert_cert2(certificate.into_cert());
-        if view > self.last_decided_view
+        if !self.decided_or_past(view)
             && self
                 .certified_proposal(view, leaf_commit, block_number)
                 .is_none()

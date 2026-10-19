@@ -442,12 +442,15 @@ impl Recorder {
             steps.push((carried, Vec::new()));
         }
 
+        // The input first: a block decided in the same step is written with the
+        // timeout evidence of the proposal this input carries.
+        let taken = self.input_json(input);
         let emitted: Vec<String> = outputs
             .iter()
             .copied()
             .filter_map(|o| self.output_json(o))
             .collect();
-        match self.input_json(input) {
+        match taken {
             Ok(json) => steps.push((json, emitted)),
             Err(dropped) => {
                 // The step cannot be written, because the model has no such

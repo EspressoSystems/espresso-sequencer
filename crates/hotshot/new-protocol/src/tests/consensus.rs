@@ -904,6 +904,71 @@ async fn test_certified_proposal_without_own_share_is_announced() {
     );
 }
 
+/// Under the certificate rule, a proposal without this node's VID share that
+/// arrives after the `Certificate2` over it is adopted on its word, as one
+/// arriving before it is, and its view decides.
+#[tokio::test]
+async fn test_proposal_after_its_certificates_is_adopted() {
+    let mut harness =
+        ConsensusHarness::new_with_upgrade_lock(0, 10, test_timeout_epoch_lock()).await;
+    let test_data = TestData::new(3).await;
+    let node_key = BLSPubKey::generated_from_seed_indexed([0; 32], 0).0;
+    let view = &test_data.views[0];
+
+    harness.apply(view.cert1_input()).await;
+    harness.apply(view.cert2_input()).await;
+    assert!(
+        !any(harness.outputs(), is_leaf_decided),
+        "nothing decides without the block"
+    );
+
+    let (proposal, _own_share) = view.proposal_input_consensus(&node_key);
+    harness.apply(proposal).await;
+    assert!(
+        any(harness.outputs(), is_proposal_certified),
+        "the proposal is adopted on the certificates already held"
+    );
+    assert!(
+        any(harness.outputs(), is_leaf_decided),
+        "and its view decides"
+    );
+}
+
+/// A block whose child was decided first, its own proposal missing then, is
+/// decided once the fetched proposal arrives: the gap is filled, not left.
+#[tokio::test]
+async fn test_fetched_proposal_fills_a_gap_behind_a_decided_child() {
+    let mut harness =
+        ConsensusHarness::new_with_upgrade_lock(0, 10, test_timeout_epoch_lock()).await;
+    let test_data = TestData::new(3).await;
+    let node_key = BLSPubKey::generated_from_seed_indexed([0; 32], 0).0;
+    let (parent, child) = (&test_data.views[0], &test_data.views[1]);
+
+    harness.apply(parent.cert1_input()).await;
+    harness.apply(parent.cert2_input()).await;
+    harness
+        .apply_pair(child.proposal_input_consensus(&node_key))
+        .await;
+    harness.apply(child.cert1_input()).await;
+    harness.apply(child.cert2_input()).await;
+    assert!(
+        any(harness.outputs(), |o| decides_view(o, 2)),
+        "setup: the child is decided"
+    );
+    assert!(
+        !any(harness.outputs(), |o| decides_view(o, 1)),
+        "setup: the parent is not, its proposal missing"
+    );
+
+    harness
+        .apply(ConsensusInput::FetchedProposal(parent.proposal_message()))
+        .await;
+    assert!(
+        any(harness.outputs(), |o| decides_view(o, 1)),
+        "the fetched parent is decided"
+    );
+}
+
 /// Obtaining a Cert2 broadcasts it once so peers that missed the vote2s can
 /// still decide, and a re-delivered Cert2 for the same view is not re-broadcast.
 #[tokio::test]
