@@ -656,7 +656,8 @@ async fn fetch_boundary_state(
 
 /// Store `state`, the state at the epoch boundary `height`, as the loop's head snapshot. The reward
 /// tree goes first: the loop reads it at the head when it resumes, so a head without it would fail
-/// every start.
+/// every start. No state is stored below the boundary, so the state pruned height goes just below
+/// it: queries for lower heights then fail as pruned, not on nodes that are missing.
 async fn store_boundary_snapshot<T>(
     storage: &T,
     height: u64,
@@ -690,6 +691,12 @@ where
     )
     .await
     .context("setting state height")?;
+    UpdateStateData::<SeqTypes, _, { BlockMerkleTree::ARITY }>::set_state_pruned_height(
+        &mut tx,
+        height - 1,
+    )
+    .await
+    .context("setting state pruned height")?;
     tx.commit().await
 }
 

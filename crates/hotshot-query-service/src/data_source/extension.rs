@@ -451,6 +451,10 @@ where
         self.data_source.set_last_state_height(height).await
     }
 
+    async fn set_state_pruned_height(&mut self, height: u64) -> anyhow::Result<()> {
+        self.data_source.set_state_pruned_height(height).await
+    }
+
     async fn insert_merkle_nodes(
         &mut self,
         path: MerkleProof<State::Entry, State::Key, State::T, ARITY>,

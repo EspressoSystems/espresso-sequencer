@@ -7728,10 +7728,11 @@ mod test {
     /// its state from a snapshot at a recent epoch boundary, from peers, instead of replaying the
     /// chain from genesis. The snapshot has no fee accounts, so the loop gets past the boundary
     /// only if it fetches them from peers, and past the next boundary only if the reward tree it
-    /// fetched is whole. It stores the fee accounts it fetches, so it can serve them. A brand-new
-    /// database, which the data pruner has not stamped yet, starts from a boundary too. A node
-    /// without a pruner, here one that pruned before and has turned pruning off, still replays
-    /// from genesis, on leaves from peers up to the data pruned height.
+    /// fetched is whole. It stores the fee accounts it fetches, so it can serve them, and answers
+    /// that the state below the boundary is pruned. A brand-new database, which the data pruner
+    /// has not stamped yet, starts from a boundary too. A node without a pruner, here one that
+    /// pruned before and has turned pruning off, still replays from genesis, on leaves from peers
+    /// up to the data pruned height.
     #[rstest]
     #[case::recent_boundary(EmptyStateStart::RecentBoundary, true)]
     #[case::fresh_database(EmptyStateStart::RecentBoundary, false)]
@@ -7912,7 +7913,27 @@ mod test {
             &query_client,
             &format!("fee-state/{past}/{fee_recipient}"),
         )
-        .await
+        .await?;
+
+        if expected == EmptyStateStart::RecentBoundary {
+            let below = start - 1;
+            // The state query reads the header there, which the node may still be fetching.
+            query_client
+                .get::<serde_json::Value>(&format!("availability/header/{below}"))
+                .send()
+                .await?;
+            let answer = query_client
+                .get::<serde_json::Value>(&format!("fee-state/{below}/{fee_recipient}"))
+                .send()
+                .await
+                .map_err(|err| err.status);
+            ensure!(
+                answer == Err(StatusCode::GONE),
+                "fee-state/{below}: answered {answer:?}, not that the state below the start \
+                 {start} is pruned"
+            );
+        }
+        Ok(())
     }
 
     /// The lowest height with a block tree node, which is the first snapshot the state loop stored.
