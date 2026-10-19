@@ -49,7 +49,6 @@ FRAGMENT_DIR = "doc/operator-notes"
 FRAGMENT_README = f"{FRAGMENT_DIR}/README.md"
 # command text is embedded in release bodies between the bot's markers
 BOT_MARKER = "<!--"
-NETWORK_LABEL = "release-network"
 NETWORK_NOTES_OPEN = "<!-- network-notes -->"
 NETWORK_NOTES_CLOSE = "<!-- /network-notes -->"
 MANIFEST_TYPES = ", ".join(
@@ -89,9 +88,6 @@ _TITLE_RE = re.compile(r"^\S+ \[([^\]]+)\]$")
 _NETWORK_NOTES_RE = re.compile(
     rf"{re.escape(NETWORK_NOTES_OPEN)}\n(.*?)\n{re.escape(NETWORK_NOTES_CLOSE)}",
     re.DOTALL,
-)
-_HISTORY_ROW_RE = re.compile(
-    r"^\| \[`([^`]+)`\]\([^)]*\) \| (\S+) \| (\S+) \| (?:`([^`]+)`|-) \|$", re.MULTILINE
 )
 _SHA_RE = re.compile(r"^[0-9a-fA-F]{7,40}$")
 _PR_ARG_RE = re.compile(r"^#?(\d+)$")
@@ -803,40 +799,6 @@ def render_publish_comment(
     return "\n".join(lines) + "\n"
 
 
-History = list[tuple[str, str, str, str | None]]  # tag, date, by, prev; newest first
-
-
-def render_network_index(network: Network, history: History, repo: str) -> str:
-    rows = [
-        f"| [`{tag}`]({release_url(repo, tag)}) | {date} | {by} | "
-        f"{f'`{prev}`' if prev else '-'} |"
-        for tag, date, by, prev in history
-    ]
-    current, since = history[0][0], history[0][1]
-    return "\n".join(
-        [
-            f"Release on **{network}**: [`{current}`]({release_url(repo, current)}), since {since}.",
-            "",
-            f"`docker pull ghcr.io/{repo.lower()}/espresso-node:{current}`",
-            "",
-            f"The bot comments here on every `/publish` for {network}. Subscribe to this issue to be notified.",
-            "",
-            "## History",
-            "",
-            "| Tag | Date | By | Previous |",
-            "|---|---|---|---|",
-            *rows,
-        ]
-    )
-
-
-def parse_network_history(body: str) -> History:
-    return [
-        (tag, date, by, prev or None)
-        for tag, date, by, prev in _HISTORY_ROW_RE.findall(normalize_newlines(body))
-    ]
-
-
 def render_tag_log(
     tags: list[tuple[str, str, str]],
     releases: list[ReleaseInfo],
@@ -1447,37 +1409,6 @@ class Gh:
                 ]
             )
 
-    def find_network_issue(self, network: Network) -> int | None:
-        data = json.loads(
-            self._run(
-                [
-                    "gh",
-                    "issue",
-                    "list",
-                    "--label",
-                    NETWORK_LABEL,
-                    "--state",
-                    "open",
-                    "--json",
-                    "number,title",
-                ]
-            )
-        )
-        title = f"Releases: {network}"
-        return next((item["number"] for item in data if item["title"] == title), None)
-
-    def network_issue(self, network: Network) -> int:
-        """Finds the open `Releases: <network>` issue, or opens it."""
-        number = self.find_network_issue(network)
-        if number is not None:
-            return number
-        self.label_create(NETWORK_LABEL, "Releases published on a network", "0E8A16")
-        return self.issue_create(
-            f"Releases: {network}",
-            NETWORK_LABEL,
-            f"_No release published on {network} yet._",
-        )
-
     def image_exists(self, repo: str, tag: str) -> bool:
         """Whether `ghcr.io/<repo>/espresso-node:<tag>` has a manifest. The package is public, so an
         anonymous pull token is enough and the workflow token needs no `packages` permission."""
@@ -1795,23 +1726,6 @@ def _tag_notes(git: Git, tag: Tag, existing: list[str], sha: str) -> str:
     return render_notes_block(render_fragments(git.fragments(str(base), sha)))
 
 
-def _promotion(
-    gh: Gh, number: int | None, target: Tag, prev: Tag | None, actor: str | None
-) -> tuple[History, bool]:
-    """The network issue's history with this promotion on top; False when a rerun finds it already there."""
-    history = parse_network_history(gh.issue(number)[1]) if number is not None else []
-    if history and history[0][0] == str(target):
-        return history, False
-    date = datetime.now(UTC).date().isoformat()
-    row = (
-        str(target),
-        date,
-        f"@{actor}" if actor else "-",
-        str(prev) if prev else None,
-    )
-    return [row, *history], True
-
-
 @dataclass(frozen=True)
 class PublishPlan:
     network: Network
@@ -1820,7 +1734,6 @@ class PublishPlan:
     edits: list[ReleaseEdit]
     comment: str
     repo: str
-    actor: str | None
 
 
 def cmd_publish(args: argparse.Namespace, git: Git, gh: Gh) -> int:
@@ -1852,7 +1765,7 @@ def cmd_publish(args: argparse.Namespace, git: Git, gh: Gh) -> int:
         image = f"ghcr.io/{plan.repo.lower()}/espresso-node:{target}"
         return fail(f"image {image} not found; wait for the build.yml run or rerun it")
     if args.dry_run:
-        _print_publish(gh, plan)
+        _print_publish(plan)
         return 0
     try:
         apply_publish(gh, plan, issue)
@@ -1882,7 +1795,7 @@ def _plan_publish(
     comment = render_publish_comment(
         target, network, prev, repo, args.actor, args.run_url
     )
-    return PublishPlan(network, target, prev, edits, comment, repo, args.actor)
+    return PublishPlan(network, target, prev, edits, comment, repo)
 
 
 def _line_tags(git: Git, version: Version) -> list[Tag]:
@@ -1896,30 +1809,17 @@ def _collect_fragments(git: Git, base: Tag, target: Tag) -> list[Fragment]:
     return git.fragments(str(base), str(target))
 
 
-def _print_publish(gh: Gh, plan: PublishPlan) -> None:
+def _print_publish(plan: PublishPlan) -> None:
     for edit in plan.edits:
         flags = f"prerelease={edit.prerelease}, make_latest={edit.make_latest}"
         print(f"# {edit.tag}: {edit.title} ({flags})\n")
     print(f"{plan.edits[0].body}\n\n---\n{plan.comment}", end="")
-    history, _promoted = _promotion(
-        gh, gh.find_network_issue(plan.network), plan.target, plan.prev, plan.actor
-    )
-    index = render_network_index(plan.network, history, plan.repo)
-    print(f"\n---\n# Releases: {plan.network}\n\n{index}")
 
 
 def apply_publish(gh: Gh, plan: PublishPlan, issue: int | None) -> None:
-    """The writes of a publish, in rerun-safe order: releases, network issue, tracker."""
+    """The writes of a publish, in rerun-safe order: releases, tracker."""
     for edit in plan.edits:
         gh.release_edit(edit)
-    number = gh.network_issue(plan.network)
-    history, promoted = _promotion(gh, number, plan.target, plan.prev, plan.actor)
-    # comment first: a failure before the row lands is retried with a notification
-    if promoted:
-        gh.issue_comment(number, plan.comment)
-        gh.issue_edit_body(
-            number, render_network_index(plan.network, history, plan.repo)
-        )
     gh.workflow_run("update-release-tracker.yml", None, {})
     if issue is not None:
         gh.issue_comment(issue, plan.comment)

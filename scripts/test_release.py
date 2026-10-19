@@ -14,7 +14,6 @@ import json
 import unittest
 from importlib.machinery import SourceFileLoader
 from pathlib import Path
-from typing import ClassVar
 
 SCRIPT = Path(__file__).with_name("release")
 _spec = importlib.util.spec_from_loader(
@@ -1908,43 +1907,9 @@ class CmdPublish(unittest.TestCase):
             runner.ran("gh", "workflow", "run", "update-release-tracker.yml")
         )
         comments = [c for c in runner.calls if c[:3] == ["gh", "issue", "comment"]]
-        self.assertEqual([c[3] for c in comments], ["9", "42"])
-        self.assertIn("Published `0.7.0.2` on `decaf`", comments[0][-1])
-        edit = next(c for c in runner.calls if c[:3] == ["gh", "issue", "edit"])
-        self.assertEqual(edit[3], "9")
-        self.assertTrue(runner.ran("gh", "issue", "create"))
-
-    def test_release_cmd_publish_comments_before_history_row_ok(self):
-        runner = self._runner()
-        code = rel.cmd_publish(self._args(), rel.Git(runner), rel.Gh(runner))
-        self.assertEqual(code, 0)
-        kinds = [
-            c[2]
-            for c in runner.calls
-            if c[:2] == ["gh", "issue"] and c[2] in ("comment", "edit") and c[3] == "9"
-        ]
-        self.assertEqual(kinds, ["comment", "edit"])
-
-    def test_release_cmd_publish_rerun_skips_network_comment_ok(self):
-        history = [("0.7.0.2", "2026-10-21", "@alice", None)]
-        runner = self._runner()
-        runner.responses[("gh", "issue", "list")] = json.dumps(
-            [
-                {"number": 42, "title": "Release 0.7.0"},
-                {"number": 7, "title": "Releases: decaf"},
-            ]
-        )
-        runner.responses[("gh", "issue", "view")] = json.dumps(
-            {
-                "title": "Release 0.7.0",
-                "body": rel.render_network_index("decaf", history, REPO),
-            }
-        )
-        code = rel.cmd_publish(self._args(), rel.Git(runner), rel.Gh(runner))
-        self.assertEqual(code, 0)
-        comments = [c for c in runner.calls if c[:3] == ["gh", "issue", "comment"]]
         self.assertEqual([c[3] for c in comments], ["42"])
-        self.assertFalse(runner.ran("gh", "issue", "edit"))
+        self.assertIn("Published `0.7.0.2` on `decaf`", comments[0][-1])
+        self.assertFalse(runner.ran("gh", "issue", "create"))
 
     def test_release_cmd_publish_mainnet_sends_latest_ok(self):
         runner = self._runner()
@@ -2091,7 +2056,6 @@ class CmdPublish(unittest.TestCase):
             out.getvalue(),
         )
         self.assertIn("docker pull", out.getvalue())
-        self.assertIn("# Releases: decaf", out.getvalue())
         for write in (
             ("gh", "release", "edit"),
             ("gh", "issue", "comment"),
@@ -2100,66 +2064,6 @@ class CmdPublish(unittest.TestCase):
             ("gh", "workflow"),
         ):
             self.assertFalse(runner.ran(*write))
-
-
-class NetworkIndex(unittest.TestCase):
-    HISTORY: ClassVar[list] = [
-        ("0.7.0.4", "2026-10-23", "@alice", "0.7.0.1"),
-        ("0.7.0.1", "2026-10-21", "-", None),
-    ]
-
-    def test_release_network_index_ok(self):
-        body = rel.render_network_index("decaf", self.HISTORY, REPO)
-        self.assertIn("Release on **decaf**: [`0.7.0.4`](", body)
-        self.assertIn("since 2026-10-23.", body)
-        self.assertIn(
-            "`docker pull ghcr.io/espressosystems/espresso-network/espresso-node:0.7.0.4`",
-            body,
-        )
-        self.assertIn(
-            f"| [`0.7.0.4`](https://github.com/{REPO}/releases/tag/0.7.0.4) | 2026-10-23 | @alice | `0.7.0.1` |",
-            body,
-        )
-        self.assertIn("| 2026-10-21 | - | - |", body)
-
-    def test_release_network_history_roundtrip_ok(self):
-        body = rel.render_network_index("mainnet", self.HISTORY, REPO)
-        self.assertEqual(rel.parse_network_history(body), self.HISTORY)
-        crlf = body.replace("\n", "\r\n")
-        self.assertEqual(rel.parse_network_history(crlf), self.HISTORY)
-        self.assertEqual(rel.parse_network_history("_No release yet._"), [])
-
-    def _runner(self, issues: list):
-        return FakeRunner(
-            {
-                ("gh", "issue", "list"): json.dumps(issues),
-                ("gh", "issue", "create"): "https://example/issues/9\n",
-                ("gh", "label", "create"): "",
-            }
-        )
-
-    def test_release_network_issue_found_ok(self):
-        issues = [
-            {"number": 3, "title": "Releases: mainnet"},
-            {"number": 4, "title": "Releases: decaf"},
-        ]
-        runner = self._runner(issues)
-        self.assertEqual(rel.Gh(runner).network_issue("decaf"), 4)
-        self.assertFalse(runner.ran("gh", "issue", "create"))
-        self.assertIn("release-network", runner.calls[0])
-
-    def test_release_network_issue_found_without_author_filter_ok(self):
-        runner = self._runner([{"number": 4, "title": "Releases: decaf"}])
-        self.assertEqual(rel.Gh(runner).find_network_issue("decaf"), 4)
-        self.assertNotIn("--author", runner.calls[0])
-
-    def test_release_network_issue_created_ok(self):
-        runner = self._runner([{"number": 3, "title": "Releases: mainnet"}])
-        self.assertEqual(rel.Gh(runner).network_issue("decaf"), 9)
-        create = next(c for c in runner.calls if c[:3] == ["gh", "issue", "create"])
-        self.assertIn("Releases: decaf", create)
-        self.assertIn("release-network", create)
-        self.assertTrue(runner.ran("gh", "label", "create", "release-network"))
 
 
 class ImageExists(unittest.TestCase):

@@ -106,7 +106,6 @@ first and mainnet later. Only `/publish` turns a pre-release into a release.
 - Gates, each reported as a tracker comment without changing anything: the tag belongs to the tracker's version, the
   release exists, the docker image `ghcr.io/espressosystems/espresso-network/espresso-node:<tag>` exists, and no
   fragment in the range contains `<!--`.
-- Network issue: the bot comments the same text on the issue `Releases: <network>` (see below).
 - Rollback: `/publish <older tag> <network>`.
 - Rerunning `/publish` for the current holder only re-renders its block from git, keeping its date and previous tag. It
   is also the recovery after a partial failure: the target release is written first, so a rerun still finds its previous
@@ -115,18 +114,9 @@ first and mainnet later. Only `/publish` turns a pre-release into a release.
 
 ### Following a network
 
-Operators get one notification per promotion from the issue `Releases: decaf` or `Releases: mainnet` (label
-`release-network`). The bot opens each issue on the first `/publish` for the network. Its body holds the current tag,
-the `docker pull` line and the promotion history (tag, date, who, previous tag, release link), and `/publish` adds one
-comment. Subscribe to the issue on its page (sidebar, Subscribe). A rerun of `/publish` for the current holder adds no
-comment.
-
-- Do not rely on Watch > Releases or `releases.atom`: both include pre-releases, so every `/tag` notifies, and the feed
-  also lists bare tags.
-- Anyone can comment on the issue, and a comment notifies all subscribers. Issues cannot be locked, because the workflow
-  token cannot comment on locked issues.
-- Pinning is a one-time manual step per issue: a maintainer runs `gh issue pin <number>`. The bot does not pin, since a
-  pin with the workflow token is unverified.
+Operators watch Watch > Custom > Releases on the repository. Alerts include the pre-release of every `/tag`; the
+deployable release carries `[decaf]` or `[mainnet]` in its title. Alternatively poll
+`GET /repos/EspressoSystems/espresso-network/releases` and filter on the title marker.
 
 ## Process
 
