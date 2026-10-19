@@ -35,10 +35,7 @@ use versions::{DRB_AND_HEADER_UPGRADE_VERSION, EPOCH_REWARD_VERSION, EPOCH_VERSI
 
 use crate::{
     NodeState, SeqTypes,
-    api::{
-        LightClientProvider, RewardMerkleTreeDataSource, RewardMerkleTreeV2Data,
-        context::ApiContext,
-    },
+    api::{LightClientProvider, RewardMerkleTreeDataSource, context::ApiContext},
     catchup::{CatchupStorage, ParallelStateCatchup, SingleAttemptCatchup, SqlStateCatchup},
     persistence::ChainConfigPersistence,
 };
@@ -366,12 +363,8 @@ where
     tx.commit().await?;
 
     // Store the genesis reward tree at height 0 so catchup can find it.
-    let tree_data: RewardMerkleTreeV2Data = (&state.reward_merkle_tree_v2)
-        .try_into()
-        .context("serializing genesis reward tree")?;
-    let tree_bytes = bincode::serialize(&tree_data).context("serializing genesis reward tree")?;
     storage
-        .persist_tree(0, tree_bytes)
+        .save_reward_tree_v2(0, &state.reward_merkle_tree_v2)
         .await
         .context("storing genesis reward merkle tree")?;
 
@@ -667,13 +660,8 @@ where
     T: SequencerStateDataSource,
     for<'a> T::Transaction<'a>: SequencerStateUpdate,
 {
-    let tree_data: RewardMerkleTreeV2Data = (&state.reward_merkle_tree_v2)
-        .try_into()
-        .context("serializing the boundary reward tree")?;
-    let tree_bytes =
-        bincode::serialize(&tree_data).context("serializing the boundary reward tree")?;
     storage
-        .persist_tree(height, tree_bytes)
+        .save_reward_tree_v2(height, &state.reward_merkle_tree_v2)
         .await
         .context("storing the boundary reward tree")?;
 

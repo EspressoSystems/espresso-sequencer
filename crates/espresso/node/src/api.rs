@@ -1211,14 +1211,7 @@ pub(crate) trait RewardMerkleTreeDataSource: Send + Sync + Clone + 'static {
         merkle_tree: &RewardMerkleTreeV2,
     ) -> impl Send + Future<Output = anyhow::Result<()>> {
         async move {
-            // The merklized state loop always applies full blocks, so an incomplete
-            // tree here indicates something is seriously wrong.
-            let tree_data = TryInto::<RewardMerkleTreeV2Data>::try_into(merkle_tree).inspect_err(
-                |err| tracing::error!(%err, height, "cannot persist incomplete RewardMerkleTreeV2"),
-            )?;
-            let serialization =
-                bincode::serialize(&tree_data).context("Merkle tree serialization failed")?;
-            self.persist_tree(height, serialization).await?;
+            self.save_reward_tree_v2(height, merkle_tree).await?;
 
             // Skip garbage collection in tests
             if cfg!(any(test, feature = "testing")) {
@@ -1271,6 +1264,25 @@ pub(crate) trait RewardMerkleTreeDataSource: Send + Sync + Clone + 'static {
             }
 
             Ok(())
+        }
+    }
+
+    /// Store `merkle_tree`, the whole reward tree at `height`, as key-value pairs.
+    fn save_reward_tree_v2(
+        &self,
+        height: u64,
+        merkle_tree: &RewardMerkleTreeV2,
+    ) -> impl Send + Future<Output = anyhow::Result<()>> {
+        async move {
+            // Every caller holds the whole tree: the merklized state loop always applies full
+            // blocks, and the trees it starts from are whole. So an incomplete tree here indicates
+            // something is seriously wrong.
+            let tree_data = TryInto::<RewardMerkleTreeV2Data>::try_into(merkle_tree).inspect_err(
+                |err| tracing::error!(%err, height, "cannot persist incomplete RewardMerkleTreeV2"),
+            )?;
+            let serialization =
+                bincode::serialize(&tree_data).context("Merkle tree serialization failed")?;
+            self.persist_tree(height, serialization).await
         }
     }
 
