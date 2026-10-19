@@ -109,7 +109,8 @@ first and mainnet later. Only `/publish` turns a pre-release into a release.
 - Command text (lines 2..n) must not contain `<!--`; the command fails with a tracker comment otherwise.
 - Gates, each reported as a tracker comment without changing anything: the tag belongs to the tracker's version, the
   release exists, the docker image `ghcr.io/espressosystems/espresso-network/espresso-node:<tag>` exists, and no
-  fragment in the range contains `<!--`.
+  fragment in the range contains `<!--`. The image gate checks only `espresso-node`; the same `build.yml` run builds the
+  other images. A failed registry check is reported the same way, without credentials in the message.
 - Rollback: `/publish <older tag> <network>`.
 - Rerunning `/publish` for the current holder only re-renders its block from git, keeping its date and previous tag. It
   is also the recovery after a partial failure: the target release is written first, so a rerun still finds its previous

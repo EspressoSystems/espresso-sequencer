@@ -1072,8 +1072,12 @@ def _run(argv: list[str]) -> str:
             argv, check=True, capture_output=True, encoding="utf-8"
         ).stdout
     except subprocess.CalledProcessError as error:
+        shown = [
+            "Authorization: <redacted>" if arg.startswith("Authorization:") else arg
+            for arg in argv
+        ]
         raise RuntimeError(
-            f"`{' '.join(argv)}` exited {error.returncode}: {(error.stderr or '').strip()}"
+            f"`{' '.join(shown)}` exited {error.returncode}: {(error.stderr or '').strip()}"
         ) from error
 
 
@@ -1782,7 +1786,11 @@ def cmd_publish(args: argparse.Namespace, git: Git, gh: Gh) -> int:
         plan = _plan_publish(args, git, gh, target, command)
     except ValueError as error:
         return fail(str(error))
-    if not gh.image_exists(plan.repo, str(target)):
+    try:
+        found = gh.image_exists(plan.repo, str(target))
+    except RuntimeError as error:
+        return fail(str(error))
+    if not found:
         image = f"ghcr.io/{plan.repo.lower()}/espresso-node:{target}"
         return fail(f"image {image} not found; wait for the build.yml run or rerun it")
     if args.dry_run:

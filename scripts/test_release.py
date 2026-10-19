@@ -2080,6 +2080,37 @@ class CmdPublish(unittest.TestCase):
             comment[-1],
         )
 
+    def _failing_gate_runner(self):
+        runner = self._runner()
+
+        def run(argv):
+            if argv[:2] == ["curl", "-sS"]:
+                raise RuntimeError("curl exited 6: could not resolve host")
+            return runner(argv)
+
+        return run, runner
+
+    def test_release_cmd_publish_gate_error_reported_fails(self):
+        run, runner = self._failing_gate_runner()
+        self.assertEqual(rel.cmd_publish(self._args(), rel.Git(run), rel.Gh(run)), 1)
+        self.assertFalse(runner.ran("gh", "release", "edit"))
+        comment = next(c for c in runner.calls if c[:3] == ["gh", "issue", "comment"])
+        self.assertIn("/publish failed:", comment[-1])
+        self.assertIn("could not resolve host", comment[-1])
+
+    def test_release_cmd_publish_gate_error_dry_run_no_comment_fails(self):
+        run, runner = self._failing_gate_runner()
+        args = self._args(dry_run=True)
+        self.assertEqual(rel.cmd_publish(args, rel.Git(run), rel.Gh(run)), 1)
+        self.assertFalse(runner.ran("gh", "issue", "comment"))
+
+    def test_release_run_error_omits_auth_header_fails(self):
+        argv = ["sh", "-c", "exit 3", "x", "-H", "Authorization: Bearer s3cret", "y"]
+        with self.assertRaises(RuntimeError) as caught:
+            rel._run(argv)
+        self.assertNotIn("s3cret", str(caught.exception))
+        self.assertIn("exited 3", str(caught.exception))
+
     def test_release_cmd_publish_fragments_in_block_ok(self):
         runner = self._runner()
         runner.responses[("git", "diff")] = (
