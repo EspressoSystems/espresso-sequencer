@@ -313,7 +313,7 @@ release-tag branch tag="":
     gh workflow run tag-release.yml --ref {{branch}} -f tag={{tag}}
 
 # Preview the release edits and tracker comment of `/publish <tag> <network>` without writing to GitHub.
-release-notes tag network:
+release-publish-preview tag network:
     scripts/release publish --dry-run --comment "/publish {{tag}} {{network}}"
 
 # Render the release tracker body for a version without writing to GitHub.

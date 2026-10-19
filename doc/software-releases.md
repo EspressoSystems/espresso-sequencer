@@ -103,14 +103,15 @@ first and mainnet later. Only `/publish` turns a pre-release into a release.
 - Command text (lines 2..n) must not contain `<!--`; the command fails with a tracker comment otherwise.
 - `/notes X.Y.Z.N` re-renders every current block, so the per-tag notes and the cumulative view stay in step.
 - Gates, each reported as a tracker comment without changing anything: the tag belongs to the tracker's version, the
-  release exists, a `build.yml` run for the tag succeeded, and every tag in the range has stated notes (the comment
-  lists the missing tags; `/notes <tag> none` fixes a quiet one).
+  release exists, a `build.yml` run for the tag succeeded, every tag in the range has a GitHub release (see Recovery),
+  and every tag in the range has stated notes (the comment lists the missing tags; `/notes <tag> none` fixes a quiet
+  one).
 - Network issue: the bot comments the same text on the issue `Releases: <network>` (see below).
 - Rollback: `/publish <older tag> <network>`.
 - Rerunning `/publish` for the current holder only re-renders its block, keeping its date and previous tag. It is also
   the recovery after a partial failure: the target release is written first, so a rerun still finds its previous tag.
-  Notes given on lines 2..n replace the stored ones.
-- `just release-notes X.Y.Z.N decaf` previews the edits and the tracker comment without writing.
+  Notes given on lines 2..n replace the stored ones; `none` clears them.
+- `just release-publish-preview X.Y.Z.N decaf` previews the edits and the tracker comment without writing.
 
 ### Following a network
 
@@ -141,7 +142,7 @@ comment.
 3. Comment `/tag` on the tracker after each batch worth testing, with the operator notes on lines 2..n or `none`. The
    bot replies with the tag, the GitHub pre-release and a link to the `build.yml` run.
 4. Validate the tag on devnet, or push an experimental branch for ad hoc changes. Fix the notes with `/notes X.Y.Z.N`.
-5. Optionally preview with `just release-notes X.Y.Z.N decaf`. Once a tag is validated, comment
+5. Optionally preview with `just release-publish-preview X.Y.Z.N decaf`. Once a tag is validated, comment
    `/publish X.Y.Z.N decaf`, with network-specific deadlines on lines 2..n. Only releases are meant for operators. A
    later mainnet promotion of the same tag is `/publish X.Y.Z.N mainnet` on the same tracker. Announce with the release
    link.
@@ -176,7 +177,7 @@ just release-tag release-0.6.0   # same as commenting /tag
 just release-tag release-0.6.0 0.6.0.5
 scripts/release tag --branch release-0.6.0 --dry-run   # show the tag, sha and tracker comment, no writes
 scripts/release --help
-just release-notes 0.7.0.4 decaf   # preview /publish, no writes
+just release-publish-preview 0.7.0.4 decaf   # preview /publish, no writes
 ```
 
 `--local` makes both dry runs read the release branch from the checkout instead of `origin/*` (`main` still comes from
@@ -199,6 +200,13 @@ gh release create X.Y.Z.N --target <sha> --title X.Y.Z.N --generate-notes --prer
 gh workflow run build.yml --ref X.Y.Z.N
 ```
 
+A tag in a `/publish` range without a GitHub release (a `/tag` that failed after pushing the tag) fails the gate and the
+comment names it. Create the release by hand, then state its notes with `/notes X.Y.Z.N` and rerun `/publish`:
+
+```sh
+gh release create X.Y.Z.N --target <sha> --title X.Y.Z.N --generate-notes --prerelease
+```
+
 If `just release-cut` pushed the branch but the dispatch failed, rerunning it is rejected because the branch exists.
 Dispatch the workflow directly with the branch tip; `cut` skips whatever already exists:
 
@@ -217,6 +225,9 @@ gh workflow run release-branch.yml -f version=X.Y.Z -f source_ref=$(git rev-pars
   the tracker.
 - Concurrency groups are job-level, so skipped runs from outside comments or fork PRs never cancel a pending run. The
   `notes` and `publish` jobs share the group `release-publish`, because a run edits releases of more than one line.
+- GitHub allows one running and one pending run per concurrency group; a newer pending run replaces the older one. Send
+  tracker commands one at a time and wait for the bot reply. If the reply is missing, the command was probably replaced
+  or failed: check the Actions tab and repost it.
 - Tag protection rules cannot exempt the workflow token, so tags are not protected yet.
 - Floating docker tags per network (`decaf`, `mainnet`) and automated promotion are not part of this process. Operators
   pin release tags. `/publish` never moves a tag.

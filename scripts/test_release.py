@@ -1743,6 +1743,28 @@ class PlanPublish(unittest.TestCase):
         self.assertIn("0.7.0.1, 0.7.0.2;", str(caught.exception))
         self.assertIn("/notes <tag> none", str(caught.exception))
 
+    def test_release_plan_range_tag_without_release_fails(self):
+        releases = [
+            release("0.7.0.0", "0.7.0.0 [decaf]", prerelease=False),
+            stated("0.7.0.2"),
+        ]
+        with self.assertRaises(ValueError) as caught:
+            plan(releases, "0.7.0.2", tags=[t("0.7.0.1"), t("0.7.0.2")])
+        message = str(caught.exception)
+        self.assertIn("no GitHub release for 0.7.0.1", message)
+        self.assertIn("Recovery", message)
+
+    def test_release_plan_none_clears_network_notes_ok(self):
+        releases = published(
+            [stated("0.7.0.1"), stated("0.7.0.2")], "0.7.0.2", notes="Deadline view 5"
+        )
+        _prev, (cleared,) = plan(releases, "0.7.0.2", notes="none")
+        self.assertNotIn("Deadline view 5", cleared.body)
+        self.assertNotIn("network-notes", cleared.body)
+        self.assertIsNone(rel.publish_block_notes(cleared.body, "decaf"))
+        _prev, (fresh,) = plan([stated("0.7.0.1")], "0.7.0.1", notes="none")
+        self.assertNotIn("network-notes", fresh.body)
+
     def test_release_plan_missing_release_fails(self):
         with self.assertRaises(ValueError):
             plan([stated("0.7.0.0")], "0.7.0.5")
@@ -2189,6 +2211,11 @@ class NetworkIndex(unittest.TestCase):
         self.assertEqual(rel.Gh(runner).network_issue("decaf"), 4)
         self.assertFalse(runner.ran("gh", "issue", "create"))
         self.assertIn("release-network", runner.calls[0])
+
+    def test_release_network_issue_found_without_author_filter_ok(self):
+        runner = self._runner([{"number": 4, "title": "Releases: decaf"}])
+        self.assertEqual(rel.Gh(runner).find_network_issue("decaf"), 4)
+        self.assertNotIn("--author", runner.calls[0])
 
     def test_release_network_issue_created_ok(self):
         runner = self._runner([{"number": 3, "title": "Releases: mainnet"}])

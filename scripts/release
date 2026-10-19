@@ -62,7 +62,7 @@ COMMANDS_LEGEND = """## Commands
 | `/tag` | Tag the branch tip with the next patch and create a pre-release. Lines 2..n are the tag's operator notes. |
 | `/tag X.Y.Z.N` | Same with an explicit tag. |
 | `/notes X.Y.Z.N` | Replace the tag's operator notes with lines 2..n; `none` for no operator action. |
-| `/publish X.Y.Z.N decaf` | Make the tag the release for the network (`decaf` or `mainnet`). Lines 2..n are notes for that network. |
+| `/publish X.Y.Z.N decaf` | Make the tag the release for the network (`decaf` or `mainnet`). Lines 2..n are notes for that network; `none` clears them. |
 | `/backport 123` | Open a backport PR for merged PR 123 against this branch. |
 | `/done <sha>` | Mark a commit ported by hand (☑️). |
 | `/skip <sha>` | Mark a commit deliberately not ported (⏭️). |
@@ -730,21 +730,20 @@ def plan_publish(
         if network in title_networks(release.title)
         else None
     )
+    clear_notes = network_notes is not None and network_notes.strip().lower() == "none"
+    if clear_notes:
+        network_notes = None
     if stored is None:
         holder = current_release(others, network)
         prev, since = (parse_tag(holder.tag) if holder else None), date
     else:
         prev, since = (parse_tag(stored[0]) if stored[0] else None), stored[1]
-        network_notes = network_notes or publish_block_notes(release.body, network)
+        if not clear_notes:
+            network_notes = network_notes or publish_block_notes(release.body, network)
 
     scope = notes_range(prev, target, tags)
+    _require_range_stated(releases, scope)
     entries = release_entries(releases, scope)
-    missing = [str(tag) for tag, text in entries if text == NOT_STATED]
-    if missing:
-        raise ValueError(
-            f"operator notes missing for {', '.join(missing)}; "
-            f"state them with `/notes <tag> ...` or `/notes <tag> none`"
-        )
     block = render_publish_block(
         network, prev, target, since, network_notes, entries, repo
     )
@@ -757,6 +756,23 @@ def plan_publish(
     )
     superseded = [_supersede(other, network, release.tag, date) for other in others]
     return prev, [edit, *superseded]
+
+
+def _require_range_stated(releases: list[ReleaseInfo], scope: list[Tag]) -> None:
+    unreleased = [str(tag) for tag in scope if find_release(releases, str(tag)) is None]
+    if unreleased:
+        raise ValueError(
+            f"no GitHub release for {', '.join(unreleased)}; create it as described under "
+            f"Recovery in doc/software-releases.md"
+        )
+    missing = [
+        str(tag) for tag, text in release_entries(releases, scope) if text == NOT_STATED
+    ]
+    if missing:
+        raise ValueError(
+            f"operator notes missing for {', '.join(missing)}; "
+            f"state them with `/notes <tag> ...` or `/notes <tag> none`"
+        )
 
 
 def _require_no_lost_holder(releases: list[ReleaseInfo], network: Network) -> None:
@@ -1494,8 +1510,6 @@ class Gh:
                     "list",
                     "--label",
                     NETWORK_LABEL,
-                    "--author",
-                    "app/github-actions",
                     "--state",
                     "open",
                     "--json",
