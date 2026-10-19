@@ -1287,6 +1287,8 @@ class CmdNotes(unittest.TestCase):
         self.assertEqual(code, 0)
         edit = next(c for c in runner.calls if c[:3] == ["gh", "release", "edit"])
         self.assertEqual(edit[3], "0.6.0.4")
+        self.assertIn("--latest=false", edit)
+        self.assertIn("--prerelease=true", edit)
         self.assertTrue(
             runner.ran("gh", "workflow", "run", "update-release-tracker.yml")
         )
@@ -1789,8 +1791,7 @@ class CmdPublish(unittest.TestCase):
                     rows
                 )
                 + "\n",
-                ("gh", "api", "repos/{owner}/{repo}/releases/tags/0.7.0.2"): "77\n",
-                ("gh", "api", "-X", "PATCH"): "",
+                ("gh", "release", "edit"): "",
                 ("gh", "run", "list"): build,
                 ("gh", "workflow", "run"): "",
                 ("gh", "issue", "comment"): "",
@@ -1823,11 +1824,11 @@ class CmdPublish(unittest.TestCase):
             rel.Gh(runner),
         )
         self.assertEqual(code, 0, runner.calls)
-        patch = next(c for c in runner.calls if c[:4] == ["gh", "api", "-X", "PATCH"])
-        self.assertEqual(patch[4], "repos/{owner}/{repo}/releases/77")
-        self.assertIn("name=0.7.0.2 [decaf]", patch)
-        self.assertIn("prerelease=false", patch)
-        self.assertIn("make_latest=false", patch)
+        edit_call = next(c for c in runner.calls if c[:3] == ["gh", "release", "edit"])
+        self.assertEqual(edit_call[3], "0.7.0.2")
+        self.assertEqual(edit_call[edit_call.index("--title") + 1], "0.7.0.2 [decaf]")
+        self.assertIn("--prerelease=false", edit_call)
+        self.assertIn("--latest=false", edit_call)
         self.assertTrue(
             runner.ran("gh", "workflow", "run", "update-release-tracker.yml")
         )
@@ -1876,14 +1877,14 @@ class CmdPublish(unittest.TestCase):
             self._args("/publish 0.7.0.2 mainnet"), rel.Git(runner), rel.Gh(runner)
         )
         self.assertEqual(code, 0)
-        patch = next(c for c in runner.calls if c[:4] == ["gh", "api", "-X", "PATCH"])
-        self.assertIn("make_latest=true", patch)
+        edit_call = next(c for c in runner.calls if c[:3] == ["gh", "release", "edit"])
+        self.assertIn("--latest=true", edit_call)
 
     def test_release_cmd_publish_build_gate_fails(self):
         runner = self._runner(build="[]")
         code = rel.cmd_publish(self._args(), rel.Git(runner), rel.Gh(runner))
         self.assertEqual(code, 1)
-        self.assertFalse(runner.ran("gh", "api", "-X", "PATCH"))
+        self.assertFalse(runner.ran("gh", "release", "edit"))
         comment = next(c for c in runner.calls if c[:3] == ["gh", "issue", "comment"])
         self.assertIn(
             "/publish failed: no successful build.yml run for 0.7.0.2", comment[-1]
@@ -1898,7 +1899,7 @@ class CmdPublish(unittest.TestCase):
         runner = self._runner(releases=rows)
         code = rel.cmd_publish(self._args(), rel.Git(runner), rel.Gh(runner))
         self.assertEqual(code, 1)
-        self.assertFalse(runner.ran("gh", "api", "-X", "PATCH"))
+        self.assertFalse(runner.ran("gh", "release", "edit"))
         comment = next(c for c in runner.calls if c[:3] == ["gh", "issue", "comment"])
         self.assertIn("missing for 0.7.0.1;", comment[-1])
 
@@ -1908,7 +1909,7 @@ class CmdPublish(unittest.TestCase):
             self._args("/publish 0.6.3.1 decaf"), rel.Git(runner), rel.Gh(runner)
         )
         self.assertEqual(code, 1)
-        self.assertFalse(runner.ran("gh", "api", "-X", "PATCH"))
+        self.assertFalse(runner.ran("gh", "release", "edit"))
         comment = next(c for c in runner.calls if c[:3] == ["gh", "issue", "comment"])
         self.assertIn("does not belong to 0.7.0", comment[-1])
 
@@ -1947,7 +1948,7 @@ class CmdPublish(unittest.TestCase):
         self.assertIn("docker pull", out.getvalue())
         self.assertIn("# Releases: decaf", out.getvalue())
         for write in (
-            ("gh", "api", "-X"),
+            ("gh", "release", "edit"),
             ("gh", "issue", "comment"),
             ("gh", "issue", "create"),
             ("gh", "issue", "edit"),
@@ -1965,7 +1966,6 @@ class CmdPublish(unittest.TestCase):
             release_row("0.7.0.3", releases[2].title, releases[2].body, False),
         ]
         runner = self._runner(releases=rows)
-        runner.responses[("gh", "release", "edit")] = ""
         args = argparse.Namespace(
             issue=42,
             comment="/notes 0.7.0.2\nUrgency: High",
@@ -1976,6 +1976,10 @@ class CmdPublish(unittest.TestCase):
         self.assertEqual(rel.cmd_notes(args, rel.Git(runner), rel.Gh(runner)), 0)
         edits = [c for c in runner.calls if c[:3] == ["gh", "release", "edit"]]
         self.assertEqual([c[3] for c in edits], ["0.7.0.2", "0.7.0.3"])
+        self.assertIn("--prerelease=true", edits[0])
+        self.assertIn("--latest=false", edits[0])
+        self.assertIn("--prerelease=false", edits[1])
+        self.assertIn("--latest=false", edits[1])
 
 
 class NetworkIndex(unittest.TestCase):
@@ -2034,19 +2038,21 @@ class NetworkIndex(unittest.TestCase):
 
 
 class GhReleaseEdit(unittest.TestCase):
-    def test_release_gh_release_edit_sends_make_latest_ok(self):
-        runner = FakeRunner(
-            {
-                ("gh", "api", "repos/{owner}/{repo}/releases/tags/0.7.0.1"): "5\n",
-                ("gh", "api", "-X", "PATCH"): "",
-            }
-        )
-        edit = rel.ReleaseEdit("0.7.0.1", "0.7.0.1 [decaf]", "body", False, False)
+    def test_release_gh_release_edit_sends_latest_ok(self):
+        runner = FakeRunner({("gh", "release", "edit"): ""})
+        edit = rel.ReleaseEdit("0.7.0.1", "0.7.0.1 [decaf]", "body", False)
         rel.Gh(runner).release_edit(edit)
-        patch = runner.calls[-1]
-        self.assertIn("make_latest=false", patch)
-        self.assertIn("prerelease=false", patch)
-        self.assertEqual(patch[4], "repos/{owner}/{repo}/releases/5")
+        call = runner.calls[-1]
+        self.assertEqual(call[:4], ["gh", "release", "edit", "0.7.0.1"])
+        self.assertIn("--prerelease=false", call)
+        self.assertIn("--latest=false", call)
+        self.assertIn("--notes-file", call)
+
+    def test_release_gh_release_edit_mainnet_latest_ok(self):
+        runner = FakeRunner({("gh", "release", "edit"): ""})
+        edit = rel.ReleaseEdit("0.7.0.1", "0.7.0.1 [mainnet]", "body", False)
+        rel.Gh(runner).release_edit(edit)
+        self.assertIn("--latest=true", runner.calls[-1])
 
 
 # EDGE:release-no-tags

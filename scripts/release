@@ -31,7 +31,8 @@ import subprocess
 import sys
 import tempfile
 import urllib.parse
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
@@ -167,7 +168,11 @@ class ReleaseEdit:
     title: str
     body: str
     prerelease: bool
-    make_latest: bool
+
+    @property
+    def make_latest(self) -> bool:
+        """Latest is always the mainnet release; GitHub defaults to true when unset."""
+        return "mainnet" in title_networks(self.title)
 
 
 @dataclass(frozen=True)
@@ -699,7 +704,6 @@ def plan_publish(
         render_title(release.tag, networks),
         with_block(release.body, network, block),
         False,
-        "mainnet" in networks,
     )
     superseded = [_supersede(other, network, release.tag, date) for other in others]
     return prev, [edit, *superseded]
@@ -715,7 +719,6 @@ def _supersede(
         render_title(release.tag, networks),
         mark_superseded(release.body, network, by, date),
         False,
-        "mainnet" in networks,
     )
 
 
@@ -1221,6 +1224,14 @@ class Git:
         self._run(["git", "push", self.remote, f"refs/tags/{name}"])
 
 
+@contextmanager
+def _body_file(body: str) -> Iterator[Path]:
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        path = Path(tmp_dir) / "body.md"
+        path.write_text(body, encoding="utf-8")
+        yield path
+
+
 class Gh:
     def __init__(self, run: Runner = _run) -> None:
         self._run = run
@@ -1270,9 +1281,7 @@ class Gh:
         return permission in WRITE_PERMISSIONS
 
     def issue_edit_body(self, number: int, body: str) -> None:
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            path = Path(tmp_dir) / "body.md"
-            path.write_text(body, encoding="utf-8")
+        with _body_file(body) as path:
             self._run(["gh", "issue", "edit", str(number), "--body-file", str(path)])
 
     def issue_comment(self, number: int, body: str) -> None:
@@ -1396,41 +1405,20 @@ class Gh:
             ]
         ).strip()
 
-    def release_edit_notes(self, tag: str, body: str) -> None:
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            path = Path(tmp_dir) / "body.md"
-            path.write_text(body, encoding="utf-8")
-            self._run(["gh", "release", "edit", tag, "--notes-file", str(path)])
-
     def release_edit(self, edit: ReleaseEdit) -> None:
-        """Always sends `make_latest`, which GitHub otherwise defaults to true."""
-        release_id = self._run(
-            [
-                "gh",
-                "api",
-                f"repos/{{owner}}/{{repo}}/releases/tags/{edit.tag}",
-                "--jq",
-                ".id",
-            ]
-        ).strip()
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            path = Path(tmp_dir) / "body.md"
-            path.write_text(edit.body, encoding="utf-8")
+        with _body_file(edit.body) as path:
             self._run(
                 [
                     "gh",
-                    "api",
-                    "-X",
-                    "PATCH",
-                    f"repos/{{owner}}/{{repo}}/releases/{release_id}",
-                    "-f",
-                    f"name={edit.title}",
-                    "-F",
-                    f"body=@{path}",
-                    "-F",
-                    f"prerelease={str(edit.prerelease).lower()}",
-                    "-f",
-                    f"make_latest={str(edit.make_latest).lower()}",
+                    "release",
+                    "edit",
+                    edit.tag,
+                    "--title",
+                    edit.title,
+                    "--notes-file",
+                    str(path),
+                    f"--prerelease={str(edit.prerelease).lower()}",
+                    f"--latest={str(edit.make_latest).lower()}",
                 ]
             )
 
@@ -1795,15 +1783,18 @@ def cmd_notes(args: argparse.Namespace, git: Git, gh: Gh) -> int:
     ]
     repo = gh.repo()
     rerendered = rerender_blocks(releases, line_tags(git, releases), repo)
-    bodies = {r.tag: r.body for r in releases if r.tag == command.arg}
-    bodies |= {r.tag: r.body for r in rerendered}
+    changed = {r.tag: r for r in releases if r.tag == command.arg}
+    changed |= {r.tag: r for r in rerendered}
+    edits = [
+        ReleaseEdit(r.tag, r.title, r.body, r.prerelease) for r in changed.values()
+    ]
     if args.dry_run:
-        for name, body in bodies.items():
-            print(f"# {name}\n")
-            print(body)
+        for edit in edits:
+            print(f"# {edit.tag}\n")
+            print(edit.body)
         return 0
-    for name, body in bodies.items():
-        gh.release_edit_notes(name, body)
+    for edit in edits:
+        gh.release_edit(edit)
     gh.workflow_run("update-release-tracker.yml", None, {"issue": str(args.issue)})
     gh.issue_comment(
         args.issue, render_notes_comment(tag, repo, args.actor, args.run_url)

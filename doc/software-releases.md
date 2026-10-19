@@ -80,8 +80,8 @@ first and mainnet later. Only `/publish` turns a pre-release into a release.
 - Title: `X.Y.Z.N [decaf]`, `[mainnet]` or `[decaf, mainnet]`. Only the release currently published on a network carries
   its marker. The previous holder loses the marker, stays a full release and gets the line
   `Superseded on <network> by <tag> (<date>)`.
-- Latest: always the release published on mainnet. Every edit sends `make_latest` explicitly, because GitHub defaults to
-  true.
+- Latest: always the release published on mainnet. Every release edit, including `/notes`, sends `--latest` explicitly,
+  because GitHub defaults to true.
 - Body: one block per network between `<!-- publish:<network> prev=<tag|none> date=<date> -->` and
   `<!-- /publish:<network> -->`, above the notes block. It holds the deploy date, the previous tag, the `docker pull`
   line, the lines 2..n of `/publish`, the operator actions of every tag in the range and a compare link. Text outside
