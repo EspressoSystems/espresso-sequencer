@@ -47,9 +47,8 @@ NOTES_CLOSE = "<!-- /operator-notes -->"
 NOTES_HEADING = "## Operator notes"
 NOT_STATED = "_Not yet stated._"
 NO_ACTION = "No operator action required."
-BOT_MARKER = (
-    "<!--"  # command text is embedded in release bodies between the bot's markers
-)
+# command text is embedded in release bodies between the bot's markers
+BOT_MARKER = "<!--"
 NETWORK_LABEL = "release-network"
 NETWORK_NOTES_OPEN = "<!-- network-notes -->"
 NETWORK_NOTES_CLOSE = "<!-- /network-notes -->"
@@ -565,29 +564,6 @@ def notes_range(prev: Tag | None, target: Tag, line_tags: list[Tag]) -> list[Tag
     )
 
 
-def scope_versions(
-    releases: list[ReleaseInfo], target: Tag, network: Network
-) -> list[Version]:
-    """The lines whose tags `notes_range` can need: from the oldest possible previous holder
-    (a marked release or the target's stored prev) up to the target's line."""
-    release = find_release(releases, str(target))
-    stored = publish_block_prev(release.body, network) if release else None
-    candidates = [r.tag for r in releases if network in title_networks(r.title)]
-    if stored is not None and stored[0] is not None:
-        candidates.append(stored[0])
-    floor = min(
-        (tag.version for text in candidates if (tag := parse_tag(text))),
-        default=target.version,
-    )
-    floor = min(floor, target.version)
-    lines = {
-        tag.version
-        for r in releases
-        if (tag := parse_tag(r.tag)) and floor <= tag.version <= target.version
-    }
-    return sorted(lines | {target.version})
-
-
 def _block_re(network: Network) -> re.Pattern[str]:
     return re.compile(
         rf"<!-- publish:{network} prev=(?P<prev>\S+) date=(?P<date>\S+) -->\n"
@@ -703,12 +679,16 @@ def mark_superseded(body: str, network: Network, by: str, date: str) -> str:
     return body[: match.start()] + block + body[match.end() :]
 
 
+# `tags_for(prev, target)` lists the git tags a notes range from `prev` to `target` can draw from.
+TagsFor = Callable[[Tag | None, Tag], list[Tag]]
+
+
 def plan_publish(
     releases: list[ReleaseInfo],
     target: Tag,
     network: Network,
     network_notes: str | None,
-    tags: list[Tag],
+    tags_for: TagsFor,
     date: str,
     repo: str,
 ) -> tuple[Tag | None, list[ReleaseEdit]]:
@@ -729,8 +709,8 @@ def plan_publish(
     prev, since, network_notes = _previous_holder(
         release, others, network, network_notes, date
     )
-    scope = notes_range(prev, target, tags)
-    _require_range_stated(releases, scope)
+    scope = notes_range(prev, target, tags_for(prev, target))
+    _require_range_ready(releases, scope)
     block = render_publish_block(
         network,
         prev,
@@ -774,7 +754,7 @@ def _previous_holder(
     return (parse_tag(stored[0]) if stored[0] else None), stored[1], notes
 
 
-def _require_range_stated(releases: list[ReleaseInfo], scope: list[Tag]) -> None:
+def _require_range_ready(releases: list[ReleaseInfo], scope: list[Tag]) -> None:
     unreleased = [str(tag) for tag in scope if find_release(releases, str(tag)) is None]
     if unreleased:
         raise ValueError(
@@ -817,14 +797,11 @@ def _supersede(
     )
 
 
-TagsFor = Callable[[Tag, Network], list[Tag]]
-
-
 def rerender_blocks(
     releases: list[ReleaseInfo], tags_for: TagsFor, repo: str
 ) -> list[ReleaseInfo]:
     """Re-renders every current publish block from the release bodies; returns the changed releases.
-    `tags_for(holder, network)` lists the git tags its range can draw from."""
+    `tags_for` lists the git tags a holder's range can draw from."""
     changed = []
     for release in releases:
         target = parse_tag(release.tag)
@@ -834,7 +811,7 @@ def rerender_blocks(
             if stored is None or target is None:
                 continue
             prev = parse_tag(stored[0]) if stored[0] else None
-            scope = notes_range(prev, target, tags_for(target, network))
+            scope = notes_range(prev, target, tags_for(prev, target))
             block = render_publish_block(
                 network,
                 prev,
@@ -1884,7 +1861,7 @@ def cmd_notes(args: argparse.Namespace, git: Git, gh: Gh) -> int:
     repo = gh.repo()
     rerendered = rerender_blocks(
         releases,
-        lambda holder, network: publish_tags(git, releases, holder, network),
+        git_tags_for(git, releases),
         repo,
     )
     changed = {r.tag: r for r in releases if r.tag == command.arg}
@@ -1906,16 +1883,30 @@ def cmd_notes(args: argparse.Namespace, git: Git, gh: Gh) -> int:
     return 0
 
 
-def _version_tags(git: Git, version: Version) -> list[Tag]:
-    git.fetch(version, [])
-    return [tag for name in git.tag_list(f"{version}.*") if (tag := parse_tag(name))]
+def git_tags_for(git: Git, releases: list[ReleaseInfo]) -> TagsFor:
+    """Tags of the release lines between `prev` and `target`, fetching each line once."""
+    lines: dict[Version, list[Tag]] = {}
 
+    def line_tags(version: Version) -> list[Tag]:
+        if version not in lines:
+            git.fetch(version, [])
+            lines[version] = [
+                tag for name in git.tag_list(f"{version}.*") if (tag := parse_tag(name))
+            ]
+        return lines[version]
 
-def publish_tags(
-    git: Git, releases: list[ReleaseInfo], target: Tag, network: Network
-) -> list[Tag]:
-    versions = scope_versions(releases, target, network)
-    return [tag for version in versions for tag in _version_tags(git, version)]
+    def tags_for(prev: Tag | None, target: Tag) -> list[Tag]:
+        if prev is None or target <= prev:
+            return []
+        versions = {
+            tag.version
+            for r in releases
+            if (tag := parse_tag(r.tag))
+            and prev.version <= tag.version <= target.version
+        } | {target.version}
+        return [tag for version in sorted(versions) for tag in line_tags(version)]
+
+    return tags_for
 
 
 def _promotion(
@@ -1996,7 +1987,7 @@ def _plan_publish(
         target,
         network,
         command.text,
-        publish_tags(git, releases, target, network),
+        git_tags_for(git, releases),
         datetime.now(UTC).date().isoformat(),
         repo,
     )
@@ -2024,9 +2015,8 @@ def apply_publish(gh: Gh, plan: PublishPlan, issue: int | None) -> None:
         gh.release_edit(edit)
     number = gh.network_issue(plan.network)
     history, promoted = _promotion(gh, number, plan.target, plan.prev, plan.actor)
-    if (
-        promoted
-    ):  # comment first: a failure before the row lands is retried with a notification
+    # comment first: a failure before the row lands is retried with a notification
+    if promoted:
         gh.issue_comment(number, plan.comment)
         gh.issue_edit_body(
             number, render_network_index(plan.network, history, plan.repo)

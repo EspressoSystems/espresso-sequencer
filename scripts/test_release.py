@@ -1421,7 +1421,9 @@ def stated(
 
 def plan(releases, target, network="decaf", notes=None, tags=None, date="2026-10-21"):
     tags = tags or [t(r.tag) for r in releases]
-    return rel.plan_publish(releases, t(target), network, notes, tags, date, REPO)
+    return rel.plan_publish(
+        releases, t(target), network, notes, lambda *_: tags, date, REPO
+    )
 
 
 def apply(releases, edits):
@@ -1523,20 +1525,22 @@ class CrossLineRange(unittest.TestCase):
         scope = rel.notes_range(t("0.6.3.12"), t("0.7.1.2"), self.TAGS)
         self.assertEqual(scope, [*self.TAGS[2:8], *self.TAGS[8:11]])
 
-    def test_release_scope_versions_ok(self):
+    def test_release_git_tags_for_fetches_each_line_once_ok(self):
         releases = [
             release("0.6.3.12", "0.6.3.12 [mainnet]"),
             *(release(f"0.7.0.{n}") for n in range(3)),
             release("0.7.1.2"),
             release("0.8.0.0"),
         ]
-        self.assertEqual(
-            rel.scope_versions(releases, t("0.7.1.2"), "mainnet"),
-            [version(0, 6, 3), version(0, 7, 0), version(0, 7, 1)],
-        )
-        self.assertEqual(
-            rel.scope_versions(releases, t("0.7.1.2"), "decaf"), [version(0, 7, 1)]
-        )
+        runner = FakeRunner({("git", "fetch"): "", ("git", "tag", "--list"): "0.7.1.2"})
+        tags_for = rel.git_tags_for(rel.Git(runner), releases)
+        tags_for(t("0.6.3.12"), t("0.7.1.2"))
+        tags_for(t("0.7.0.1"), t("0.7.1.2"))
+        fetched = [c for c in runner.calls if c[:2] == ["git", "fetch"]]
+        self.assertEqual(len(fetched), 3)
+        self.assertEqual(tags_for(None, t("0.7.1.2")), [])
+        self.assertEqual(tags_for(t("0.7.1.2"), t("0.7.0.1")), [])
+        self.assertEqual(len([c for c in runner.calls if c[:2] == ["git", "fetch"]]), 3)
 
     def test_release_cmd_publish_cross_line_collects_every_line_ok(self):
         releases = [
