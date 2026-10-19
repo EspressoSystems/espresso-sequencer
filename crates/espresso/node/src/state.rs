@@ -428,7 +428,7 @@ where
     // state only, so give it a recent snapshot to resume from instead.
     if last_height == 0
         && empty_state_start == EmptyStateStart::RecentBoundary
-        && let Some(boundary) = seed_boundary_snapshot(&storage, &instance, &provider).await?
+        && let Some(boundary) = seed_boundary_snapshot(&storage, &instance, &provider).await
     {
         last_height = boundary;
     }
@@ -523,16 +523,22 @@ async fn seed_boundary_snapshot<T, C>(
     storage: &Arc<T>,
     instance: &NodeState,
     provider: &LightClientProvider<C>,
-) -> anyhow::Result<Option<u64>>
+) -> Option<u64>
 where
     T: SequencerStateDataSource,
     for<'a> T::Transaction<'a>: SequencerStateUpdate,
     C: ApiContext,
 {
-    let Some(epoch_height) = instance.epoch_height.filter(|height| *height > 0) else {
-        return Ok(None);
+    let epoch_height = instance.epoch_height.filter(|height| *height > 0)?;
+    // A database error here would end the loop for good, so this read and the store below retry
+    // until they succeed.
+    let pruned = loop {
+        match storage.load_pruned_height().await {
+            Ok(pruned) => break pruned.unwrap_or(0),
+            Err(err) => tracing::warn!("failed to load the data pruned height: {err:#}"),
+        }
+        sleep(BOUNDARY_RETRY_INTERVAL).await;
     };
-    let pruned = storage.load_pruned_height().await?.unwrap_or(0);
     // Each request is sent once, because this loop retries: peers never answer a request for a
     // boundary they have pruned, and the next try then picks the boundary again from the tip. Each
     // try passes its number on, so that peers get longer to answer.
@@ -541,11 +547,11 @@ where
         let tip = local_tip_above(&**storage, pruned).await;
         let boundary = tip - tip % epoch_height;
         if boundary == 0 {
-            return Ok(None);
+            return None;
         }
         let leaf = leaf_at(storage, provider, boundary).await;
         if leaf.block_header().version() < EPOCH_REWARD_VERSION {
-            return Ok(None);
+            return None;
         }
         let catchup = SingleAttemptCatchup::new(instance.state_catchup.clone(), retry);
         match fetch_boundary_state(&catchup, instance, &leaf).await {
@@ -565,13 +571,20 @@ where
         }
     };
     let height = leaf.height();
-    store_boundary_snapshot(&**storage, height, &state).await?;
+    // Every write is an upsert, so a retry after a partial store is safe.
+    while let Err(err) = store_boundary_snapshot(&**storage, height, &state).await {
+        tracing::error!(
+            height,
+            "storing the boundary snapshot failed, retrying: {err:#}"
+        );
+        sleep(BOUNDARY_RETRY_INTERVAL).await;
+    }
     tracing::info!(
         height,
         pruned,
         "state loop starts from a snapshot at a recent epoch boundary"
     );
-    Ok(Some(height))
+    Some(height)
 }
 
 /// The height of the newest block in local storage, once it is above `pruned`.
