@@ -36,7 +36,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from functools import partial
 from pathlib import Path
-from typing import Literal, cast
+from typing import Literal, NamedTuple, cast
 
 log = logging.getLogger("release")
 
@@ -144,6 +144,11 @@ class Fragment:
     text: str
 
 
+class NoteCounts(NamedTuple):
+    valid: int
+    invalid: int
+
+
 MarkKind = Literal["done", "skip"]
 
 
@@ -212,8 +217,8 @@ class TrackerState:
     experimental_branches: list[tuple[str, str]]  # name, sha
     branch_tags: dict[str, str]  # branch commit sha -> first tag containing it
     fragment_counts: dict[
-        str, tuple[int, int]
-    ]  # tag -> (valid, invalid) operator-notes paths new since the previous tag
+        str, NoteCounts
+    ]  # operator-notes paths new since the previous tag
 
 
 def parse_version(text: str) -> Version | None:
@@ -498,13 +503,10 @@ def render_notes_block(text: str) -> str:
 
 
 def is_fragment_path(path: str) -> bool:
-    """A top-level `doc/operator-notes/<topic>.md`, `README.md` excluded."""
+    """A top-level `doc/operator-notes/<topic>.md`. `fragment_paths` drops the README."""
     name = path.removeprefix(f"{FRAGMENT_DIR}/")
     return (
-        name != path
-        and "/" not in name
-        and name.endswith(".md")
-        and path != FRAGMENT_README
+        path.startswith(f"{FRAGMENT_DIR}/") and "/" not in name and name.endswith(".md")
     )
 
 
@@ -811,18 +813,18 @@ def render_publish_comment(
     return "\n".join(lines) + "\n"
 
 
-def render_notes_cell(counts: tuple[int, int] | None) -> str:
-    valid, invalid = counts or (0, 0)
-    parts = [str(valid)] if valid else []
-    if invalid:
-        parts.append(f"\u26a0\ufe0f {invalid} invalid")
+def render_notes_cell(counts: NoteCounts | None) -> str:
+    counts = counts or NoteCounts(0, 0)
+    parts = [str(counts.valid)] if counts.valid else []
+    if counts.invalid:
+        parts.append(f"\u26a0\ufe0f {counts.invalid} invalid")
     return ", ".join(parts) or "-"
 
 
 def render_tag_log(
     tags: list[tuple[str, str, str]],
     releases: list[ReleaseInfo],
-    fragment_counts: dict[str, tuple[int, int]],
+    fragment_counts: dict[str, NoteCounts],
     repo: str,
 ) -> str:
     if not tags:
@@ -1939,8 +1941,8 @@ def build_tracker_state(
 
 def fragment_counts(
     git: Git, tags: list[tuple[str, str, str]]
-) -> dict[str, tuple[int, int]]:
-    """(valid, invalid) fragment paths new in each tag since the previous tag on its line."""
+) -> dict[str, NoteCounts]:
+    """Valid and invalid fragment paths new in each tag since the previous tag on its line."""
     parsed = [tag for name, _date, _sha in tags if (tag := parse_tag(name))]
     counts = {}
     for tag in parsed:
@@ -1948,7 +1950,7 @@ def fragment_counts(
         if base is not None:
             paths = git.fragment_paths(str(base), str(tag))
             valid = sum(is_fragment_path(path) for path in paths)
-            counts[str(tag)] = (valid, len(paths) - valid)
+            counts[str(tag)] = NoteCounts(valid, len(paths) - valid)
     return counts
 
 

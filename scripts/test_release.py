@@ -948,6 +948,16 @@ class CmdTagHappyPath(unittest.TestCase):
         comment = next(c for c in runner.calls if c[:3] == ["gh", "issue", "comment"])
         self.assertIn("doc/operator-notes/b.md", comment[-1])
 
+    def test_release_cmd_tag_nested_fragment_path_fails(self):
+        runner = self._fragment_runner("doc/operator-notes/sub/a.md\0", "### A\n")
+        self.assertEqual(
+            rel.cmd_tag(self._tag_args(), rel.Git(runner), rel.Gh(runner)), 1
+        )
+        self.assertFalse(runner.ran("git", "tag", "-a"))
+        comment = next(c for c in runner.calls if c[:3] == ["gh", "issue", "comment"])
+        self.assertIn("/tag failed:", comment[-1])
+        self.assertIn("doc/operator-notes/sub/a.md", comment[-1])
+
 
 # REQ:release-tag-failure-reported
 
@@ -1296,7 +1306,7 @@ class BuildTrackerStateAnchor(unittest.TestCase):
         git, gh = rel.Git(runner), rel.Gh(runner)
         state, _body_before = rel.build_tracker_state(git, gh, 7, version())
         self.assertEqual(state.branch_tags, {branch_sha: "0.6.0.1"})
-        self.assertEqual(state.fragment_counts, {"0.6.0.1": (1, 0)})
+        self.assertEqual(state.fragment_counts, {"0.6.0.1": rel.NoteCounts(1, 0)})
         self.assertEqual(
             [c.sha for c in state.main_commits], [cherry_sha, pr_match_sha]
         )
@@ -1333,14 +1343,16 @@ class TagLogReleases(unittest.TestCase):
         runner = FakeRunner({("git", "diff"): "doc/operator-notes/a.md\0"})
         tags = [(f"0.6.3.{n}", "d", "c" * 40) for n in range(3)]
         counts = rel.fragment_counts(rel.Git(runner), tags)
-        self.assertEqual(counts, {"0.6.3.1": (1, 0), "0.6.3.2": (1, 0)})
+        self.assertEqual(
+            counts, {"0.6.3.1": rel.NoteCounts(1, 0), "0.6.3.2": rel.NoteCounts(1, 0)}
+        )
 
     def test_release_fragment_counts_invalid_path_ok(self):
         diff = "doc/operator-notes/a.md\0doc/operator-notes/sub/b.md\0"
         runner = FakeRunner({("git", "diff"): diff})
         tags = [(f"0.6.3.{n}", "d", "c" * 40) for n in range(2)]
         counts = rel.fragment_counts(rel.Git(runner), tags)
-        self.assertEqual(counts, {"0.6.3.1": (1, 1)})
+        self.assertEqual(counts, {"0.6.3.1": rel.NoteCounts(1, 1)})
         rows = rel.render_tag_log(tags, [], counts, REPO).splitlines()[2:]
         self.assertIn("| 1, \u26a0\ufe0f 1 invalid |", rows[1])
 
@@ -1425,7 +1437,7 @@ class Fragments(unittest.TestCase):
     def test_release_fragment_path_ok(self):
         self.assertTrue(rel.is_fragment_path("doc/operator-notes/db-migration.md"))
         for path in (
-            "doc/operator-notes/README.md",
+            "doc/operator-notes/sub/a.md",
             "doc/operator-notes/notes.txt",
             "doc/other/a.md",
         ):
