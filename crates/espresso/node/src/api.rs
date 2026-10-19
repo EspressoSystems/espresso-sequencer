@@ -7728,9 +7728,10 @@ mod test {
     /// its state from a snapshot at a recent epoch boundary, from peers, instead of replaying the
     /// chain from genesis. The snapshot has no fee accounts, so the loop gets past the boundary
     /// only if it fetches them from peers, and past the next boundary only if the reward tree it
-    /// fetched is whole. A brand-new database, which the data pruner has not stamped yet, starts
-    /// from a boundary too. A node without a pruner, here one that pruned before and has turned
-    /// pruning off, still replays from genesis, on leaves from peers up to the data pruned height.
+    /// fetched is whole. It stores the fee accounts it fetches, so it can serve them. A brand-new
+    /// database, which the data pruner has not stamped yet, starts from a boundary too. A node
+    /// without a pruner, here one that pruned before and has turned pruning off, still replays
+    /// from genesis, on leaves from peers up to the data pruned height.
     #[rstest]
     #[case::recent_boundary(EmptyStateStart::RecentBoundary, true)]
     #[case::fresh_database(EmptyStateStart::RecentBoundary, false)]
@@ -7784,6 +7785,11 @@ mod test {
             .await?
             .build();
         let genesis_state = config.states()[0].clone();
+        let fee_recipient = genesis_state
+            .chain_config
+            .resolve()
+            .context("genesis chain config")?
+            .fee_recipient;
         let mut network = TestNetwork::new(config, TEST_UPGRADE).await;
 
         // Peer 0 comes back later as a query node on a database with no query data.
@@ -7895,7 +7901,18 @@ mod test {
             lowest == start,
             "state below the start {start} was computed, from {lowest}"
         );
-        Ok(())
+
+        // From V0.6 on no block changes the fee recipient, so the loop has it only if it stored
+        // the account when it fetched it.
+        let query_client: Client<ClientErr, StaticVersion<0, 1>> =
+            Client::new(format!("http://localhost:{query_port}").parse()?);
+        wait_until_block_height(&api_client, "fee-state/block-height", past + 1).await;
+        assert_same_response(
+            &api_client,
+            &query_client,
+            &format!("fee-state/{past}/{fee_recipient}"),
+        )
+        .await
     }
 
     /// The lowest height with a block tree node, which is the first snapshot the state loop stored.
