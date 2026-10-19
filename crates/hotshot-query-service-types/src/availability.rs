@@ -847,11 +847,9 @@ impl<Types: NodeType> VidCommonQueryData<Types> {
             },
             VidCommitment::V2(_) => {
                 let param = init_avidm_gf2_param(GENESIS_VID_NUM_STORAGE_NODES).unwrap();
-                let weights = vec![1; GENESIS_VID_NUM_STORAGE_NODES];
                 let ns_table =
                     parse_ns_table(bytes.len(), &leaf.block_header().metadata().encode());
-                let (_, common, _) =
-                    AvidmGf2Scheme::ns_disperse(&param, &weights, &bytes, ns_table).unwrap();
+                let (_, common) = AvidmGf2Scheme::commit(&param, &bytes, ns_table).unwrap();
                 VidCommon::V2(common)
             },
         };
