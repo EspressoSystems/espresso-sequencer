@@ -46,6 +46,9 @@ NOTES_CLOSE = "<!-- /operator-notes -->"
 NOTES_HEADING = "## Operator notes"
 NOT_STATED = "_Not yet stated._"
 NO_ACTION = "No operator action required."
+BOT_MARKER = (
+    "<!--"  # command text is embedded in release bodies between the bot's markers
+)
 NETWORK_LABEL = "release-network"
 NETWORK_NOTES_OPEN = "<!-- network-notes -->"
 NETWORK_NOTES_CLOSE = "<!-- /network-notes -->"
@@ -294,6 +297,8 @@ def parse_command(body: str) -> Command | None:
     name, arg, arg2 = match.group(1, 2, 3)
     kind = cast(CommandName, name)
     text = normalize_newlines(body[match.end() :]).strip() or None
+    if text is not None and BOT_MARKER in text:
+        return None
     if kind == "publish":
         if arg is None or arg2 not in NETWORKS:
             return None
@@ -310,6 +315,13 @@ def parse_command(body: str) -> Command | None:
     if arg is None or _SHA_RE.match(arg) is None:
         return None  # done/skip/unmark require a 7-40 char hex sha
     return Command(kind, arg.lower())
+
+
+def bad_command(comment: str, usage: str) -> str:
+    """The failure message for a comment `parse_command` rejected; never echoes bot markers."""
+    if BOT_MARKER in comment:
+        return f"command text must not contain `{BOT_MARKER}`"
+    return f"comment {comment!r} is not {usage}"
 
 
 def command_authors(comments: list[Comment]) -> set[str]:
@@ -643,11 +655,13 @@ def mark_superseded(body: str, network: Network, by: str, date: str) -> str:
     match = _block_re(network).search(body)
     if match is None:
         return body
-    stale = rf"\n*^Superseded on {network} by .*$"
-    inner = re.sub(stale, "", match.group("inner"), flags=re.MULTILINE).rstrip()
+    stale = rf"\n*<!-- superseded:{network} -->\n.*?\n<!-- /superseded:{network} -->"
+    inner = re.sub(stale, "", match.group("inner"), flags=re.DOTALL).rstrip()
     block = (
         f"<!-- publish:{network} prev={match.group('prev')} date={match.group('date')} -->\n"
-        f"{inner}\n\nSuperseded on {network} by {by} ({date})\n"
+        f"{inner}\n\n<!-- superseded:{network} -->\n"
+        f"Superseded on {network} by {by} ({date})\n"
+        f"<!-- /superseded:{network} -->\n"
         f"<!-- /publish:{network} -->"
     )
     return body[: match.start()] + block + body[match.end() :]
@@ -1642,7 +1656,7 @@ def cmd_backport(args: argparse.Namespace, git: Git, gh: Gh) -> int:
         return 1
     command = parse_command(args.comment)
     if command is None or command.name != "backport" or command.arg is None:
-        message = f"comment {args.comment!r} is not `/backport <PR>`"
+        message = bad_command(args.comment, "`/backport <PR>`")
         gh_error(message)
         gh.issue_comment(args.issue, f"/backport failed: {message}\n")
         return 1
@@ -1685,7 +1699,10 @@ def cmd_tag(args: argparse.Namespace, git: Git, gh: Gh) -> int:
     if args.comment is not None:
         command = parse_command(args.comment)
         if command is None or command.name != "tag":
-            gh_error(f"comment {args.comment!r} is not a /tag command")
+            message = bad_command(args.comment, "a /tag command")
+            gh_error(message)
+            if args.issue is not None and not args.dry_run:
+                gh.issue_comment(args.issue, f"/tag failed: {message}")
             return 1
         comment_explicit, notes = command.arg, command.text
     explicit = args.explicit if args.explicit is not None else comment_explicit
@@ -1765,7 +1782,7 @@ def cmd_notes(args: argparse.Namespace, git: Git, gh: Gh) -> int:
 
     command = parse_command(args.comment)
     if command is None or command.name != "notes" or command.arg is None:
-        return fail(f"comment {args.comment!r} is not `/notes X.Y.Z.N`")
+        return fail(bad_command(args.comment, "`/notes X.Y.Z.N`"))
     tag = parse_tag(command.arg)
     if tag is None or tag.version != version:
         return fail(f"tag {command.arg} does not belong to {version}")
@@ -1850,7 +1867,7 @@ def cmd_publish(args: argparse.Namespace, git: Git, gh: Gh) -> int:
         return 1
 
     if command is None or command.name != "publish" or command.network is None:
-        return fail(f"comment {args.comment!r} is not `/publish X.Y.Z.N decaf|mainnet`")
+        return fail(bad_command(args.comment, "`/publish X.Y.Z.N decaf|mainnet`"))
     if target is None:
         return fail(f"{command.arg} is not a tag X.Y.Z.N")
     if args.issue is not None:

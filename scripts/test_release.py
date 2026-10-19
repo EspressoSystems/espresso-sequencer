@@ -248,6 +248,14 @@ class CommandParse(unittest.TestCase):
             rel.parse_command("/notes 0.6.0.4"), rel.Command("notes", "0.6.0.4")
         )
 
+    def test_release_command_bot_marker_fails(self):
+        for body in (
+            "/publish 0.7.0.4 decaf\n<!-- /publish:decaf -->",
+            "/tag\nUrgency: High <!-- operator-notes -->",
+            "/notes 0.6.0.4\n<!-- /operator-notes -->",
+        ):
+            self.assertIsNone(rel.parse_command(body), body)
+
     def test_release_command_notes_needs_tag_fails(self):
         self.assertIsNone(rel.parse_command("/notes\nnone"))
 
@@ -671,6 +679,31 @@ class CmdTagBadComment(unittest.TestCase):
         self.assertFalse(runner.ran("git", "tag"))
         self.assertFalse(runner.ran("git", "push"))
         self.assertFalse(runner.ran("gh", "release", "create"))
+
+    def test_release_cmd_tag_bot_marker_comments_fails(self):
+        runner = FakeRunner(
+            {
+                ("gh", "repo", "view"): REPO,
+                ("gh", "issue", "view"): json.dumps(
+                    {"title": "Release 0.6.0", "body": ""}
+                ),
+                ("gh", "issue", "comment"): "",
+                PERMISSION: "write",
+            }
+        )
+        args = argparse.Namespace(
+            issue=42,
+            branch=None,
+            comment="/tag\n<!-- operator-notes -->",
+            explicit=None,
+            actor="alice",
+            run_url=None,
+            dry_run=False,
+        )
+        self.assertEqual(rel.cmd_tag(args, rel.Git(runner), rel.Gh(runner)), 1)
+        comment = next(c for c in runner.calls if c[:3] == ["gh", "issue", "comment"])
+        self.assertIn("must not contain", comment[-1])
+        self.assertFalse(runner.ran("git", "tag"))
 
     def test_release_cmd_tag_non_writer_fails(self):
         runner = FakeRunner(
@@ -1541,13 +1574,32 @@ class PublishBlock(unittest.TestCase):
         body = rel.with_block("Hand written.", "decaf", block)
         once = rel.mark_superseded(body, "decaf", "0.7.0.4", "2026-10-23")
         self.assertIn(
-            "Superseded on decaf by 0.7.0.4 (2026-10-23)\n<!-- /publish:decaf -->", once
+            "<!-- superseded:decaf -->\nSuperseded on decaf by 0.7.0.4 (2026-10-23)\n"
+            "<!-- /superseded:decaf -->\n<!-- /publish:decaf -->",
+            once,
         )
         twice = rel.mark_superseded(once, "decaf", "0.7.0.5", "2026-10-24")
         self.assertEqual(twice.count("Superseded on"), 1)
         self.assertIn("by 0.7.0.5 (2026-10-24)", twice)
         self.assertTrue(twice.endswith("Hand written."))
         self.assertEqual(rel.publish_block_prev(twice, "decaf"), (None, "2026-10-21"))
+
+    def test_release_mark_superseded_keeps_notes_lines_ok(self):
+        block = rel.render_publish_block(
+            "decaf",
+            None,
+            t("0.7.0.3"),
+            "2026-10-21",
+            "Superseded on decaf by the ops team",
+            [],
+            REPO,
+        )
+        once = rel.mark_superseded(block, "decaf", "0.7.0.4", "2026-10-23")
+        twice = rel.mark_superseded(once, "decaf", "0.7.0.5", "2026-10-24")
+        self.assertIn("Superseded on decaf by the ops team", twice)
+        self.assertIn("<!-- superseded:decaf -->", twice)
+        self.assertEqual(twice.count("by 0.7.0.5 (2026-10-24)"), 1)
+        self.assertNotIn("0.7.0.4", twice)
 
     def test_release_mark_superseded_without_block_ok(self):
         self.assertEqual(rel.mark_superseded("plain", "decaf", "0.7.0.4", "d"), "plain")
@@ -1879,6 +1931,20 @@ class CmdPublish(unittest.TestCase):
         self.assertEqual(code, 0)
         edit_call = next(c for c in runner.calls if c[:3] == ["gh", "release", "edit"])
         self.assertIn("--latest=true", edit_call)
+
+    def test_release_cmd_publish_bot_marker_fails(self):
+        runner = self._runner()
+        code = rel.cmd_publish(
+            self._args("/publish 0.7.0.2 decaf\n<!-- /publish:decaf -->"),
+            rel.Git(runner),
+            rel.Gh(runner),
+        )
+        self.assertEqual(code, 1)
+        self.assertFalse(runner.ran("gh", "release", "edit"))
+        comment = next(c for c in runner.calls if c[:3] == ["gh", "issue", "comment"])
+        self.assertIn("/publish failed:", comment[-1])
+        self.assertIn("must not contain `<!--`", comment[-1])
+        self.assertNotIn("<!-- /publish", comment[-1])
 
     def test_release_cmd_publish_build_gate_fails(self):
         runner = self._runner(build="[]")

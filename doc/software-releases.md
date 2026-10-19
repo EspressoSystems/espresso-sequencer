@@ -79,7 +79,7 @@ first and mainnet later. Only `/publish` turns a pre-release into a release.
 
 - Title: `X.Y.Z.N [decaf]`, `[mainnet]` or `[decaf, mainnet]`. Only the release currently published on a network carries
   its marker. The previous holder loses the marker, stays a full release and gets the line
-  `Superseded on <network> by <tag> (<date>)`.
+  `Superseded on <network> by <tag> (<date>)`, wrapped in `<!-- superseded:<network> -->` markers.
 - Latest: always the release published on mainnet. Every release edit, including `/notes`, sends `--latest` explicitly,
   because GitHub defaults to true.
 - Body: one block per network between `<!-- publish:<network> prev=<tag|none> date=<date> -->` and
@@ -97,6 +97,7 @@ first and mainnet later. Only `/publish` turns a pre-release into a release.
 
   Tags with a stated action get a subsection, newest first. Tags with `none` fold into one `<tags>: no action` line.
 
+- Command text (lines 2..n) must not contain `<!--`; the command fails with a tracker comment otherwise.
 - `/notes X.Y.Z.N` re-renders every current block, so the per-tag notes and the cumulative view stay in step.
 - Gates, each reported as a tracker comment without changing anything: the tag belongs to the tracker's version, the
   release exists, a `build.yml` run for the tag succeeded, and every tag in the range has stated notes (the comment
