@@ -180,7 +180,6 @@ class ReleaseEdit:
     tag: str
     title: str
     body: str
-    prerelease: bool
     create: bool = False
     start_tag: str | None = None  # base of the generated notes, when creating
 
@@ -732,7 +731,6 @@ def plan_publish(
         release.tag,
         render_title(release.tag, title_networks(release.title) | {network}),
         with_block(release.body, network, block),
-        False,
         existing is None,
         str(start) if start is not None else None,
     )
@@ -786,7 +784,6 @@ def _supersede(
         release.tag,
         render_title(release.tag, networks),
         mark_superseded(release.body, network, by, date),
-        False,
     )
 
 
@@ -1463,7 +1460,7 @@ class Gh:
                     edit.title,
                     "--notes-file",
                     str(path),
-                    f"--prerelease={str(edit.prerelease).lower()}",
+                    "--prerelease=false",
                     f"--latest={str(edit.make_latest).lower()}",
                 ]
             )
@@ -1884,9 +1881,7 @@ def _collect_fragments(git: Git, base: Tag, target: Tag) -> list[Fragment]:
 def _print_publish(plan: PublishPlan) -> None:
     for edit in plan.edits:
         action = "create" if edit.create else "edit"
-        flags = (
-            f"{action}, prerelease={edit.prerelease}, make_latest={edit.make_latest}"
-        )
+        flags = f"{action}, make_latest={edit.make_latest}"
         print(f"# {edit.tag}: {edit.title} ({flags})\n")
     print(f"{plan.edits[0].body}\n\n---\n{plan.comment}", end="")
 

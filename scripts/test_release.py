@@ -790,7 +790,7 @@ class CmdTagHappyPath(unittest.TestCase):
         comment = next(c for c in runner.calls if c[:3] == ["gh", "issue", "comment"])
         self.assertIn("Tagged `0.6.0.2`", comment[-1])
         self.assertIn("Build runs", comment[-1])
-        self.assertNotIn("release", comment[-1].lower())
+        self.assertNotIn("/releases/tag/", comment[-1])
 
     def test_release_cmd_tag_dry_run_ok(self):
         runner = FakeRunner(
@@ -1840,7 +1840,6 @@ class PlanPublish(unittest.TestCase):
         self.assertIsNone(prev)
         (edit,) = edits
         self.assertEqual(edit.title, "0.7.0.1 [decaf]")
-        self.assertFalse(edit.prerelease)
         self.assertFalse(edit.make_latest)
         self.assertIn("prev=none", edit.body)
         self.assertIn("### A\n\nUrgency: High", edit.body)
@@ -1858,8 +1857,8 @@ class PlanPublish(unittest.TestCase):
         self.assertEqual(prev, t("0.7.0.1"))
         new, old = edits
         self.assertEqual(
-            (old.tag, old.title, old.prerelease, old.make_latest),
-            ("0.7.0.1", "0.7.0.1", False, False),
+            (old.tag, old.title, old.make_latest),
+            ("0.7.0.1", "0.7.0.1", False),
         )
         self.assertIn("Superseded on decaf by 0.7.0.3 (2026-10-23)", old.body)
         self.assertEqual(new.title, "0.7.0.3 [decaf]")
@@ -1943,7 +1942,6 @@ class PlanPublish(unittest.TestCase):
         _prev, (edit,) = plan([release("0.7.0.1")], "0.7.0.1")
         self.assertFalse(edit.create)
         self.assertIsNone(edit.start_tag)
-        self.assertFalse(edit.prerelease)
 
     def test_release_plan_rerun_keeps_prev_date_and_notes_ok(self):
         releases = published(
@@ -2378,7 +2376,7 @@ class CmdPublish(unittest.TestCase):
             )
         self.assertEqual(code, 0)
         self.assertIn(
-            "# 0.7.0.2: 0.7.0.2 [decaf] (edit, prerelease=False, make_latest=False)",
+            "# 0.7.0.2: 0.7.0.2 [decaf] (edit, make_latest=False)",
             out.getvalue(),
         )
         self.assertIn("docker pull", out.getvalue())
@@ -2426,7 +2424,7 @@ class ImageExists(unittest.TestCase):
 class GhReleaseEdit(unittest.TestCase):
     def test_release_gh_release_edit_sends_latest_ok(self):
         runner = FakeRunner({("gh", "release", "edit"): ""})
-        edit = rel.ReleaseEdit("0.7.0.1", "0.7.0.1 [decaf]", "body", False)
+        edit = rel.ReleaseEdit("0.7.0.1", "0.7.0.1 [decaf]", "body")
         rel.Gh(runner).release_edit(edit)
         call = runner.calls[-1]
         self.assertEqual(call[:4], ["gh", "release", "edit", "0.7.0.1"])
@@ -2436,7 +2434,7 @@ class GhReleaseEdit(unittest.TestCase):
 
     def test_release_gh_release_edit_mainnet_latest_ok(self):
         runner = FakeRunner({("gh", "release", "edit"): ""})
-        edit = rel.ReleaseEdit("0.7.0.1", "0.7.0.1 [mainnet]", "body", False)
+        edit = rel.ReleaseEdit("0.7.0.1", "0.7.0.1 [mainnet]", "body")
         rel.Gh(runner).release_edit(edit)
         self.assertIn("--latest=true", runner.calls[-1])
 
@@ -2444,9 +2442,7 @@ class GhReleaseEdit(unittest.TestCase):
 class GhReleaseCreate(unittest.TestCase):
     def test_release_gh_release_create_flags_ok(self):
         runner = FakeRunner({("gh", "release", "create"): ""})
-        edit = rel.ReleaseEdit(
-            "0.7.0.1", "0.7.0.1 [mainnet]", "body", False, True, "0.7.0.0"
-        )
+        edit = rel.ReleaseEdit("0.7.0.1", "0.7.0.1 [mainnet]", "body", True, "0.7.0.0")
         rel.Gh(runner).release_create(edit)
         call = runner.calls[-1]
         self.assertEqual(call[:4], ["gh", "release", "create", "0.7.0.1"])
@@ -2463,7 +2459,7 @@ class GhReleaseCreate(unittest.TestCase):
 
     def test_release_gh_release_create_omits_start_tag_ok(self):
         runner = FakeRunner({("gh", "release", "create"): ""})
-        edit = rel.ReleaseEdit("0.7.0.1", "0.7.0.1 [decaf]", "body", False, True)
+        edit = rel.ReleaseEdit("0.7.0.1", "0.7.0.1 [decaf]", "body", True)
         rel.Gh(runner).release_create(edit)
         self.assertNotIn("--notes-start-tag", runner.calls[-1])
         self.assertIn("--latest=false", runner.calls[-1])
