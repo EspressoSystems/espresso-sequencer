@@ -2164,10 +2164,11 @@ mod test {
 
     use committable::Committable;
     use espresso_types::{Leaf, NodeState, PubKey};
-    use hotshot::types::SignatureKey;
     use hotshot_example_types::node_types::TEST_VERSIONS;
     use hotshot_query_service::{metrics::PrometheusMetrics, testing::mocks::MOCK_UPGRADE};
-    use hotshot_types::{data::QuorumProposal2, simple_vote::Vote2Data};
+    use hotshot_types::{
+        data::QuorumProposal2, simple_vote::Vote2Data, traits::signature_key::SignatureKey,
+    };
     use serde_json::json;
     use tempfile::TempDir;
 
