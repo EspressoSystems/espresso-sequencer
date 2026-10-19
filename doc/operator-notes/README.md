@@ -1,41 +1,22 @@
 # Operator notes
 
-One file per change that requires operator action. The release process collects the files into the release body.
-
-## When a fragment is needed
-
-A PR needs a fragment when it changes any of:
-
-- environment variables
-- CLI flags
-- config or genesis files
-- database migrations
-- ports
-- storage layout
-- restart requirements
-- upgrade or activation timing
+One file per change that requires operator action when upgrading, for example a renamed or newly required setting, a
+manual migration step, a restart order or a deadline. Changes that work with existing setups need none. The release
+process collects the files into the release body.
 
 ## Format
 
-File: `doc/operator-notes/<short-topic>.md`, any name. Free markdown starting with a `### <title>` line.
+File: `doc/operator-notes/<short-topic>.md`, added in the PR that needs it. Backports carry it.
 
 ```markdown
 ### <title>
 
 Urgency: High | Medium | Low
 
-What operators must do: env vars to set, flags to change, migration duration, restart order, deadline as view number and
-UTC time.
+What operators must do, and by when (view number and UTC time) if there is a deadline.
 ```
 
 ## Rules
 
-- Fragments must not contain `<!--`. The release commands fail naming the file.
-- A fragment is added in the PR that needs it. Backports carry the file automatically.
-- Fragments are never deleted by the release process.
-- A release lists the fragments added since the previous tag on its line. `/publish` lists the fragments added since the
-  network's previous release. An edited fragment reappears in the next tag's release body and in the next `/publish`
-  block whose range contains the edit.
-- Only top-level `doc/operator-notes/<topic>.md` files are fragments. Another added or edited path in the directory
-  fails the release commands.
-- This file is not collected.
+- No `<!--` in a fragment, and no subdirectories or non-`.md` files here: the release commands fail naming the file.
+- A release lists the fragments added or edited since the previous release, so an edited fragment is shown again.
