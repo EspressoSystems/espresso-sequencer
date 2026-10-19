@@ -60,12 +60,12 @@ def version(major=0, minor=6, phase=0) -> "rel.Version":
     return rel.Version(major, minor, phase)
 
 
-def release(tag="0.6.3.1", title=None, body="", prerelease=True) -> "rel.ReleaseInfo":
-    return rel.ReleaseInfo(tag, title or tag, body, prerelease)
+def release(tag="0.6.3.1", title=None, body="") -> "rel.ReleaseInfo":
+    return rel.ReleaseInfo(tag, title or tag, body)
 
 
-def release_row(tag, name=None, body="", prerelease=True) -> str:
-    row = {"tag_name": tag, "name": name, "body": body, "prerelease": prerelease}
+def release_row(tag, name=None, body="") -> str:
+    row = {"tag_name": tag, "name": name, "body": body}
     return json.dumps(row)
 
 
@@ -860,7 +860,7 @@ class CmdTagHappyPath(unittest.TestCase):
     def test_release_gh_release_list_ok(self):
         lines = [
             release_row("0.6.1.0", "0.6.1.0", "a\r\nb"),
-            release_row("0.6.1.3", "0.6.1.3 [mainnet]", None, False),
+            release_row("0.6.1.3", "0.6.1.3 [mainnet]", None),
             release_row("0.7.0.0", ""),
         ]
         runner = FakeRunner({("gh", "api"): "\n".join(lines) + "\n"})
@@ -868,7 +868,7 @@ class CmdTagHappyPath(unittest.TestCase):
             rel.Gh(runner).release_list(),
             [
                 release("0.6.1.0", body="a\nb"),
-                release("0.6.1.3", "0.6.1.3 [mainnet]", prerelease=False),
+                release("0.6.1.3", "0.6.1.3 [mainnet]"),
                 release("0.7.0.0"),
             ],
         )
@@ -1544,9 +1544,7 @@ def apply(releases, edits):
     """The releases after GitHub accepted `edits`."""
     by_tag = {edit.tag: edit for edit in edits}
     return [
-        release(
-            r.tag, by_tag[r.tag].title, by_tag[r.tag].body, by_tag[r.tag].prerelease
-        )
+        release(r.tag, by_tag[r.tag].title, by_tag[r.tag].body)
         if r.tag in by_tag
         else r
         for r in releases
@@ -1835,7 +1833,7 @@ class PlanPublish(unittest.TestCase):
 
     def test_release_plan_mainnet_takes_latest_ok(self):
         releases = [
-            release("0.6.3.12", "0.6.3.12 [decaf, mainnet]", prerelease=False),
+            release("0.6.3.12", "0.6.3.12 [decaf, mainnet]"),
             release("0.7.0.0"),
             release("0.7.0.1"),
         ]
@@ -1851,7 +1849,7 @@ class PlanPublish(unittest.TestCase):
 
     def test_release_plan_old_holder_keeps_latest_on_other_network_ok(self):
         releases = [
-            release("0.6.3.12", "0.6.3.12 [decaf, mainnet]", prerelease=False),
+            release("0.6.3.12", "0.6.3.12 [decaf, mainnet]"),
             release("0.6.3.13"),
         ]
         _prev, edits = plan(releases, "0.6.3.13", "decaf", tags=[t("0.6.3.13")])
@@ -1921,8 +1919,8 @@ class PlanPublish(unittest.TestCase):
 
     def test_release_plan_rerun_supersedes_leftover_holder_ok(self):
         releases = [
-            release("0.7.0.1", "0.7.0.1 [decaf]", prerelease=False),
-            release("0.7.0.2", title="0.7.0.2 [decaf]", prerelease=False),
+            release("0.7.0.1", "0.7.0.1 [decaf]"),
+            release("0.7.0.2", title="0.7.0.2 [decaf]"),
         ]
         _prev, edits = plan(releases, "0.7.0.2")
         self.assertEqual([e.tag for e in edits], ["0.7.0.2", "0.7.0.1"])
@@ -1945,7 +1943,7 @@ class PlanPublish(unittest.TestCase):
 
     def test_release_plan_lost_holder_title_fails(self):
         releases = published([release("0.7.0.1"), release("0.7.0.2")], "0.7.0.1")
-        releases[0] = release("0.7.0.1", "renamed by hand", releases[0].body, False)
+        releases[0] = release("0.7.0.1", "renamed by hand", releases[0].body)
         with self.assertRaises(ValueError) as caught:
             plan(releases, "0.7.0.2")
         self.assertIn("0.7.0.1", str(caught.exception))
@@ -1999,7 +1997,7 @@ class DeployedLine(unittest.TestCase):
 
     def test_release_release_cell_networks_ok(self):
         releases = [
-            release("0.7.0.4", "0.7.0.4 [decaf, mainnet]", prerelease=False),
+            release("0.7.0.4", "0.7.0.4 [decaf, mainnet]"),
             release("0.7.0.5"),
         ]
         cell = rel.render_release_cell("0.7.0.4", releases, REPO)
@@ -2141,7 +2139,7 @@ class CmdPublish(unittest.TestCase):
     def test_release_cmd_publish_lost_holder_title_comments_fails(self):
         held = published([release("0.7.0.1"), release("0.7.0.2")], "0.7.0.1")[0]
         rows = [
-            release_row("0.7.0.1", "renamed by hand", held.body, False),
+            release_row("0.7.0.1", "renamed by hand", held.body),
             release_row("0.7.0.2"),
         ]
         runner = self._runner(releases=rows)
