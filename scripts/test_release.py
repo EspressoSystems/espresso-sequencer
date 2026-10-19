@@ -918,12 +918,15 @@ class CmdTagHappyPath(unittest.TestCase):
         self.assertIn("### B\n\nUrgency: High", notes)
         self.assertIn("--generate-notes", create)
 
-    def test_release_cmd_tag_text_is_ignored_ok(self):
+    def test_release_cmd_tag_text_fails(self):
         runner = self._fragment_runner("", "")
         args = self._tag_args("/tag\nUrgency: High")
-        self.assertEqual(rel.cmd_tag(args, rel.Git(runner), rel.Gh(runner)), 0)
-        create = next(c for c in runner.calls if c[:3] == ["gh", "release", "create"])
-        self.assertNotIn("Urgency", create[create.index("--notes") + 1])
+        self.assertEqual(rel.cmd_tag(args, rel.Git(runner), rel.Gh(runner)), 1)
+        self.assertFalse(runner.ran("git", "tag", "-a"))
+        self.assertFalse(runner.ran("gh", "release", "create"))
+        comment = next(c for c in runner.calls if c[:3] == ["gh", "issue", "comment"])
+        self.assertIn("/tag failed:", comment[-1])
+        self.assertIn("doc/operator-notes/", comment[-1])
 
     def test_release_cmd_tag_dot_zero_has_no_block_ok(self):
         runner = self._fragment_runner("", "", tags="")

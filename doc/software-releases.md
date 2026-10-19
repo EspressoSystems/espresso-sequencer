@@ -73,7 +73,8 @@ body.
   or a non-`.md` file) fails the command with a comment naming it.
 - `/tag` writes the fragments added or edited since the previous tag on the same line into the release body, between
   `<!-- operator-notes -->` and `<!-- /operator-notes -->`, above the generated PR list. No fragments render
-  `No operator action required.` The `.0` tag has no block. Lines 2..n of `/tag` are ignored.
+  `No operator action required.` The `.0` tag has no block. `/tag` takes no lines 2..n; text there fails the command
+  with a comment pointing to `doc/operator-notes/`.
 - A fragment containing `<!--` fails `/tag` and `/publish` with a comment naming the file. Fix it with a PR, then tag
   again.
 

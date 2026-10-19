@@ -1681,6 +1681,12 @@ def cmd_tag(args: argparse.Namespace, git: Git, gh: Gh) -> int:
         if command is None or command.name != "tag":
             message = bad_command(args.comment, "a /tag command")
             return report_failure(gh, args.issue, "/tag", message, args.dry_run)
+        if command.text is not None:
+            message = (
+                "/tag takes no text; operator notes go in a fragment under "
+                f"{FRAGMENT_DIR}/ (see {FRAGMENT_DIR}/README.md)"
+            )
+            return report_failure(gh, args.issue, "/tag", message, args.dry_run)
         comment_explicit = command.arg
     explicit = args.explicit if args.explicit is not None else comment_explicit
 
