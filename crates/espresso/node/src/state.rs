@@ -9,7 +9,6 @@ use espresso_types::{
     BackoffParams, BlockMerkleTree, EpochRewardsCalculator, FeeAccount, FeeMerkleTree, Leaf2,
     ValidatedState,
     traits::StateCatchup,
-    v0_1::IterableFeeInfo,
     v0_3::{ChainConfig, RewardMerkleTreeV1},
     v0_4::Delta,
 };
@@ -229,22 +228,10 @@ where
     let block_number = proposed_leaf.height();
     let version = proposed_leaf.block_header().version();
 
-    let (state, mut delta) =
+    let (state, delta) =
         compute_state_update(parent_state, instance, peers, parent_leaf, proposed_leaf)
             .await
             .context("computing state update")?;
-    // The update reads the fee recipient and the builder accounts, but from V0.6 on, where no fee
-    // is charged, it does not change them. Store the ones it fetched anyway: a loop that started
-    // from a boundary snapshot holds them nowhere else, so it could not serve them, and would
-    // fetch them from peers again after every restart.
-    let fee_recipient = state.chain_config.resolve().map(|cf| cf.fee_recipient);
-    delta.fees_delta.extend(
-        parent_state.forgotten_accounts(
-            fee_recipient
-                .into_iter()
-                .chain(proposed_leaf.block_header().fee_info().accounts()),
-        ),
-    );
 
     let has_changed_accounts = version > EPOCH_VERSION && !delta.rewards_delta.is_empty();
     // For EPOCH_REWARD_VERSION+ we must persist the reward tree at every epoch

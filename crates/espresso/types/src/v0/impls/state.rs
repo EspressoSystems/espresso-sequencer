@@ -1058,6 +1058,13 @@ impl ValidatedState {
                 .chain(proposed_header.fee_info().accounts())
                 .chain(l1_deposits.accounts()),
         );
+        // The delta also lists the accounts fetched here, even those the update does not change.
+        // From V0.6 on no fee is charged, so the recipient and the builders do not change. But
+        // whoever stores the new state lacked them before, so it has to store them now.
+        let mut delta = Delta {
+            fees_delta: missing_accounts.iter().copied().collect(),
+            ..Default::default()
+        };
 
         let parent_height = parent_leaf.height();
         let parent_view = parent_leaf.view_number();
@@ -1106,7 +1113,6 @@ impl ValidatedState {
             }
         }
 
-        let mut delta = Delta::default();
         validated_state.apply_proposal(&mut delta, parent_leaf, l1_deposits);
 
         // TODO(abdul): builder is unfunded error
