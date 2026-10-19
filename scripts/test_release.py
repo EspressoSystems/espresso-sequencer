@@ -1927,6 +1927,14 @@ class PlanPublish(unittest.TestCase):
         self.assertTrue(create.create)
         self.assertIsNone(create.start_tag)
 
+    def test_release_plan_create_rollback_starts_at_fragment_base_ok(self):
+        releases = published([release("0.7.0.3")], "0.7.0.3")
+        _prev, (create, _old) = plan(
+            releases, "0.7.0.2", tags=[t("0.7.0.1"), t("0.7.0.3")]
+        )
+        self.assertTrue(create.create)
+        self.assertEqual(create.start_tag, "0.7.0.1")
+
     def test_release_plan_create_mainnet_takes_latest_ok(self):
         _prev, (create,) = plan([release("0.7.0.0")], "0.7.0.5", "mainnet")
         self.assertTrue(create.make_latest)

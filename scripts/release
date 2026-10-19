@@ -723,6 +723,7 @@ def plan_publish(
         release, others, network, network_notes, date
     )
     base = publish_base(prev, target, tags() if prev is None else [])
+    start = base or (fragment_base(target, tags()) if existing is None else None)
     fragments = collect(base, target) if base is not None else []
     block = render_publish_block(
         network, prev, target, since, network_notes, fragments, repo, base
@@ -733,7 +734,7 @@ def plan_publish(
         with_block(release.body, network, block),
         False,
         existing is None,
-        str(base) if existing is None and base is not None else None,
+        str(start) if start is not None else None,
     )
     superseded = [_supersede(other, network, release.tag, date) for other in others]
     return prev, [edit, *superseded]
