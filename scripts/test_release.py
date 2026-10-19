@@ -1334,7 +1334,9 @@ class TagLogReleases(unittest.TestCase):
 
     def test_release_tag_log_notes_column_ok(self):
         tags = [(f"0.6.3.{n}", "2026-09-21", "c" * 40) for n in range(3)]
-        rows = rel.render_tag_log(tags, [], {"0.6.3.1": (2, 0)}, REPO).splitlines()[2:]
+        rows = rel.render_tag_log(
+            tags, [], {"0.6.3.1": rel.NoteCounts(2, 0)}, REPO
+        ).splitlines()[2:]
         self.assertIn("| - | - |", rows[0])
         self.assertIn("| - | 2 |", rows[1])
         self.assertIn("| - | - |", rows[2])
