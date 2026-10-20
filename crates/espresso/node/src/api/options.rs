@@ -494,7 +494,7 @@ pub struct Query {
 }
 
 impl Query {
-    pub fn light_client_db(&self) -> LightClientSqliteOptions {
+    pub fn sqlite_light_client_db(&self) -> LightClientSqliteOptions {
         let lc_path = self.light_client_db.lc_path.clone().or_else(|| {
             self.storage_path
                 .as_ref()

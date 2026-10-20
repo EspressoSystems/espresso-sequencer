@@ -84,7 +84,7 @@ impl DataSourceOptions for persistence::sql::Options {
             )))
         }
         #[cfg(feature = "embedded-db")]
-        Ok(LightClientDbOptions::Sqlite(query.light_client_db()))
+        Ok(LightClientDbOptions::Sqlite(query.sqlite_light_client_db()))
     }
 }
 
@@ -96,7 +96,7 @@ impl DataSourceOptions for persistence::fs::Options {
     }
 
     fn light_client_db(&self, query: &Query) -> anyhow::Result<LightClientDbOptions> {
-        Ok(LightClientDbOptions::Sqlite(query.light_client_db()))
+        Ok(LightClientDbOptions::Sqlite(query.sqlite_light_client_db()))
     }
 }
 

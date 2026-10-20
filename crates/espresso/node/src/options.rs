@@ -1099,7 +1099,7 @@ impl From<&api::options::Query> for QueryConfig {
         Self {
             peers: o.peers.clone(),
             light_client: o.light_client.clone(),
-            light_client_db: o.light_client_db(),
+            light_client_db: o.sqlite_light_client_db(),
         }
     }
 }
@@ -1658,7 +1658,7 @@ pub(crate) mod tests {
                 },
                 ..Default::default()
             };
-            query.light_client_db().lc_path
+            query.sqlite_light_client_db().lc_path
         }
         assert_eq!(
             lc_path(Some("/store/espresso"), None),
