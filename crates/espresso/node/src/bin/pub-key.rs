@@ -3,8 +3,11 @@ use clap::{Parser, ValueEnum};
 use derive_more::Display;
 use espresso_node::keyset::{KeySet, KeySetOptions};
 use espresso_types::PubKey;
-use hotshot::{traits::implementations::derive_libp2p_peer_id, types::BLSPubKey};
-use hotshot_types::{light_client::StateKeyPair, traits::signature_key::SignatureKey, x25519};
+use hotshot::traits::implementations::derive_libp2p_peer_id;
+use hotshot_types::{
+    light_client::StateKeyPair, signature_key::BLSPubKey, traits::signature_key::SignatureKey,
+    x25519,
+};
 
 #[derive(Clone, Copy, Debug, Display, Default, ValueEnum)]
 enum Scheme {

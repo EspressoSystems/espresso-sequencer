@@ -28,7 +28,6 @@ use alloy_rlp::Encodable;
 use committable::Committable;
 use espresso_types::{StateCertQueryDataV1, StateCertQueryDataV2};
 use espresso_utils::commitment_to_u256;
-use hotshot::types::BLSPubKey;
 use hotshot_contract_adapter::sol_types::StakeTableV3::{ValidatorExitV2, ValidatorRegisteredV3};
 use hotshot_query_service::availability::{
     BlockQueryData, LeafQueryData, LeafQueryDataLegacy, PayloadQueryData, TransactionQueryData,
@@ -38,6 +37,7 @@ use hotshot_types::{
     addr::NetAddr,
     data::{VidCommitment, VidCommon, vid_commitment},
     light_client::StateVerKey,
+    signature_key::BLSPubKey,
     simple_certificate::{
         LightClientStateUpdateCertificateV1, LightClientStateUpdateCertificateV2,
     },
@@ -108,7 +108,7 @@ async fn reference_payload() -> Payload {
         txs
     };
 
-    Payload::from_transactions(txs, &Default::default(), &Default::default())
+    Payload::from_transactions(&txs, &Default::default(), &Default::default())
         .await
         .unwrap()
         .0

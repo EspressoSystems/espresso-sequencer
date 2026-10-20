@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use hotshot::types::{BLSPubKey, SchnorrPubKey};
 use hotshot_example_types::{
     membership::{
         TestableMembership, static_committee::StaticStakeTable, strict_membership::StrictMembership,
@@ -11,7 +10,10 @@ use hotshot_example_types::{
 use hotshot_new_protocol::client::{ClientLeafFetcherNetwork, CoordinatorClient};
 use hotshot_testing::{node_stake::TestNodeStakes, test_builder::gen_node_lists};
 use hotshot_types::{
-    data::EpochNumber, epoch_membership::EpochMembershipCoordinator, traits::election::Membership,
+    data::EpochNumber,
+    epoch_membership::EpochMembershipCoordinator,
+    signature_key::{BLSPubKey, SchnorrPubKey},
+    traits::election::Membership,
 };
 
 /// Create an `EpochMembershipCoordinator<TestTypes>` with `num_nodes` validators.

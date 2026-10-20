@@ -82,8 +82,8 @@ A machine that meets `NewProtocolSpec`, and the proof that it does.
 
 The machine is eager and slow: after each input it takes every obligation the
 history holds, rescanning the history to find them. It shows the specification
-can be met, and it is executable, so recorded traces can be replayed against it.
-Nothing here binds another implementation.
+can be met, and it is executable, so `new-protocol-diff` runs it on simulated
+networks. Nothing here binds another implementation.
 
 `historyOf_protocol` takes one premise about the environment: validity reports
 are truthful, since consensus cannot judge a block itself.

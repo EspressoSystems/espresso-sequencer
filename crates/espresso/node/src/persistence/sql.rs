@@ -29,7 +29,6 @@ use espresso_types::{
     },
 };
 use futures::stream::StreamExt;
-use hotshot::InitializerEpochInfo;
 use hotshot_libp2p_networking::network::behaviours::dht::store::persistent::{
     DhtPersistentStorage, SerializableRecord,
 };
@@ -59,7 +58,8 @@ use hotshot_types::{
         QuorumProposalWrapperLegacy, VidCommitment, VidCommon, VidDisperseShare,
     },
     drb::{DrbInput, DrbResult},
-    event::{Event, EventType, HotShotAction, LeafInfo},
+    event::{HotShotAction, LeafInfo},
+    initializer::InitializerEpochInfo,
     message::{Proposal, convert_proposal},
     new_protocol::CoordinatorEvent,
     simple_certificate::{
@@ -941,11 +941,10 @@ impl PersistenceOptions for Options {
     }
 
     async fn reset(self) -> anyhow::Result<()> {
-        SqlStorage::connect(
-            Config::try_from(&self)?.reset_schema(),
-            StorageConnectionType::Sequencer,
-        )
-        .await?;
+        let config = Config::try_from(&self)?;
+        #[cfg(not(feature = "embedded-db"))]
+        light_client::storage::LightClientPostgresOptions::reset(config.connect_options()).await?;
+        SqlStorage::connect(config.reset_schema(), StorageConnectionType::Sequencer).await?;
         Ok(())
     }
 }
@@ -987,67 +986,26 @@ struct DecidedLeaf {
     cert: CertificatePair<SeqTypes>,
 }
 
-fn decide_events_from_chain(
-    mut chain: Vec<DecidedLeaf>,
+/// The decide for `chain`, newest leaf first; `cert2`, if any, finalizes the newest leaf only.
+fn decide_event_from_chain(
+    chain: Vec<DecidedLeaf>,
     cert2: Option<Certificate2<SeqTypes>>,
-    deciding_qc: Option<Arc<CertificatePair<SeqTypes>>>,
-) -> Vec<CoordinatorEvent<SeqTypes>> {
-    let split_idx = chain
-        .iter()
-        .position(|leaf| leaf.info.leaf.block_header().version() < versions::NEW_PROTOCOL_VERSION)
-        .unwrap_or(chain.len());
-    let legacy_leaves = chain.split_off(split_idx);
-    let new_leaves = chain;
-
-    let mut events = Vec::with_capacity(2);
-    if !legacy_leaves.is_empty() {
-        let committing_qc = legacy_leaves[0].cert.clone();
-        let deciding_qc = new_leaves
-            .is_empty()
-            .then_some(deciding_qc)
-            .flatten()
-            .filter(|qc| qc.view_number() == committing_qc.view_number() + 1);
-        let view_number = legacy_leaves[0].info.leaf.view_number();
-        let leaf_chain = legacy_leaves
-            .into_iter()
-            .map(|leaf| leaf.info)
-            .collect::<Vec<_>>();
-
-        events.push(CoordinatorEvent::LegacyEvent(Event {
-            view_number,
-            event: EventType::Decide {
-                leaf_chain: Arc::new(leaf_chain),
-                committing_qc: Arc::new(committing_qc),
-                deciding_qc,
-                block_size: None,
-            },
-        }));
-    }
-
-    if new_leaves.is_empty() && cert2.is_some() {
-        tracing::warn!(
-            "decide_events_from_chain called with cert2 but no new-protocol leaves; cert2 will be \
-             dropped"
-        );
-    }
-
-    if !new_leaves.is_empty() {
-        // cert1 is the QC for the newest leaf
-        // ancestors are certified by
-        // their successor's justify_qc. cert2 finalizes the newest leaf.
-        // update() uses cert1 to build LeafQueryData for
-        // the newest leaf and only attaches cert2 to it.
-        let cert1 = new_leaves[0].cert.qc().clone();
-        let leaf_infos = new_leaves.into_iter().map(|leaf| leaf.info).collect();
-
-        events.push(CoordinatorEvent::NewDecide {
-            leaf_infos,
-            cert1,
-            cert2,
-        });
-    }
-
-    events
+) -> Option<CoordinatorEvent<SeqTypes>> {
+    let Some(newest) = chain.first() else {
+        if cert2.is_some() {
+            tracing::warn!(
+                "decide_event_from_chain called with cert2 but no leaves; cert2 will be dropped"
+            );
+        }
+        return None;
+    };
+    let cert1 = newest.cert.qc().clone();
+    let leaf_infos = chain.into_iter().map(|leaf| leaf.info).collect();
+    Some(CoordinatorEvent::NewDecide {
+        leaf_infos,
+        cert1,
+        cert2,
+    })
 }
 
 impl Persistence {
@@ -1110,11 +1068,7 @@ impl Persistence {
             .map(|row| ViewNumber::new(row.get::<i64, _>("last_processed_view") as u64)))
     }
 
-    async fn generate_decide_events(
-        &self,
-        deciding_qc: Option<Arc<CertificatePair<SeqTypes>>>,
-        consumer: &impl EventConsumer,
-    ) -> anyhow::Result<()> {
+    async fn generate_decide_events(&self, consumer: &impl EventConsumer) -> anyhow::Result<()> {
         let mut last_processed_view: Option<i64> = serializable_retry!(self, || async {
             Ok(self
                 .db
@@ -1413,7 +1367,7 @@ impl Persistence {
                 "generating decide event"
             );
 
-            for event in decide_events_from_chain(chain, cert2, deciding_qc.clone()) {
+            if let Some(event) = decide_event_from_chain(chain, cert2) {
                 consumer.handle_event(&event).await?;
             }
 
@@ -1733,11 +1687,16 @@ impl SequencerPersistence for Persistence {
 
     async fn persist_decided_leaves(
         &self,
-        _view: ViewNumber,
         leaf_chain: impl IntoIterator<Item = (&LeafInfo<SeqTypes>, CertificatePair<SeqTypes>)> + Send,
-        _deciding_qc: Option<Arc<CertificatePair<SeqTypes>>>,
+        cert2: Option<&Certificate2<SeqTypes>>,
         _consumer: &(impl EventConsumer + 'static),
     ) -> anyhow::Result<()> {
+        let cert2_row = cert2
+            .map(|cert2| {
+                let data = bincode::serialize(cert2).context("serializing cert2")?;
+                anyhow::Ok((cert2.view_number.u64() as i64, data))
+            })
+            .transpose()?;
         let values = leaf_chain
             .into_iter()
             .map(|(info, cert)| {
@@ -1759,8 +1718,8 @@ impl SequencerPersistence for Persistence {
             })
             .collect::<anyhow::Result<Vec<_>>>()?;
 
-        // Append the new leaves. We do this in its own transaction because even if GC or the
-        // event consumer later fails, there is no need to abort the storage of the leaves.
+        // Append the new leaves and their cert2. We do this in its own transaction because even if
+        // GC or the event consumer later fails, there is no need to abort the storage of the leaves.
         serializable_retry!(self, || async {
             let mut tx = self.db.write().await?;
             tx.upsert(
@@ -1770,6 +1729,10 @@ impl SequencerPersistence for Persistence {
                 values.clone(),
             )
             .await?;
+            if let Some(row) = &cert2_row {
+                tx.upsert("decided_cert2", ["view", "data"], ["view"], [row.clone()])
+                    .await?;
+            }
             tx.commit().await
         })
         .await?;
@@ -1780,7 +1743,6 @@ impl SequencerPersistence for Persistence {
     async fn process_decided_events(
         &self,
         view: ViewNumber,
-        deciding_qc: Option<Arc<CertificatePair<SeqTypes>>>,
         consumer: &(impl EventConsumer + 'static),
     ) -> anyhow::Result<Option<ViewNumber>> {
         let now = Instant::now();
@@ -1789,7 +1751,7 @@ impl SequencerPersistence for Persistence {
         } else {
             // Generate events for the new leaves, then GC. On error `last_processed_view` is not
             // advanced past the failure point, so no data is lost and the range is retried.
-            self.generate_decide_events(deciding_qc, consumer).await?;
+            self.generate_decide_events(consumer).await?;
 
             // Best-effort GC of data not included in any decide event; runs again at the next
             // decide.
@@ -3876,7 +3838,7 @@ mod test {
         // the target, because of the minimum retention.
         tracing::info!("decide view 1");
         storage
-            .append_decided_leaves(data_view + 1, [], None, &NullEventConsumer)
+            .append_decided_leaves(data_view + 1, [], &NullEventConsumer)
             .await
             .unwrap();
         assert_eq!(
@@ -3898,7 +3860,7 @@ mod test {
         // retention) so it gets pruned.
         tracing::info!("decide view 2");
         storage
-            .append_decided_leaves(data_view + 2, [], None, &NullEventConsumer)
+            .append_decided_leaves(data_view + 2, [], &NullEventConsumer)
             .await
             .unwrap();
         assert!(storage.load_vid_share(data_view).await.unwrap().is_none(),);
@@ -4005,7 +3967,7 @@ mod test {
 
         for view in [10, 5] {
             storage
-                .append_decided_leaves(ViewNumber::new(view), [], None, &NullEventConsumer)
+                .append_decided_leaves(ViewNumber::new(view), [], &NullEventConsumer)
                 .await
                 .unwrap();
         }
@@ -4094,7 +4056,7 @@ mod postgres_tests {
             .into();
 
         let (payload, ns_table) =
-            Payload::from_transactions(txs.clone(), &validated_state, &instance_state)
+            Payload::from_transactions(&txs, &validated_state, &instance_state)
                 .await
                 .unwrap();
         let payload_bytes = payload.encode();
@@ -4168,7 +4130,13 @@ mod postgres_tests {
 
     #[test_log::test(tokio::test(flavor = "multi_thread"))]
     async fn test_postgres_read_ns_table_v0_1() {
-        test_postgres_read_ns_table(NodeState::mock()).await;
+        let v0_1 = versions::version(0, 1);
+        test_postgres_read_ns_table(
+            NodeState::mock()
+                .with_current_version(v0_1)
+                .with_genesis_version(v0_1),
+        )
+        .await;
     }
 
     #[test_log::test(tokio::test(flavor = "multi_thread"))]
@@ -4207,5 +4175,60 @@ mod postgres_tests {
 
         let latest = storage.load_latest_acted_view().await.unwrap();
         assert_eq!(latest, Some(ViewNumber::new(19)));
+    }
+
+    #[test_log::test(tokio::test(flavor = "multi_thread"))]
+    async fn test_light_client_shares_the_node_database() {
+        use hotshot_query_service::availability::LeafId;
+        use light_client::storage::Storage as _;
+
+        use crate::api::{data_source::DataSourceOptions as _, options::Query};
+
+        let tmp = Persistence::tmp_storage().await;
+        let mut opt = Persistence::options(&tmp);
+        let persistence = opt.create().await.unwrap();
+
+        let db = opt
+            .light_client_db(&Query::default())
+            .unwrap()
+            .connect()
+            .await
+            .unwrap();
+        let leaf = light_client::testing::leaf_chain(0..1, versions::EPOCH_VERSION)
+            .await
+            .remove(0);
+        db.insert_leaf(leaf.clone()).await.unwrap();
+        assert_eq!(
+            db.leaf_upper_bound(LeafId::Number(0)).await.unwrap(),
+            Some(leaf)
+        );
+
+        let (leaves,): (i64,) = sqlx::query_as("SELECT count(*) FROM light_client.leaf")
+            .fetch_one(&persistence.db.pool())
+            .await
+            .unwrap();
+        assert_eq!(leaves, 1);
+    }
+
+    #[test_log::test(tokio::test(flavor = "multi_thread"))]
+    async fn test_reset_drops_light_client_cache() {
+        use light_client::storage::Storage as _;
+
+        use crate::api::{data_source::DataSourceOptions as _, options::Query};
+
+        let tmp = Persistence::tmp_storage().await;
+        let opt = Persistence::options(&tmp);
+        let light_client = || opt.light_client_db(&Query::default()).unwrap().connect();
+        let leaf = light_client::testing::leaf_chain(0..1, versions::EPOCH_VERSION)
+            .await
+            .remove(0);
+        let db = light_client().await.unwrap();
+        db.insert_leaf(leaf).await.unwrap();
+        drop(db);
+
+        opt.clone().reset().await.unwrap();
+
+        let db = light_client().await.unwrap();
+        assert_eq!(db.block_height().await.unwrap(), 0);
     }
 }

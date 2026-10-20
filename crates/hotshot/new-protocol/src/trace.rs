@@ -1,54 +1,52 @@
-//! Recording a run for the Lean reference machine to replay.
+//! Recording a run for the Lean specification to check.
 //!
-//! `lean/new-protocol-impl` is a machine proved to satisfy the specification in
-//! `lean/new-protocol-spec`. It is executable, so it can be driven with the
-//! inputs this implementation took and its conclusions compared against ours.
-//! This module writes the trace; `lean/new-protocol-diff` reads it.
-//!
-//! # What the comparison is
-//!
-//! Not per-step output equality. The Lean machine is *eager* — after recording
-//! an input it does everything the new state owes — while this implementation
-//! defers, acting on particular views on particular inputs. Both satisfy the
-//! specification; their per-step outputs differ anyway. What is compared is
-//! containment on the views each side voted, proposed and decided in: everything
-//! we did by step `n`, the machine did by step `n`. See the Lean side's
-//! `NewProtocolDiff.Replay` for why that is the right relation.
+//! The rules of `lean/new-protocol-spec` read a node's history: the inputs it
+//! took and the outputs it emitted. This module writes that history as a trace;
+//! the `check` binary of `lean/new-protocol-diff` decides on it whether the node
+//! obeyed every rule, and discharged what it owed in time.
 //!
 //! # What does not survive the translation
 //!
 //! The model covers the core protocol and epoch changes. The DRB and the storage
 //! handshake have no counterpart. Inputs carrying them are dropped, each leaving a
-//! `#` comment naming what went — visible in the trace rather than silent, because
-//! a dropped input can make the machine look behind us for a reason that is not a
-//! bug. A proposal not yet paired with our share, and a fetched block, are
-//! recorded as a `proposal` without a share: what the node then holds is the
-//! proposal alone. Light-client certification has no counterpart either: an
+//! `#` comment naming what went, visible in the trace rather than silent, because
+//! a node waiting on a dropped input can owe for a reason that is not a bug. A
+//! proposal not yet paired with our share, and a fetched block, are recorded as
+//! a `proposal` without a share: what the node then holds is the proposal alone. Light-client certification has no counterpart either: an
 //! epoch root's state certificate is left out, and only the `Cert1` it arrives
 //! with is recorded.
 //!
-//! One dropped input is worth watching for, since it makes the machine look
-//! *ahead* of us rather than behind — which the comparison reports but tolerates:
-//! [`ConsensusInput::StateValidationFailed`], since the model has no way to
-//! un-admit a block, so the machine goes on voting for a block we condemned.
+//! One dropped input is worth watching for:
+//! [`ConsensusInput::StateValidationFailed`]. The model has no way to un-admit a
+//! block, so it goes on owing a vote for a block we condemned.
 //!
-//! Pruning is not recorded either. We prune inside a consensus step; the model
-//! makes it a separate transition, so a faithful trace would have to say where
-//! ours happened. Until it does, `GcSpec` goes untested and the machine keeps
-//! more state than we do — which shows up as the machine being ahead, which the
-//! comparison tolerates.
+//! Pruning is not recorded either. The specification says nothing about what a
+//! node keeps, so there is nothing to check it against.
 //!
 //! # Identities
 //!
 //! A block's identity travels as the text of its commitment. The Lean side does
 //! not interpret it — every rule there only ever *compares* identities — so all
 //! that is asked is that distinct commitments give distinct text.
+//!
+//! # Time
+//!
+//! Each step carries `t`, the milliseconds since the recorder was made, so a
+//! checker can tell how long the node took to discharge what it owed. Outputs
+//! released on a dropped input join the last step written: the model saw
+//! nothing between that step and the release, so the step's inputs are all that
+//! justify them. They go after the step's own outputs, and the step's
+//! `released` list says when: each entry is a release's time and how many
+//! outputs it added. The trace ends with the time the recorder was dropped,
+//! since a node that owes something and takes no further step is late all the
+//! same.
 
 use std::{
     collections::BTreeMap,
     fs::create_dir_all,
     path::PathBuf,
     sync::atomic::{AtomicUsize, Ordering},
+    time::Instant,
 };
 
 use committable::Committable;
@@ -111,23 +109,38 @@ pub struct Recorder {
     lines: Vec<String>,
     /// Whether the identity line has been written; see [`Recorder::preamble`].
     identified: bool,
-    /// Outputs from steps the model has no input for, waiting for a step to ride on.
-    ///
-    /// See [`Recorder::record`] for why they wait rather than being dropped.
+    /// Outputs released on a dropped input before any step was written, waiting
+    /// for the first one.
     pending: Vec<String>,
+    /// The last step written, which outputs released on a dropped input join.
+    last: Option<LastStep>,
     /// Epochs and views whose leader has been written; see [`Recorder::leader`].
     led: BTreeMap<(EpochNumber, ViewNumber), String>,
     /// Steps written so far, which is the index the next one will have.
     ///
-    /// A dropped input is noted with this number, so a replay can tell whether
-    /// the drop came before the divergence it is being asked to excuse. Without
-    /// it, one unmodelled input anywhere excuses everything anywhere.
+    /// A dropped input is noted with this number, so a checker can tell whether
+    /// the drop came before the delay it is being asked to excuse. Without it,
+    /// one unmodelled input anywhere excuses everything anywhere.
     steps: usize,
     /// Blocks to an epoch on this network, as [`Recorder::preamble`] was told.
     ///
     /// A decided leaf carries no epoch of its own, so this is what turns its
     /// block number into one.
     epoch_height: u64,
+    /// When the recorder was made, which step times count from.
+    started: Instant,
+}
+
+/// A step already written, kept so that later outputs can join it.
+struct LastStep {
+    /// Its index in [`Recorder::lines`].
+    line: usize,
+    input: String,
+    outputs: Vec<String>,
+    /// When it was taken.
+    t: u64,
+    /// When each later release joined it, and how many outputs it added.
+    released: Vec<(u64, usize)>,
 }
 
 impl Recorder {
@@ -138,9 +151,11 @@ impl Recorder {
             lines: Vec::new(),
             identified: true,
             pending: Vec::new(),
+            last: None,
             led: BTreeMap::new(),
             steps: 0,
             epoch_height: 0,
+            started: Instant::now(),
         };
         let Ok(dir) = std::env::var(TRACE_DIR) else {
             return inert;
@@ -158,9 +173,11 @@ impl Recorder {
             lines: Vec::new(),
             identified: false,
             pending: Vec::new(),
+            last: None,
             led: BTreeMap::new(),
             steps: 0,
             epoch_height: 0,
+            started: Instant::now(),
         }
     }
 
@@ -171,11 +188,11 @@ impl Recorder {
 
     /// Write the identity line, once, before the first step.
     ///
-    /// A replay needs two things the steps do not carry: which node this is, and
+    /// A checker needs two things the steps do not carry: which node this is, and
     /// the block its chain is anchored at. Neither can be recovered from the
     /// steps in general — a run that casts no vote never names its own key, and
-    /// one that starts above genesis never cites the anchor — so a replay left to
-    /// infer them has to guess, and a wrong guess looks like a disagreement.
+    /// one that starts above genesis never cites the anchor — so a checker left
+    /// to infer them has to guess, and a wrong guess looks like a fault.
     ///
     /// Written on the comment channel: a reader that only knows about steps skips
     /// it, as it already skips the dropped-input notes.
@@ -185,8 +202,8 @@ impl Recorder {
     ///
     /// `anchor_cert` is the certificate the node holds at the genesis view. The
     /// first proposal names it as its parent, and a fresh node is locked on it,
-    /// so the replay has to start from that certificate rather than from one it
-    /// makes up from the anchor leaf.
+    /// so the rules have to start from that certificate rather than from one
+    /// made up from the anchor leaf.
     pub fn preamble<T: NodeType>(
         &mut self,
         node: &T::SignatureKey,
@@ -227,14 +244,13 @@ impl Recorder {
         if self.path.is_none() {
             return;
         }
-        self.lines
-            .push(step(bare_proposal_json(NO_SENDER, proposal), &[]));
-        self.steps += 1;
+        let t = self.now();
+        self.push_step(bare_proposal_json(NO_SENDER, proposal), Vec::new(), t);
     }
 
     /// Record that a test placed the node at `view` in `epoch` directly.
     ///
-    /// No input puts a node there, so the view and epoch a replay derives from
+    /// No input puts a node there, so the view and epoch a checker derives from
     /// the steps are not the node's. Written on the comment channel with the
     /// step it precedes, so a checker can leave the rules that read the view and
     /// epoch unchecked rather than report the placement as a fault.
@@ -250,7 +266,7 @@ impl Recorder {
 
     /// Record that a test replaced the node's proposal for `view` directly.
     ///
-    /// No input does that, so the blocks a replay derives from the steps are not
+    /// No input does that, so the blocks a checker derives from the steps are not
     /// the node's. Written like [`Recorder::placed`], so a checker can leave the
     /// rules that read what the node holds unchecked.
     pub fn forced(&mut self, view: ViewNumber) {
@@ -275,16 +291,16 @@ impl Recorder {
     /// Name the leader of `view`, once, or say that it cannot be named.
     ///
     /// Every view has a leader, and the model takes the schedule as a parameter,
-    /// so a trace that does not say who leads leaves a replay with no way to tell
+    /// so a trace that does not say who leads leaves a checker with no way to tell
     /// a proposal this node was entitled to make from one it was not: assuming
     /// this node leads everywhere makes the leader clause of
     /// `ProposalJustified` unfalsifiable.
     ///
     /// `None` is written as `unknown` rather than left out. A stake table that
     /// cannot answer for an epoch it does not have leaves consensus unable to
-    /// claim leadership either, so a replay that refuses to propose there reaches
-    /// the same conclusion by the same ignorance — but silence would not say
-    /// whether the leader was unknown or merely unrecorded.
+    /// claim leadership either, and the rules, which then find no leader, agree
+    /// with it; but silence would not say whether the leader was unknown or merely
+    /// unrecorded.
     ///
     /// The leader is named per epoch: at a boundary the outgoing committee's
     /// leader may ask for a re-vote in the view the incoming committee's leader
@@ -326,11 +342,11 @@ impl Recorder {
             return;
         }
         let outputs: Vec<_> = outputs.collect();
-        let mut lines: Vec<String> = Vec::new();
+        let t = self.now();
 
         // The model takes a proposal already paired with our share, and pairs
         // nothing itself. Rather than reassemble the pair here — where a bug
-        // would look like a divergence — take it from the output that reports
+        // would look like a fault — take it from the output that reports
         // the pairing, as a step of its own. The parent's `Cert1`, the timeout
         // certificate and the `Cert2` a proposal opening an epoch comes with
         // are kept on pairing, so each is received just before: the model
@@ -357,15 +373,18 @@ impl Recorder {
                             tagged("certificate2", obj(&[("c", cert2_json_raw(cert2))]))
                         }),
                     );
-                lines.extend(carried.map(|json| step(json, &[])));
+                for json in carried {
+                    self.push_step(json, Vec::new(), t);
+                }
                 let sender = self
                     .led
                     .get(&(proposal.data.epoch, proposal.data.view_number))
                     .cloned();
-                lines.push(step(
+                self.push_step(
                     paired_proposal_json(&proposal.data, vid_share, sender),
-                    &[],
-                ));
+                    Vec::new(),
+                    t,
+                );
             }
         }
 
@@ -375,31 +394,59 @@ impl Recorder {
             .filter_map(|o| output_json(o, self.epoch_height))
             .collect();
         match input_json(input) {
-            Ok(json) => {
-                // Anything held back rides along now. A recorded action reported
-                // later than it happened is the safe direction: the replay asks
-                // that the machine acted at or before the recording did, so a
-                // delay can only make the recording easier to contain.
-                let mut all = std::mem::take(&mut self.pending);
-                all.extend(emitted);
-                lines.push(step(json, &all));
-            },
+            Ok(json) => self.push_step(json, emitted, t),
             Err(dropped) => {
                 // The step cannot be written, because the model has no such
                 // input. Its outputs are the run's all the same, and a trace
                 // that discarded them would show a node that never voted: the
                 // votes a real node parks until storage confirms them are
                 // released on exactly these steps.
-                lines.push(format!(
+                self.lines.push(format!(
                     "# dropped input: {dropped} (at step {})",
                     self.steps
                 ));
-                self.pending.extend(emitted);
+                self.release(emitted, t);
             },
         }
+    }
 
-        self.steps += lines.iter().filter(|l| !l.starts_with('#')).count();
-        self.lines.extend(lines);
+    /// Write a step, and keep it as the one later outputs join.
+    ///
+    /// Outputs held for the first step go first, since they were released
+    /// before any of the step's own.
+    fn push_step(&mut self, input: String, emitted: Vec<String>, t: u64) {
+        let mut outputs = std::mem::take(&mut self.pending);
+        outputs.extend(emitted);
+        self.lines.push(step(&input, &outputs, t, &[]));
+        self.last = Some(LastStep {
+            line: self.lines.len() - 1,
+            input,
+            outputs,
+            t,
+            released: Vec::new(),
+        });
+        self.steps += 1;
+    }
+
+    /// Add outputs released on a dropped input at time `t` to the last step
+    /// written, or hold them for the first step if none is written yet.
+    fn release(&mut self, emitted: Vec<String>, t: u64) {
+        if emitted.is_empty() {
+            return;
+        }
+        match self.last.as_mut() {
+            Some(last) => {
+                last.released.push((t, emitted.len()));
+                last.outputs.extend(emitted);
+                self.lines[last.line] = step(&last.input, &last.outputs, last.t, &last.released);
+            },
+            None => self.pending.extend(emitted),
+        }
+    }
+
+    /// Milliseconds since the recorder was made.
+    fn now(&self) -> u64 {
+        u64::try_from(self.started.elapsed().as_millis()).unwrap_or(u64::MAX)
     }
 }
 
@@ -409,10 +456,9 @@ impl Recorder {
 /// consensus core has no trace to speak of, and an empty one would only have to
 /// be skipped by every reader.
 ///
-/// Outputs still held back are noted rather than lost in silence. A run whose
-/// last steps all carry inputs the model has no counterpart for ends with actions
-/// that never found a step to ride on. A reader comparing marks would otherwise
-/// see the machine ahead and have no way to know why.
+/// Outputs still held back are noted rather than lost in silence: a run that
+/// wrote no step has no step for them to join, and a checker would otherwise
+/// pass a node whose actions it never saw.
 impl Drop for Recorder {
     fn drop(&mut self) {
         let Some(path) = self.path.as_ref() else {
@@ -423,16 +469,13 @@ impl Drop for Recorder {
         }
         let held = self.pending.len();
         if held > 0 {
-            // Named, not just counted. A held output is the usual reason a replay
-            // reports the machine ahead of the recording at the end of a trace,
-            // and the question it raises — did the node fail to act, or did the
-            // recorder fail to place what it did? — is answerable only if the
-            // note says which action it was.
             self.lines.push(format!(
-                "# {held} outputs had no later step to ride on: {}",
+                "# {held} outputs had no step to join: {}",
                 self.pending.join(", ")
             ));
         }
+        let ended = self.now();
+        self.lines.push(format!("# ended at t={ended}"));
         let times_out = |line: &String| TIMEOUT_TAGS.iter().any(|tag| line.contains(tag));
         if self.lines.iter().any(times_out) {
             self.lines
@@ -446,12 +489,24 @@ impl Drop for Recorder {
     }
 }
 
-/// One `consensus` step of a trace.
-fn step(input: String, outputs: &[String]) -> String {
-    tagged(
-        "consensus",
-        obj(&[("input", input), ("output", arr(outputs))]),
-    )
+/// One `consensus` step of a trace, taken `t` milliseconds into the run.
+///
+/// `released` lists, for each release that joined the step, its time and how many
+/// outputs it added, in the order they follow the step's own.
+fn step(input: &str, outputs: &[String], t: u64, released: &[(u64, usize)]) -> String {
+    let mut fields = vec![
+        ("input", input.to_string()),
+        ("output", arr(outputs)),
+        ("t", t.to_string()),
+    ];
+    if !released.is_empty() {
+        let released: Vec<String> = released
+            .iter()
+            .map(|(t, n)| obj(&[("t", t.to_string()), ("outputs", n.to_string())]))
+            .collect();
+        fields.push(("released", arr(&released)));
+    }
+    tagged("consensus", obj(&fields))
 }
 
 /// A proposal and this node's share for it, as the model's `Input.proposal`.
