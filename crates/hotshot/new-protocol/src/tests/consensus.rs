@@ -20,8 +20,9 @@ use hotshot_types::{
 use super::common::{
     coordinator_builder::{build_genesis_cert1, build_genesis_proposal},
     utils::{
-        TestData, TestView, build_state_cert_for_test, build_timeout_cert2_signed_by,
-        build_timeout_cert3, build_timeout_cert3_with_lock,
+        TestData, TestView, build_cert1, build_cert2, build_state_cert_for_test,
+        build_timeout_cert2_signed_by, build_timeout_cert3, build_timeout_cert3_with_lock,
+        mock_membership,
     },
 };
 use crate::{
@@ -769,6 +770,75 @@ async fn test_vote2_with_cert1() {
     );
 }
 
+/// Certificates of two epochs at one view, both held by the time the block is
+/// reconstructed, each move the lock, so that it ends on the later one, but the
+/// node votes2 at the view once.
+#[tokio::test]
+async fn test_two_epochs_at_one_view_draw_one_vote2() {
+    // Tests behaviour before 0.7: under the certificate rule a node votes2
+    // once per epoch.
+    crate::helpers::pin_test_version(versions::NEW_PROTOCOL_VERSION);
+    let mut harness = ConsensusHarness::new(0).await;
+    let test_data = TestData::new(3).await;
+    let node_key = BLSPubKey::generated_from_seed_indexed([0; 32], 0).0;
+    let at = &test_data.views[1];
+    let parent = &test_data.views[0];
+    harness
+        .apply_pair(parent.proposal_input_consensus(&node_key))
+        .await;
+    harness.apply(parent.block_reconstructed_input()).await;
+    harness
+        .apply_pair(at.proposal_input_consensus(&node_key))
+        .await;
+
+    // The same payload, proposed again as the next epoch's at the same view.
+    // The epoch is not part of a leaf's commitment, so another field makes it
+    // a different block; otherwise it would replace the first in the node's
+    // proposals.
+    let mut later = at.proposal.data.clone();
+    later.epoch = at.epoch_number + 1;
+    later.next_drb_result = Some([1; 32]);
+    assert_ne!(
+        proposal_commitment(&later),
+        proposal_commitment(&at.proposal.data)
+    );
+    harness.consensus.seed_proposals([later.clone()]);
+    let membership = mock_membership()
+        .membership_for_epoch(Some(later.epoch))
+        .expect("the next epoch resolves");
+    let (public_key, private_key) = BLSPubKey::generated_from_seed_indexed([0; 32], 0);
+    let later_cert1 = build_cert1(
+        proposal_commitment(&later),
+        later.epoch,
+        BlockHeader::<TestTypes>::block_number(&later.block_header),
+        &membership,
+        at.view_number,
+        &public_key,
+        &private_key,
+    );
+
+    harness.apply(at.cert1_input()).await;
+    harness
+        .apply(ConsensusInput::Certificate1(ValidCert::new(
+            later_cert1.clone(),
+            later.epoch,
+        )))
+        .await;
+
+    harness.apply(at.block_reconstructed_input()).await;
+
+    assert_eq!(
+        harness.consensus.lock_view(),
+        Some(LockView::of(&later_cert1)),
+        "the lock ends on the later epoch's certificate"
+    );
+    assert_eq!(
+        count_matching(harness.outputs(), |o| is_vote2_for_view(o, *at.view_number)),
+        1,
+        "one vote2 at the view"
+    );
+}
+
 /// Full single-view decision: proposal → vote1, cert1 → vote2, cert2 → decide.
 #[tokio::test]
 async fn test_single_view_decide() {
@@ -931,6 +1001,47 @@ async fn test_proposal_after_its_certificates_is_adopted() {
     assert!(
         any(harness.outputs(), is_leaf_decided),
         "and its view decides"
+    );
+}
+
+/// A `Certificate2` names its block by number as well as by leaf: one whose
+/// number is not that of the block it names decides nothing.
+#[tokio::test]
+async fn test_cert2_of_another_block_number_decides_nothing() {
+    let mut harness =
+        ConsensusHarness::new_with_upgrade_lock(0, 10, test_timeout_epoch_lock()).await;
+    let test_data = TestData::new(3).await;
+    let node_key = BLSPubKey::generated_from_seed_indexed([0; 32], 0).0;
+    let view = &test_data.views[0];
+    harness
+        .apply_pair(view.proposal_input_consensus(&node_key))
+        .await;
+    harness.apply(view.block_reconstructed_input()).await;
+    harness.apply(view.cert1_input()).await;
+
+    let block = BlockHeader::<TestTypes>::block_number(&view.proposal.data.block_header);
+    let membership = mock_membership()
+        .membership_for_epoch(Some(view.epoch_number))
+        .unwrap();
+    let (public_key, private_key) = BLSPubKey::generated_from_seed_indexed([0; 32], 0);
+    let misnumbered = build_cert2(
+        proposal_commitment(&view.proposal.data),
+        view.epoch_number,
+        block + 1,
+        &membership,
+        view.view_number,
+        &public_key,
+        &private_key,
+    );
+    harness
+        .apply(ConsensusInput::Certificate2(ValidCert::new(
+            misnumbered,
+            view.epoch_number,
+        )))
+        .await;
+    assert!(
+        !any(harness.outputs(), is_leaf_decided),
+        "a certificate naming another block number decides nothing"
     );
 }
 

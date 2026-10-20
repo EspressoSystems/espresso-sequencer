@@ -90,7 +90,7 @@ def conjuncts (h : History) : Obligation → List (String × Bool)
       ("current", decide (NotBehindB cfg h c.data.epoch)),
       ("notVoted", decide (∀ vote ∈ vote2sSent h, vote.data.epoch = c.data.epoch → vote.view ≠ c.view)),
       ("notCommitted", decide (∀ c2 ∈ cert2sHeld h, c2.data.epoch = c.data.epoch → c2.view ≠ c.view)),
-      ("notPast", !decide (PastViewB h c.view)),
+      ("notPast", !decide (PastViewB cfg h c.view)),
       ("afterAnchor", decide (cfg.anchorView < c.view)),
       ("notDecidedPast", decide (∀ u ∈ decidedViews h, u < c.view)) ]
   | .decide c =>
