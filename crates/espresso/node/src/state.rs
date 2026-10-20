@@ -368,9 +368,9 @@ const PRUNED_LEAF_CHECK_INTERVAL: Duration = Duration::from_secs(10);
 /// start from a recent epoch boundary.
 const BOUNDARY_RETRY_INTERVAL: Duration = Duration::from_secs(10);
 
-/// How long the loop waits on a local catchup read before it asks peers. Consensus cuts local reads
-/// short, so that it can still vote in time. The loop has no such deadline, while peers may have
-/// pruned the heights it reads, so a slow read cut short on every try would stall it.
+/// How long the loop waits on a local catchup read. Consensus cuts local reads short, so that it
+/// can still vote in time. The loop has no such deadline, while peers may have pruned the heights
+/// it reads, so a slow read cut short on every try would stall it.
 const LOCAL_CATCHUP_TIMEOUT: Duration = Duration::from_secs(60);
 
 /// Where the state loop starts when it has no state of its own.
@@ -573,7 +573,7 @@ where
 /// The snapshot holds the block frontier and the reward tree, fetched from peers and checked
 /// against the boundary header. Peers serve fee accounts only by address, and the loop cannot know
 /// them all, so the fee tree starts empty and the catchup in [`apply_leaf`] fetches each account
-/// from peers when the loop first needs it.
+/// from peers when the loop first needs it. From V0.6 on no block reads one, so it stays empty.
 ///
 /// Returns `None`, which leaves the loop to replay from genesis, when there is no boundary yet, or
 /// when it predates epoch rewards and so has no reward tree stored at it.
@@ -910,15 +910,15 @@ async fn apply_leaf<T>(
     T: SequencerStateDataSource,
     for<'a> T::Transaction<'a>: SequencerStateUpdate,
 {
-    // The node's catchup reads this database first, through the node's SQL persistence, and asks
-    // peers only for what the parent snapshot lacks: a loop that started from a boundary snapshot
+    // The node's catchup races this database, through the node's SQL persistence, against peers,
+    // which serve what the parent snapshot lacks: a loop that started from a boundary snapshot
     // holds only the fee accounts it has touched since. The parent snapshot is the state head,
     // which this database always keeps, while peers may have pruned it. When the data pruner has
     // deleted the parent's leaf and header, the local read finds the snapshot by the roots in the
     // parent state. Each request is sent once, because the loop below retries: peers never answer
-    // a request for a height they have pruned, and the next try then starts from this database
-    // again. Each try passes its number on, so that peers get longer to answer, as they would on
-    // retries of the request itself.
+    // a request for a height they have pruned, and the next try then reads this database again.
+    // Each try passes its number on, so that peers get longer to answer, as they would on retries
+    // of the request itself.
     for retry in 0.. {
         tracing::debug!(
             height = leaf.height(),

@@ -305,8 +305,8 @@ pub trait StateCatchup: Send + Sync {
     /// Returns the name of the catchup provider.
     fn name(&self) -> String;
 
-    /// A copy of this provider that waits up to `local_timeout` on its local providers before it
-    /// asks remote ones, or `None` if it has no such timeout.
+    /// A copy of this provider that waits up to `local_timeout` on its local providers, or `None`
+    /// if it has no such timeout.
     fn with_local_timeout(&self, _local_timeout: Duration) -> Option<Arc<dyn StateCatchup>> {
         None
     }

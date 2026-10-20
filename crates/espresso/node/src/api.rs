@@ -7647,10 +7647,9 @@ mod test {
 
     /// A query node with no state of its own on a pruned database, as a fresh pruned node, starts
     /// its state from a snapshot at a recent epoch boundary, from peers, instead of replaying the
-    /// chain from genesis. The snapshot has no fee accounts, so the loop gets past the boundary
-    /// only if it fetches them from peers, and past the next boundary only if the reward tree it
-    /// fetched is whole. It stores the fee accounts it fetches, so it can serve them. It answers
-    /// that the fee state at the boundary is missing, and that the state below it is pruned. A
+    /// chain from genesis. The loop gets past the next boundary only if the reward tree it fetched
+    /// is whole. The snapshot has no fee accounts, and from V0.6 on no block reads one, so the node
+    /// answers that the fee state is missing from the boundary on, and pruned below it. A
     /// brand-new database, which the data pruner has not stamped yet, starts from a boundary too.
     /// A node without a pruner, here one that pruned before and has turned pruning off, still
     /// replays from genesis, on leaves from peers up to the data pruned height.
@@ -7703,13 +7702,16 @@ mod test {
             "state below the start {start} was computed, from {lowest}"
         );
 
-        // From V0.6 on no block changes the fee recipient, so the loop has it only if it stored
-        // the account when it fetched it.
         wait_until_block_height(&network.api_client, "fee-state/block-height", past + 1).await;
-        let fee_state = format!("fee-state/{past}/{}", network.fee_recipient);
-        assert_same_response(&network.api_client, &query_client, &fee_state).await?;
-        if expected == EmptyStateStart::RecentBoundary {
-            check_fee_state_around_start(&query_client, start, network.fee_recipient).await?;
+        match expected {
+            EmptyStateStart::RecentBoundary => {
+                check_fee_state_from_start(&query_client, start, past, network.fee_recipient)
+                    .await?
+            },
+            EmptyStateStart::Genesis => {
+                let fee_state = format!("fee-state/{past}/{}", network.fee_recipient);
+                assert_same_response(&network.api_client, &query_client, &fee_state).await?;
+            },
         }
         Ok(())
     }
@@ -7951,15 +7953,18 @@ mod test {
         }
     }
 
-    /// Check the fee state a node that started from the boundary `start` serves next to it: at the
-    /// boundary, whose snapshot holds no fee account, the state is missing, and below it, pruned.
-    async fn check_fee_state_around_start(
+    /// Check the fee state a node that started from the boundary `start` serves: the snapshot holds
+    /// no fee account, and no block since has read one, so the state is missing at the boundary and
+    /// at `past` above it, and pruned below it.
+    async fn check_fee_state_from_start(
         client: &Client<ClientErr, StaticVersion<0, 1>>,
         start: u64,
+        past: u64,
         account: FeeAccount,
     ) -> anyhow::Result<()> {
         for (height, status) in [
             (start, StatusCode::NOT_FOUND),
+            (past, StatusCode::NOT_FOUND),
             (start - 1, StatusCode::GONE),
         ] {
             // The state query reads the header there, which the node may still be fetching.
