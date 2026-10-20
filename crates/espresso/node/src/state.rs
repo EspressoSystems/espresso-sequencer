@@ -9,7 +9,7 @@ use espresso_types::{
     BlockMerkleTree, EpochRewardsCalculator, FeeAccount, FeeMerkleTree, Leaf2, ValidatedState,
     traits::StateCatchup,
     v0_3::{ChainConfig, RewardMerkleTreeV1},
-    v0_4::Delta,
+    v0_4::{Delta, PermittedRewardMerkleTreeV2},
 };
 use futures::{StreamExt, future::Future};
 use hotshot::traits::ValidatedState as HotShotState;
@@ -460,37 +460,10 @@ where
     // Load the parent's tree from storage to avoid this. Doing it once is enough
     // every later iteration carries the tree forward in `parent_state`.
     if parent_leaf.block_header().version() > EPOCH_VERSION && parent_leaf.height() > 0 {
-        // The tree is only written at epoch boundaries, so the parent height
-        // usually has no row; fall back to the most recent tree at or below it.
-        let reward_merkle_tree_v2 = match storage
-            .load_reward_merkle_tree_v2(parent_leaf.height())
+        parent_state.reward_merkle_tree_v2 = load_parent_reward_tree(&*storage, &parent_leaf)
             .await
-        {
-            Ok(tree) => tree,
-            Err(_) => storage
-                .load_latest_reward_merkle_tree_v2(parent_leaf.height())
-                .await
-                .context(
-                    "Error starting the state storage update loop: failed to load \
-                     RewardMerkleTreeV2 for the previous height",
-                )?,
-        };
-
-        // The fallback returns the latest tree at or below the parent height,
-        // which is the parent's tree only if their roots match (they do within an
-        // epoch). Verify against the root the parent header commits to.
-        let parent_reward_root = parent_leaf
-            .block_header()
-            .reward_merkle_tree_root()
-            .right()
-            .context("V5+ parent header must have a v2 reward root")?;
-        ensure!(
-            reward_merkle_tree_v2.tree.commitment() == parent_reward_root,
-            "loaded reward tree root {} does not match parent header {parent_reward_root}",
-            reward_merkle_tree_v2.tree.commitment(),
-        );
-
-        parent_state.reward_merkle_tree_v2 = reward_merkle_tree_v2.tree;
+            .context("Error starting the state storage update loop")?
+            .tree;
     }
 
     if last_height == 0 {
@@ -504,6 +477,43 @@ where
 
     follow_leaves(&storage, &instance, &provider, parent_leaf, parent_state).await;
     Ok(())
+}
+
+/// The reward tree of `parent_leaf`, from storage.
+async fn load_parent_reward_tree<T>(
+    storage: &T,
+    parent_leaf: &Leaf2,
+) -> anyhow::Result<PermittedRewardMerkleTreeV2>
+where
+    T: SequencerStateDataSource,
+{
+    // The tree is only written at epoch boundaries, so the parent height usually has no row; fall
+    // back to the most recent tree at or below it.
+    let tree = match storage
+        .load_reward_merkle_tree_v2(parent_leaf.height())
+        .await
+    {
+        Ok(tree) => tree,
+        Err(_) => storage
+            .load_latest_reward_merkle_tree_v2(parent_leaf.height())
+            .await
+            .context("failed to load RewardMerkleTreeV2 for the previous height")?,
+    };
+
+    // The fallback returns the latest tree at or below the parent height, which is the parent's
+    // tree only if their roots match (they do within an epoch). Verify against the root the parent
+    // header commits to.
+    let parent_reward_root = parent_leaf
+        .block_header()
+        .reward_merkle_tree_root()
+        .right()
+        .context("V5+ parent header must have a v2 reward root")?;
+    ensure!(
+        tree.tree.commitment() == parent_reward_root,
+        "loaded reward tree root {} does not match parent header {parent_reward_root}",
+        tree.tree.commitment(),
+    );
+    Ok(tree)
 }
 
 /// Store a snapshot at a recent epoch boundary for a loop with no state of its own, and return the
