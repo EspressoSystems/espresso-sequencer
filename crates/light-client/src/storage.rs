@@ -923,6 +923,7 @@ mod test {
     #[cfg(unix)]
     use std::os::unix::fs::PermissionsExt;
 
+    use hotshot_query_service::data_source::storage::sql::testing::TmpPostgres;
     use pretty_assertions::assert_eq;
     use sqlx::sqlite::SqliteConnectOptions;
     use tempfile::tempdir;
@@ -930,6 +931,96 @@ mod test {
 
     use super::*;
     use crate::testing::{leaf_chain, random_validator};
+
+    #[derive(Clone, Copy, Debug)]
+    enum Backend {
+        Sqlite,
+        Postgres,
+    }
+
+    impl Backend {
+        async fn temp_db(self) -> TestDb {
+            match self {
+                Self::Sqlite => TestDb::Sqlite(tempdir().unwrap()),
+                Self::Postgres => TestDb::Postgres(TmpPostgres::init().await),
+            }
+        }
+
+        /// Hold the returned [`TestDb`] for the whole test, since dropping it deletes the
+        /// database.
+        async fn open(self, num_leaves: u32) -> (SqlStorage, TestDb) {
+            let tmp = self.temp_db().await;
+            (tmp.connect(num_leaves).await, tmp)
+        }
+    }
+
+    /// A database that outlives the [`SqlStorage`] handles connected to it, so a test can drop a
+    /// handle and reconnect as a restarted node would.
+    enum TestDb {
+        Sqlite(tempfile::TempDir),
+        Postgres(TmpPostgres),
+    }
+
+    impl TestDb {
+        async fn connect(&self, num_leaves: u32) -> SqlStorage {
+            match self {
+                Self::Sqlite(dir) => LightClientSqliteOptions {
+                    lc_path: Some(dir.path().join("lc.db")),
+                    num_leaves,
+                    ..Default::default()
+                }
+                .connect()
+                .await
+                .unwrap(),
+                Self::Postgres(tmp) => LightClientPostgresOptions {
+                    connect: PgConnectOptions::new()
+                        .host(&tmp.host())
+                        .port(tmp.port())
+                        .username("postgres")
+                        .password("password"),
+                    num_connections: 5,
+                    num_leaves,
+                }
+                .connect()
+                .await
+                .unwrap(),
+            }
+        }
+    }
+
+    #[rstest_reuse::template]
+    #[rstest::rstest]
+    #[case::sqlite(Backend::Sqlite)]
+    #[case::postgres(Backend::Postgres)]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn backends(#[case] backend: Backend) {}
+
+    #[test_log::test(rstest_reuse::apply(backends))]
+    async fn test_survives_reconnect(#[case] backend: Backend) {
+        let tmp = backend.temp_db().await;
+        let leaf = leaf_chain(0..1, EPOCH_VERSION).await.remove(0);
+        let state = random_stake_table();
+        {
+            let db = tmp.connect(10).await;
+            db.insert_leaf(leaf.clone()).await.unwrap();
+            db.insert_stake_table(EpochNumber::new(3), &state, EPOCH_VERSION, EPOCH_VERSION)
+                .await
+                .unwrap();
+        }
+
+        let db = tmp.connect(10).await;
+        assert_eq!(
+            db.leaf_upper_bound(LeafId::Number(0)).await.unwrap(),
+            Some(leaf)
+        );
+        assert_eq!(
+            db.stake_table_lower_bound(EpochNumber::new(5))
+                .await
+                .unwrap()
+                .unwrap(),
+            (EpochNumber::new(3), state, EPOCH_VERSION, EPOCH_VERSION)
+        );
+    }
 
     #[tokio::test]
     #[test_log::test]
@@ -998,9 +1089,13 @@ mod test {
     // (LRU recency bump) inside one write transaction, so every read took the
     // WAL write lock and contended with concurrent inserts under a full-history
     // backfill, producing SQLITE_BUSY. The read path is now a pure SELECT.
-    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-    async fn test_concurrent_reads_do_not_lock() {
-        let db = Arc::new(SqlStorage::default().await.unwrap());
+    // The cache is smaller than the chain, so on Postgres concurrent inserts also
+    // race their recency updates against each other's eviction, which can deadlock
+    // and must be absorbed by the write retries.
+    #[test_log::test(rstest_reuse::apply(backends))]
+    async fn test_concurrent_reads_do_not_lock(#[case] backend: Backend) {
+        let (db, _tmp) = backend.open(8).await;
+        let db = Arc::new(db);
         let leaves = leaf_chain(0..40, EPOCH_VERSION).await;
 
         let mut tasks = Vec::new();
@@ -1060,10 +1155,9 @@ mod test {
         assert!(path.exists(), "sqlite file should have been created");
     }
 
-    #[tokio::test]
-    #[test_log::test]
-    async fn test_block_height() {
-        let db = SqlStorage::default().await.unwrap();
+    #[test_log::test(rstest_reuse::apply(backends))]
+    async fn test_block_height(#[case] backend: Backend) {
+        let (db, _guard) = backend.open(100).await;
 
         // Test with empty db.
         assert_eq!(db.block_height().await.unwrap(), 0);
@@ -1074,10 +1168,9 @@ mod test {
         assert_eq!(db.block_height().await.unwrap(), 101);
     }
 
-    #[tokio::test]
-    #[test_log::test]
-    async fn test_leaf_upper_bound_exact() {
-        let db = SqlStorage::default().await.unwrap();
+    #[test_log::test(rstest_reuse::apply(backends))]
+    async fn test_leaf_upper_bound_exact(#[case] backend: Backend) {
+        let (db, _guard) = backend.open(100).await;
 
         let leaf = leaf_chain(0..1, EPOCH_VERSION).await.remove(0);
         db.insert_leaf(leaf.clone()).await.unwrap();
@@ -1119,10 +1212,9 @@ mod test {
         );
     }
 
-    #[tokio::test]
-    #[test_log::test]
-    async fn test_leaf_upper_bound_loose() {
-        let db = SqlStorage::default().await.unwrap();
+    #[test_log::test(rstest_reuse::apply(backends))]
+    async fn test_leaf_upper_bound_loose(#[case] backend: Backend) {
+        let (db, _guard) = backend.open(100).await;
 
         let leaves = leaf_chain(0..=1, EPOCH_VERSION).await;
         db.insert_leaf(leaves[1].clone()).await.unwrap();
@@ -1149,10 +1241,9 @@ mod test {
         );
     }
 
-    #[tokio::test]
-    #[test_log::test]
-    async fn test_leaf_upper_bound_least_upper_bound() {
-        let db = SqlStorage::default().await.unwrap();
+    #[test_log::test(rstest_reuse::apply(backends))]
+    async fn test_leaf_upper_bound_least_upper_bound(#[case] backend: Backend) {
+        let (db, _guard) = backend.open(100).await;
 
         let leaves = leaf_chain(0..=2, EPOCH_VERSION).await;
         db.insert_leaf(leaves[2].clone()).await.unwrap();
@@ -1166,10 +1257,9 @@ mod test {
         );
     }
 
-    #[tokio::test]
-    #[test_log::test]
-    async fn test_leaf_upper_bound_not_found() {
-        let db = SqlStorage::default().await.unwrap();
+    #[test_log::test(rstest_reuse::apply(backends))]
+    async fn test_leaf_upper_bound_not_found(#[case] backend: Backend) {
+        let (db, _guard) = backend.open(100).await;
 
         let leaves = leaf_chain(0..=1, EPOCH_VERSION).await;
         db.insert_leaf(leaves[0].clone()).await.unwrap();
@@ -1182,16 +1272,9 @@ mod test {
         );
     }
 
-    #[tokio::test]
-    #[test_log::test]
-    async fn test_gc_last_inserted() {
-        let db = LightClientSqliteOptions {
-            num_leaves: 1,
-            ..Default::default()
-        }
-        .connect()
-        .await
-        .unwrap();
+    #[test_log::test(rstest_reuse::apply(backends))]
+    async fn test_gc_last_inserted(#[case] backend: Backend) {
+        let (db, _guard) = backend.open(1).await;
 
         let leaves = leaf_chain(0..=1, EPOCH_VERSION).await;
         db.insert_leaf(leaves[1].clone()).await.unwrap();
@@ -1208,16 +1291,9 @@ mod test {
     }
 
     // LRU GC: leaf touched by a read is kept; untouched leaf is evicted.
-    #[tokio::test]
-    #[test_log::test]
-    async fn test_gc_evicts_least_recently_used() {
-        let db = LightClientSqliteOptions {
-            num_leaves: 2,
-            ..Default::default()
-        }
-        .connect()
-        .await
-        .unwrap();
+    #[test_log::test(rstest_reuse::apply(backends))]
+    async fn test_gc_evicts_least_recently_used(#[case] backend: Backend) {
+        let (db, _guard) = backend.open(2).await;
 
         let leaves = leaf_chain(0..=2, EPOCH_VERSION).await;
         db.insert_leaf(leaves[0].clone()).await.unwrap();
@@ -1258,22 +1334,13 @@ mod test {
     // still honours access history. Specifically: `next_tick` must be seeded
     // above the persisted MAX(last_used) so that a touch recorded after reopen
     // outranks all pre-restart last_used values.
-    #[tokio::test]
-    #[test_log::test]
-    async fn test_recency_survives_restart() {
-        let dir = tempdir().unwrap();
-        let lc_path = dir.path().join("lc.db");
-
-        let opts = || LightClientSqliteOptions {
-            lc_path: Some(lc_path.clone()),
-            num_leaves: 2,
-            ..Default::default()
-        };
-
+    #[test_log::test(rstest_reuse::apply(backends))]
+    async fn test_recency_survives_restart(#[case] backend: Backend) {
+        let tmp = backend.temp_db().await;
         let leaves = leaf_chain(0..=3, EPOCH_VERSION).await;
 
         {
-            let db = opts().connect().await.unwrap();
+            let db = tmp.connect(2).await;
             db.insert_leaf(leaves[0].clone()).await.unwrap();
             db.insert_leaf(leaves[1].clone()).await.unwrap();
 
@@ -1288,7 +1355,7 @@ mod test {
         // Reopen. next_tick seeds from MAX(last_used) + 1, so any post-reopen
         // tick is strictly greater than all persisted last_used values.
         {
-            let db = opts().connect().await.unwrap();
+            let db = tmp.connect(2).await;
 
             // Touch leaf 2 after reopen; its tick now exceeds all pre-restart last_used.
             db.leaf_upper_bound(LeafId::Hash(leaves[2].hash()))
@@ -1328,22 +1395,13 @@ mod test {
     // final reads, so GC after restart honours them. `Drop` spawns the flush as a
     // detached task inside a runtime, so the test awaits the same flush directly to
     // stay deterministic; the subsequent drop is then a no-op.
-    #[tokio::test]
-    #[test_log::test]
-    async fn test_recency_flushed_on_shutdown_without_insert() {
-        let dir = tempdir().unwrap();
-        let lc_path = dir.path().join("lc.db");
-
-        let opts = || LightClientSqliteOptions {
-            lc_path: Some(lc_path.clone()),
-            num_leaves: 2,
-            ..Default::default()
-        };
-
+    #[test_log::test(rstest_reuse::apply(backends))]
+    async fn test_recency_flushed_on_shutdown_without_insert(#[case] backend: Backend) {
+        let tmp = backend.temp_db().await;
         let leaves = leaf_chain(0..=2, EPOCH_VERSION).await;
 
         {
-            let db = opts().connect().await.unwrap();
+            let db = tmp.connect(2).await;
             db.insert_leaf(leaves[0].clone()).await.unwrap();
             db.insert_leaf(leaves[1].clone()).await.unwrap();
 
@@ -1357,7 +1415,7 @@ mod test {
         // Reopen and insert leaf 2; GC evicts the lowest last_used. With the touch
         // flushed, leaf 0 outranks leaf 1, so leaf 1 is evicted.
         {
-            let db = opts().connect().await.unwrap();
+            let db = tmp.connect(2).await;
             db.insert_leaf(leaves[2].clone()).await.unwrap();
 
             assert_eq!(
@@ -1377,10 +1435,9 @@ mod test {
         }
     }
 
-    #[tokio::test]
-    #[test_log::test]
-    async fn test_get_leaves_in_range() {
-        let db = SqlStorage::default().await.unwrap();
+    #[test_log::test(rstest_reuse::apply(backends))]
+    async fn test_get_leaves_in_range(#[case] backend: Backend) {
+        let (db, _guard) = backend.open(100).await;
 
         let leaves = leaf_chain(0..5, EPOCH_VERSION).await;
         for leaf in &leaves {
@@ -1391,10 +1448,9 @@ mod test {
         assert_eq!(fetched, leaves[1..4]);
     }
 
-    #[tokio::test]
-    #[test_log::test]
-    async fn test_get_leaves_in_range_not_found() {
-        let db = SqlStorage::default().await.unwrap();
+    #[test_log::test(rstest_reuse::apply(backends))]
+    async fn test_get_leaves_in_range_not_found(#[case] backend: Backend) {
+        let (db, _guard) = backend.open(100).await;
 
         let leaves = leaf_chain(0..3, EPOCH_VERSION).await;
         for leaf in &leaves {
@@ -1405,10 +1461,9 @@ mod test {
         assert!(fetched.is_empty());
     }
 
-    #[tokio::test]
-    #[test_log::test]
-    async fn test_insert_stake_table_idempotent() {
-        let db = SqlStorage::default().await.unwrap();
+    #[test_log::test(rstest_reuse::apply(backends))]
+    async fn test_insert_stake_table_idempotent(#[case] backend: Backend) {
+        let (db, _guard) = backend.open(100).await;
 
         let epoch = EpochNumber::new(1);
         let state = random_stake_table();
@@ -1425,10 +1480,9 @@ mod test {
         );
     }
 
-    #[tokio::test]
-    #[test_log::test]
-    async fn test_stake_table_lower_bound_exact() {
-        let db = SqlStorage::default().await.unwrap();
+    #[test_log::test(rstest_reuse::apply(backends))]
+    async fn test_stake_table_lower_bound_exact(#[case] backend: Backend) {
+        let (db, _guard) = backend.open(100).await;
 
         let epoch = EpochNumber::new(1);
         let state = random_stake_table();
@@ -1441,10 +1495,9 @@ mod test {
         );
     }
 
-    #[tokio::test]
-    #[test_log::test]
-    async fn test_stake_table_lower_bound_loose() {
-        let db = SqlStorage::default().await.unwrap();
+    #[test_log::test(rstest_reuse::apply(backends))]
+    async fn test_stake_table_lower_bound_loose(#[case] backend: Backend) {
+        let (db, _guard) = backend.open(100).await;
 
         let epoch = EpochNumber::new(1);
         let state = random_stake_table();
@@ -1460,10 +1513,9 @@ mod test {
         );
     }
 
-    #[tokio::test]
-    #[test_log::test]
-    async fn test_stake_table_lower_bound_greatest_lower_bound() {
-        let db = SqlStorage::default().await.unwrap();
+    #[test_log::test(rstest_reuse::apply(backends))]
+    async fn test_stake_table_lower_bound_greatest_lower_bound(#[case] backend: Backend) {
+        let (db, _guard) = backend.open(100).await;
 
         let state1 = random_stake_table();
         let state2 = chain_stake_table(&state1);
@@ -1483,10 +1535,9 @@ mod test {
         );
     }
 
-    #[tokio::test]
-    #[test_log::test]
-    async fn test_stake_table_lower_bound_not_found() {
-        let db = SqlStorage::default().await.unwrap();
+    #[test_log::test(rstest_reuse::apply(backends))]
+    async fn test_stake_table_lower_bound_not_found(#[case] backend: Backend) {
+        let (db, _guard) = backend.open(100).await;
         db.insert_stake_table(
             EpochNumber::new(2),
             &random_stake_table(),
@@ -1503,10 +1554,9 @@ mod test {
         );
     }
 
-    #[tokio::test]
-    #[test_log::test]
-    async fn test_stake_table_keeps_every_epoch() {
-        let db = SqlStorage::default().await.unwrap();
+    #[test_log::test(rstest_reuse::apply(backends))]
+    async fn test_stake_table_keeps_every_epoch(#[case] backend: Backend) {
+        let (db, _guard) = backend.open(100).await;
 
         let mut states = Vec::from([random_stake_table()]);
         for _ in 1..150 {
@@ -1529,10 +1579,9 @@ mod test {
         }
     }
 
-    #[tokio::test]
-    #[test_log::test]
-    async fn test_stake_table_insert_out_of_order() {
-        let db = SqlStorage::default().await.unwrap();
+    #[test_log::test(rstest_reuse::apply(backends))]
+    async fn test_stake_table_insert_out_of_order(#[case] backend: Backend) {
+        let (db, _guard) = backend.open(100).await;
 
         let state1 = random_stake_table();
         let state2 = chain_stake_table(&state1);
@@ -1559,10 +1608,9 @@ mod test {
         );
     }
 
-    #[tokio::test]
-    #[test_log::test]
-    async fn test_stake_table_epoch_root_protocol_version_roundtrip() {
-        let db = SqlStorage::default().await.unwrap();
+    #[test_log::test(rstest_reuse::apply(backends))]
+    async fn test_stake_table_epoch_root_protocol_version_roundtrip(#[case] backend: Backend) {
+        let (db, _guard) = backend.open(100).await;
 
         let epoch = EpochNumber::new(1);
         let state = random_stake_table();
@@ -1580,12 +1628,11 @@ mod test {
     /// Regression: storage previously dropped `used_x25519_keys` on round trip,
     /// so a reloaded `StakeTableState::commit()` diverged from the proposer's
     /// hash once any V3 events had been applied.
-    #[tokio::test]
-    #[test_log::test]
-    async fn test_stake_table_x25519_keys_round_trip() {
+    #[test_log::test(rstest_reuse::apply(backends))]
+    async fn test_stake_table_x25519_keys_round_trip(#[case] backend: Backend) {
         use committable::Committable;
 
-        let db = SqlStorage::default().await.unwrap();
+        let (db, _guard) = backend.open(100).await;
         let epoch = EpochNumber::new(1);
         let state = random_stake_table();
         assert!(

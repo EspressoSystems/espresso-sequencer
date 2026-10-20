@@ -8269,6 +8269,8 @@ dependencies = [
  "light-client",
  "pretty_assertions",
  "rand 0.8.6",
+ "rstest",
+ "rstest_reuse",
  "serde",
  "serde_json",
  "sqlx",
