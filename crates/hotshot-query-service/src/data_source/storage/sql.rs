@@ -17,7 +17,6 @@ use anyhow::Context;
 use async_trait::async_trait;
 use backon::{BackoffBuilder, ExponentialBuilder};
 use chrono::Utc;
-#[cfg(not(feature = "embedded-db"))]
 use futures::future::FutureExt;
 use hotshot_types::{
     data::VidShare,
@@ -142,6 +141,29 @@ macro_rules! include_migrations {
                     .expect("invalid migration")
             })
     };
+}
+
+/// Drop connections that come back to the pool with a transaction still open.
+///
+/// In sqlx 0.8.6, a `begin()` cancelled mid-flight can return its connection to the pool inside
+/// a transaction that sqlx does not know about.
+pub fn release_only_idle(pool: PoolOptions<sqlx::Postgres>) -> PoolOptions<sqlx::Postgres> {
+    // TODO(abdul): remove once a sqlx release includes launchbadge/sqlx#4394.
+    // With no transaction open, this query starts its own, so both timestamps are the same.
+    // Keep `raw_sql`. A normal query is sent in several messages and Postgres moves
+    // `statement_timestamp()` forward on each one, so the timestamps would always differ.
+    pool.after_release(|conn, _| {
+        async move {
+            let row = conn
+                .fetch_one(sqlx::raw_sql(
+                    "SELECT transaction_timestamp() <> statement_timestamp()",
+                ))
+                .await?;
+            let in_transaction: bool = row.try_get(0)?;
+            Ok(!in_transaction)
+        }
+        .boxed()
+    })
 }
 
 /// The migrations required to build the default schema for this version of [`SqlStorage`].
@@ -374,6 +396,11 @@ impl Config {
     pub fn tls(mut self) -> Self {
         self.db_opt = self.db_opt.ssl_mode(PgSslMode::Require);
         self
+    }
+
+    #[cfg(not(feature = "embedded-db"))]
+    pub fn connect_options(&self) -> &PgConnectOptions {
+        &self.db_opt
     }
 
     /// Set the name of the schema to use for queries.
@@ -738,26 +765,8 @@ impl SqlStorage {
             }
             .boxed()
         });
-        // TODO(abdul): remove once a sqlx release includes launchbadge/sqlx#4394.
-        // In sqlx 0.8.6, if `begin()` is cancelled, the connection can go back to the pool with a
-        // transaction still open, and sqlx does not know about it. Ask Postgres and drop it.
-        // With no transaction open, this query starts its own, so both timestamps are the same.
-        // Inside an open transaction, the transaction started earlier, so they differ.
-        // Keep `raw_sql`. A normal query is sent in several messages and Postgres moves
-        // `statement_timestamp()` forward on each one, so the timestamps would always differ.
         #[cfg(not(feature = "embedded-db"))]
-        let pool = pool.after_release(|conn, _| {
-            async move {
-                let row = conn
-                    .fetch_one(sqlx::raw_sql(
-                        "SELECT transaction_timestamp() <> statement_timestamp()",
-                    ))
-                    .await?;
-                let in_transaction: bool = row.try_get(0)?;
-                Ok(!in_transaction)
-            }
-            .boxed()
-        });
+        let pool = release_only_idle(pool);
 
         #[cfg(feature = "embedded-db")]
         if config.reset {

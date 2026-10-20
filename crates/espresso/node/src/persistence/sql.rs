@@ -941,11 +941,10 @@ impl PersistenceOptions for Options {
     }
 
     async fn reset(self) -> anyhow::Result<()> {
-        SqlStorage::connect(
-            Config::try_from(&self)?.reset_schema(),
-            StorageConnectionType::Sequencer,
-        )
-        .await?;
+        let config = Config::try_from(&self)?;
+        #[cfg(not(feature = "embedded-db"))]
+        light_client::storage::LightClientPostgresOptions::reset(config.connect_options()).await?;
+        SqlStorage::connect(config.reset_schema(), StorageConnectionType::Sequencer).await?;
         Ok(())
     }
 }
