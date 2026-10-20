@@ -21,7 +21,7 @@ use lcv1_relay::{LCV1StateRelayServerDataSource, LCV1StateRelayServerState};
 use lcv2_relay::{LCV2StateRelayServerDataSource, LCV2StateRelayServerState};
 use lcv3_relay::{LCV3StateRelayServerDataSource, LCV3StateRelayServerState};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
-use stake_table_tracker::{StakeTableInfo, StakeTableTracker};
+use stake_table_tracker::StakeTableTracker;
 use tokio::{net::TcpListener, sync::oneshot};
 use url::Url;
 use vbs::version::StaticVersionType;
@@ -119,50 +119,14 @@ impl StateRelayServerState {
     }
 }
 
-impl LCV1StateRelayServerDataSource for StateRelayServerState {
-    fn get_latest_signature_bundle(&self) -> Result<LCV1StateSignaturesBundle, RelayError> {
-        self.lcv1_state.get_latest_signature_bundle()
-    }
-
-    fn post_signature(
-        &mut self,
-        req: LCV1StateSignatureRequestBody,
-        stake_table: &StakeTableInfo,
-    ) -> Result<(), RelayError> {
-        self.lcv1_state.post_signature(req, stake_table)
-    }
+/// Router state, cloned into every axum handler via `State`. The stake table tracker sits outside
+/// the lock because a lookup can go to the sequencer for a height the unauthenticated caller
+/// picked.
+#[derive(Clone)]
+struct SharedState {
+    stake_tables: Arc<StakeTableTracker>,
+    signatures: Arc<RwLock<StateRelayServerState>>,
 }
-
-impl LCV2StateRelayServerDataSource for StateRelayServerState {
-    fn get_latest_signature_bundle(&self) -> Result<LCV2StateSignaturesBundle, RelayError> {
-        self.lcv2_state.get_latest_signature_bundle()
-    }
-
-    fn post_signature(
-        &mut self,
-        req: LCV2StateSignatureRequestBody,
-        stake_table: &StakeTableInfo,
-    ) -> Result<(), RelayError> {
-        self.lcv2_state.post_signature(req, stake_table)
-    }
-}
-
-impl LCV3StateRelayServerDataSource for StateRelayServerState {
-    fn get_latest_signature_bundle(&self) -> Result<LCV3StateSignaturesBundle, RelayError> {
-        self.lcv3_state.get_latest_signature_bundle()
-    }
-
-    fn post_signature(
-        &mut self,
-        req: LCV3StateSignatureRequestBody,
-        stake_table: &StakeTableInfo,
-    ) -> Result<(), RelayError> {
-        self.lcv3_state.post_signature(req, stake_table)
-    }
-}
-
-/// Shared, lock-guarded server state, cloned into every axum handler via `State`.
-type SharedState = Arc<RwLock<StateRelayServerState>>;
 
 fn stake_table_unavailable(err: anyhow::Error) -> RelayError {
     RelayError::catch_all(StatusCode::INTERNAL_SERVER_ERROR, format!("{err:#}"))
@@ -170,55 +134,42 @@ fn stake_table_unavailable(err: anyhow::Error) -> RelayError {
 
 /// Handle a `POST` to `state`/`api/state`: tries LCV3, then LCV2 (auto-downgrading to LCV1 if the
 /// signature verifies against the legacy scheme), then LCV1. Mirrors tide's `poststatesignature`.
-///
-/// Each branch resolves the stake table before taking the write lock, since the lookup can go to
-/// the sequencer for a height the unauthenticated caller picked.
 async fn post_state_signature(
     state: &SharedState,
     headers: &HeaderMap,
     body: &[u8],
 ) -> Result<(), RelayError> {
-    let tracker = Arc::clone(&state.read().await.stake_table_tracker);
     if let Ok(req) = decode_body::<LCV3StateSignatureRequestBody>(headers, body) {
         tracing::debug!("Received LCV3 state signature: {req}");
-        let stake_table = tracker
+        let stake_table = state
+            .stake_tables
             .stake_table_info_for_block(req.state.block_height)
             .await
             .map_err(stake_table_unavailable)?;
-        let mut state = state.write().await;
-        if let Err(e) = LCV2StateRelayServerDataSource::post_signature(
-            &mut *state,
-            req.clone().into(),
-            &stake_table,
-        ) {
+        let mut signatures = state.signatures.write().await;
+        if let Err(e) = signatures
+            .lcv2_state
+            .post_signature(req.clone().into(), &stake_table)
+        {
             tracing::error!("Failed to post downgraded LCV2 state signature: {}", e);
         }
-        LCV3StateRelayServerDataSource::post_signature(&mut *state, req, &stake_table)
+        signatures.lcv3_state.post_signature(req, &stake_table)
     } else if let Ok(req) = decode_body::<LCV2StateSignatureRequestBody>(headers, body) {
         tracing::debug!("Received LCV2 state signature: {req}");
         if LCV1StateSignatureKey::verify_state_sig(&req.key, &req.signature, &req.state) {
-            let stake_table = tracker
-                .genesis_stake_table_info()
-                .await
-                .map_err(stake_table_unavailable)?;
-            let mut state = state.write().await;
-            LCV1StateRelayServerDataSource::post_signature(&mut *state, req.into(), &stake_table)
+            post_lcv1_signature(state, req.into()).await
         } else {
-            let stake_table = tracker
+            let stake_table = state
+                .stake_tables
                 .stake_table_info_for_block(req.state.block_height)
                 .await
                 .map_err(stake_table_unavailable)?;
-            let mut state = state.write().await;
-            LCV2StateRelayServerDataSource::post_signature(&mut *state, req, &stake_table)
+            let mut signatures = state.signatures.write().await;
+            signatures.lcv2_state.post_signature(req, &stake_table)
         }
     } else if let Ok(req) = decode_body::<LCV1StateSignatureRequestBody>(headers, body) {
         tracing::debug!("Received LCV1 state signature: {req}");
-        let stake_table = tracker
-            .genesis_stake_table_info()
-            .await
-            .map_err(stake_table_unavailable)?;
-        let mut state = state.write().await;
-        LCV1StateRelayServerDataSource::post_signature(&mut *state, req, &stake_table)
+        post_lcv1_signature(state, req).await
     } else {
         Err(RelayError::catch_all(
             StatusCode::BAD_REQUEST,
@@ -244,44 +195,53 @@ async fn post_legacy_state_signature(
             "Invalid request body",
         ));
     };
-    let tracker = Arc::clone(&state.read().await.stake_table_tracker);
-    let stake_table = tracker
+    post_lcv1_signature(state, req).await
+}
+
+async fn post_lcv1_signature(
+    state: &SharedState,
+    req: LCV1StateSignatureRequestBody,
+) -> Result<(), RelayError> {
+    let stake_table = state
+        .stake_tables
         .genesis_stake_table_info()
         .await
         .map_err(stake_table_unavailable)?;
-    let mut state = state.write().await;
-    LCV1StateRelayServerDataSource::post_signature(&mut *state, req, &stake_table)
+    let mut signatures = state.signatures.write().await;
+    signatures.lcv1_state.post_signature(req, &stake_table)
 }
 
 /// `GET state` (deprecated): mirrors tide's `getlateststate`, always the LCV2 bundle regardless
 /// of version, since all three registered API versions shared this handler.
 async fn get_latest_state(state: &SharedState) -> Result<LCV2StateSignaturesBundle, RelayError> {
-    let state = state.read().await;
-    LCV2StateRelayServerDataSource::get_latest_signature_bundle(&*state)
+    let signatures = state.signatures.read().await;
+    signatures.lcv2_state.get_latest_signature_bundle()
 }
 
 /// `GET legacy-state`: mirrors tide's `getlatestlegacystate`.
 async fn get_latest_legacy_state(
     state: &SharedState,
 ) -> Result<LCV2StateSignaturesBundle, RelayError> {
-    let state = state.read().await;
-    LCV1StateRelayServerDataSource::get_latest_signature_bundle(&*state)
+    let signatures = state.signatures.read().await;
+    signatures
+        .lcv1_state
+        .get_latest_signature_bundle()
         .map(LCV2StateSignaturesBundle::from_v1)
 }
 
 async fn get_latest_state_v1(state: &SharedState) -> Result<LCV1StateSignaturesBundle, RelayError> {
-    let state = state.read().await;
-    LCV1StateRelayServerDataSource::get_latest_signature_bundle(&*state)
+    let signatures = state.signatures.read().await;
+    signatures.lcv1_state.get_latest_signature_bundle()
 }
 
 async fn get_latest_state_v2(state: &SharedState) -> Result<LCV2StateSignaturesBundle, RelayError> {
-    let state = state.read().await;
-    LCV2StateRelayServerDataSource::get_latest_signature_bundle(&*state)
+    let signatures = state.signatures.read().await;
+    signatures.lcv2_state.get_latest_signature_bundle()
 }
 
 async fn get_latest_state_v3(state: &SharedState) -> Result<LCV3StateSignaturesBundle, RelayError> {
-    let state = state.read().await;
-    LCV3StateRelayServerDataSource::get_latest_signature_bundle(&*state)
+    let signatures = state.signatures.read().await;
+    signatures.lcv3_state.get_latest_signature_bundle()
 }
 
 async fn healthcheck(headers: HeaderMap) -> Response {
@@ -335,7 +295,11 @@ const LATEST_STATE_PATH: &str = "/api/lateststate";
 /// with no version prefix were redirected to the latest (v3). We reproduce that by serving the
 /// same handlers at the unversioned and all three `/v{1,2,3}` paths, and only special-casing
 /// `lateststate` per version.
-fn router(state: SharedState) -> Router {
+fn router(state: StateRelayServerState) -> Router {
+    let state = SharedState {
+        stake_tables: Arc::clone(&state.stake_table_tracker),
+        signatures: Arc::new(RwLock::new(state)),
+    };
     let mut router = Router::<SharedState>::new()
         .route("/healthcheck", get(healthcheck))
         .route(STATE_PATH, post(post_state).get(get_state))
@@ -371,7 +335,7 @@ async fn serve(server_url: Url, state: StateRelayServerState) -> anyhow::Result<
     let listener = TcpListener::bind((host, port)).await?;
 
     tracing::info!(%server_url, "Relay server starts serving at ");
-    axum::serve(listener, router(Arc::new(RwLock::new(state)))).await?;
+    axum::serve(listener, router(state)).await?;
     Ok(())
 }
 
@@ -462,9 +426,7 @@ mod test {
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
         tokio::spawn(async move {
-            axum::serve(listener, router(Arc::new(RwLock::new(state))))
-                .await
-                .unwrap();
+            axum::serve(listener, router(state)).await.unwrap();
         });
         format!("http://{addr}").parse().unwrap()
     }
