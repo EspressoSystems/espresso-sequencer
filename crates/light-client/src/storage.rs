@@ -939,25 +939,51 @@ mod test {
     }
 
     impl Backend {
-        /// Hold the returned [`TmpPostgres`] for the whole test, since dropping it stops the
-        /// server.
-        async fn open(self, num_leaves: u32) -> (SqlStorage, Option<TmpPostgres>) {
+        async fn temp_db(self) -> TestDb {
             match self {
-                Self::Sqlite => {
-                    let db = LightClientSqliteOptions {
-                        num_leaves,
-                        ..Default::default()
-                    }
-                    .connect()
-                    .await
-                    .unwrap();
-                    (db, None)
-                },
-                Self::Postgres => {
-                    let tmp = TmpPostgres::init().await;
-                    let db = postgres_options(&tmp, num_leaves).connect().await.unwrap();
-                    (db, Some(tmp))
-                },
+                Self::Sqlite => TestDb::Sqlite(tempdir().unwrap()),
+                Self::Postgres => TestDb::Postgres(TmpPostgres::init().await),
+            }
+        }
+
+        /// Hold the returned [`TestDb`] for the whole test, since dropping it deletes the
+        /// database.
+        async fn open(self, num_leaves: u32) -> (SqlStorage, TestDb) {
+            let tmp = self.temp_db().await;
+            (tmp.connect(num_leaves).await, tmp)
+        }
+    }
+
+    /// A database that outlives the [`SqlStorage`] handles connected to it, so a test can drop a
+    /// handle and reconnect as a restarted node would.
+    enum TestDb {
+        Sqlite(tempfile::TempDir),
+        Postgres(TmpPostgres),
+    }
+
+    impl TestDb {
+        async fn connect(&self, num_leaves: u32) -> SqlStorage {
+            match self {
+                Self::Sqlite(dir) => LightClientSqliteOptions {
+                    lc_path: Some(dir.path().join("lc.db")),
+                    num_leaves,
+                    ..Default::default()
+                }
+                .connect()
+                .await
+                .unwrap(),
+                Self::Postgres(tmp) => LightClientPostgresOptions {
+                    connect: PgConnectOptions::new()
+                        .host(&tmp.host())
+                        .port(tmp.port())
+                        .username("postgres")
+                        .password("password"),
+                    num_connections: 5,
+                    num_leaves,
+                }
+                .connect()
+                .await
+                .unwrap(),
             }
         }
     }
@@ -966,36 +992,23 @@ mod test {
     #[rstest::rstest]
     #[case::sqlite(Backend::Sqlite)]
     #[case::postgres(Backend::Postgres)]
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn backends(#[case] backend: Backend) {}
 
-    fn postgres_options(tmp: &TmpPostgres, num_leaves: u32) -> LightClientPostgresOptions {
-        LightClientPostgresOptions {
-            connect: PgConnectOptions::new()
-                .host(&tmp.host())
-                .port(tmp.port())
-                .username("postgres")
-                .password("password"),
-            num_connections: 5,
-            num_leaves,
-        }
-    }
-
-    #[tokio::test]
-    #[test_log::test]
-    async fn test_postgres_survives_reconnect() {
-        let tmp = TmpPostgres::init().await;
+    #[test_log::test(rstest_reuse::apply(backends))]
+    async fn test_survives_reconnect(#[case] backend: Backend) {
+        let tmp = backend.temp_db().await;
         let leaf = leaf_chain(0..1, EPOCH_VERSION).await.remove(0);
         let state = random_stake_table();
         {
-            let db = postgres_options(&tmp, 10).connect().await.unwrap();
+            let db = tmp.connect(10).await;
             db.insert_leaf(leaf.clone()).await.unwrap();
             db.insert_stake_table(EpochNumber::new(3), &state, EPOCH_VERSION, EPOCH_VERSION)
                 .await
                 .unwrap();
         }
 
-        let db = postgres_options(&tmp, 10).connect().await.unwrap();
+        let db = tmp.connect(10).await;
         assert_eq!(
             db.leaf_upper_bound(LeafId::Number(0)).await.unwrap(),
             Some(leaf)
@@ -1076,9 +1089,13 @@ mod test {
     // (LRU recency bump) inside one write transaction, so every read took the
     // WAL write lock and contended with concurrent inserts under a full-history
     // backfill, producing SQLITE_BUSY. The read path is now a pure SELECT.
-    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-    async fn test_concurrent_reads_do_not_lock() {
-        let db = Arc::new(SqlStorage::default().await.unwrap());
+    // The cache is smaller than the chain, so on Postgres concurrent inserts also
+    // race their recency updates against each other's eviction, which can deadlock
+    // and must be absorbed by the write retries.
+    #[test_log::test(rstest_reuse::apply(backends))]
+    async fn test_concurrent_reads_do_not_lock(#[case] backend: Backend) {
+        let (db, _tmp) = backend.open(8).await;
+        let db = Arc::new(db);
         let leaves = leaf_chain(0..40, EPOCH_VERSION).await;
 
         let mut tasks = Vec::new();
@@ -1317,22 +1334,13 @@ mod test {
     // still honours access history. Specifically: `next_tick` must be seeded
     // above the persisted MAX(last_used) so that a touch recorded after reopen
     // outranks all pre-restart last_used values.
-    #[tokio::test]
-    #[test_log::test]
-    async fn test_recency_survives_restart() {
-        let dir = tempdir().unwrap();
-        let lc_path = dir.path().join("lc.db");
-
-        let opts = || LightClientSqliteOptions {
-            lc_path: Some(lc_path.clone()),
-            num_leaves: 2,
-            ..Default::default()
-        };
-
+    #[test_log::test(rstest_reuse::apply(backends))]
+    async fn test_recency_survives_restart(#[case] backend: Backend) {
+        let tmp = backend.temp_db().await;
         let leaves = leaf_chain(0..=3, EPOCH_VERSION).await;
 
         {
-            let db = opts().connect().await.unwrap();
+            let db = tmp.connect(2).await;
             db.insert_leaf(leaves[0].clone()).await.unwrap();
             db.insert_leaf(leaves[1].clone()).await.unwrap();
 
@@ -1347,7 +1355,7 @@ mod test {
         // Reopen. next_tick seeds from MAX(last_used) + 1, so any post-reopen
         // tick is strictly greater than all persisted last_used values.
         {
-            let db = opts().connect().await.unwrap();
+            let db = tmp.connect(2).await;
 
             // Touch leaf 2 after reopen; its tick now exceeds all pre-restart last_used.
             db.leaf_upper_bound(LeafId::Hash(leaves[2].hash()))
@@ -1387,22 +1395,13 @@ mod test {
     // final reads, so GC after restart honours them. `Drop` spawns the flush as a
     // detached task inside a runtime, so the test awaits the same flush directly to
     // stay deterministic; the subsequent drop is then a no-op.
-    #[tokio::test]
-    #[test_log::test]
-    async fn test_recency_flushed_on_shutdown_without_insert() {
-        let dir = tempdir().unwrap();
-        let lc_path = dir.path().join("lc.db");
-
-        let opts = || LightClientSqliteOptions {
-            lc_path: Some(lc_path.clone()),
-            num_leaves: 2,
-            ..Default::default()
-        };
-
+    #[test_log::test(rstest_reuse::apply(backends))]
+    async fn test_recency_flushed_on_shutdown_without_insert(#[case] backend: Backend) {
+        let tmp = backend.temp_db().await;
         let leaves = leaf_chain(0..=2, EPOCH_VERSION).await;
 
         {
-            let db = opts().connect().await.unwrap();
+            let db = tmp.connect(2).await;
             db.insert_leaf(leaves[0].clone()).await.unwrap();
             db.insert_leaf(leaves[1].clone()).await.unwrap();
 
@@ -1416,7 +1415,7 @@ mod test {
         // Reopen and insert leaf 2; GC evicts the lowest last_used. With the touch
         // flushed, leaf 0 outranks leaf 1, so leaf 1 is evicted.
         {
-            let db = opts().connect().await.unwrap();
+            let db = tmp.connect(2).await;
             db.insert_leaf(leaves[2].clone()).await.unwrap();
 
             assert_eq!(

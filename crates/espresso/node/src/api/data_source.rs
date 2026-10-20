@@ -702,6 +702,7 @@ mod test {
         assert_eq!(keys["p2p_addr"], validator["p2p_addr"]);
         assert_eq!(keys["p2p_addr"], "node.example.com:9977");
     }
+
     #[cfg(not(feature = "embedded-db"))]
     #[test]
     fn sql_storage_keeps_light_client_in_postgres() {

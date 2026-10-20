@@ -4180,20 +4180,20 @@ mod postgres_tests {
     #[test_log::test(tokio::test(flavor = "multi_thread"))]
     async fn test_light_client_shares_the_node_database() {
         use hotshot_query_service::availability::LeafId;
-        use light_client::storage::{LightClientPostgresOptions, Storage as _};
+        use light_client::storage::Storage as _;
+
+        use crate::api::{data_source::DataSourceOptions as _, options::Query};
 
         let tmp = Persistence::tmp_storage().await;
         let mut opt = Persistence::options(&tmp);
-        let _persistence = opt.create().await.unwrap();
+        let persistence = opt.create().await.unwrap();
 
-        let db = LightClientPostgresOptions {
-            connect: Config::try_from(&opt).unwrap().connect_options().clone(),
-            num_connections: 1,
-            num_leaves: 10,
-        }
-        .connect()
-        .await
-        .unwrap();
+        let db = opt
+            .light_client_db(&Query::default())
+            .unwrap()
+            .connect()
+            .await
+            .unwrap();
         let leaf = light_client::testing::leaf_chain(0..1, versions::EPOCH_VERSION)
             .await
             .remove(0);
@@ -4202,29 +4202,33 @@ mod postgres_tests {
             db.leaf_upper_bound(LeafId::Number(0)).await.unwrap(),
             Some(leaf)
         );
+
+        let (leaves,): (i64,) = sqlx::query_as("SELECT count(*) FROM light_client.leaf")
+            .fetch_one(&persistence.db.pool())
+            .await
+            .unwrap();
+        assert_eq!(leaves, 1);
     }
 
     #[test_log::test(tokio::test(flavor = "multi_thread"))]
     async fn test_reset_drops_light_client_cache() {
-        use light_client::storage::{LightClientPostgresOptions, Storage as _};
+        use light_client::storage::Storage as _;
+
+        use crate::api::{data_source::DataSourceOptions as _, options::Query};
 
         let tmp = Persistence::tmp_storage().await;
         let opt = Persistence::options(&tmp);
-        let light_client = || LightClientPostgresOptions {
-            connect: Config::try_from(&opt).unwrap().connect_options().clone(),
-            num_connections: 1,
-            num_leaves: 10,
-        };
+        let light_client = || opt.light_client_db(&Query::default()).unwrap().connect();
         let leaf = light_client::testing::leaf_chain(0..1, versions::EPOCH_VERSION)
             .await
             .remove(0);
-        let db = light_client().connect().await.unwrap();
+        let db = light_client().await.unwrap();
         db.insert_leaf(leaf).await.unwrap();
         drop(db);
 
         opt.clone().reset().await.unwrap();
 
-        let db = light_client().connect().await.unwrap();
+        let db = light_client().await.unwrap();
         assert_eq!(db.block_height().await.unwrap(), 0);
     }
 }

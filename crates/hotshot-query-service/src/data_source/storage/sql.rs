@@ -1741,7 +1741,7 @@ impl VersionedDataSource for SqlStorage {
     }
 }
 
-// These tests run the `postgres` Docker image, which doesn't work on Windows.
+// These tests start `postgres` from PATH, which doesn't work on Windows.
 #[cfg(all(any(test, feature = "testing"), not(target_os = "windows")))]
 pub mod testing {
     #![allow(unused_imports)]
@@ -2011,7 +2011,7 @@ pub mod testing {
     }
 }
 
-// These tests run the `postgres` Docker image, which doesn't work on Windows.
+// These tests start `postgres` from PATH, which doesn't work on Windows.
 #[cfg(all(test, not(target_os = "windows")))]
 mod test {
     use std::time::Duration;
