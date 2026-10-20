@@ -395,6 +395,19 @@ def test_protocol_version_belongs_to_one_run(harness, runner):
     assert cfg.protocol_version == "0.8"
 
 
+def test_slow_nodes_belong_to_one_run(harness, runner):
+    manifest = harness.fleet()
+    cfg = awsb.fleet_run_config(harness.run_args(), manifest)
+    assert (cfg.slow_nodes, cfg.slow_cores) == (0, None)
+    flags = ("--slow-nodes", "1", "--slow-cores", "4")
+    cfg = awsb.fleet_run_config(harness.run_args(*flags), manifest)
+    assert (cfg.slow_nodes, cfg.slow_cores) == (1, 4)
+    with pytest.raises(awsb.Refused, match="validator-only"):
+        awsb.fleet_run_config(
+            harness.run_args("--slow-nodes", "9", "--slow-cores", "4"), manifest
+        )
+
+
 def test_lock_held(harness, runner):
     awsb.take_fleet_lock(FakeSystem(), harness.fleet_dir, "other", False)
     mark = len(runner.calls)

@@ -432,6 +432,13 @@ just bench aws run --tag release-x --leader-trace
   `nodes - 1` keeps txs off the query node.
   - With `node0` submitting, query lag, the query-node rule and `node0` CPU are not comparable across `--submit-nodes`
     values.
+- `--slow-nodes N --slow-cores C`: the last N nodes, which must be validator-only, run espresso-node pinned to cores
+  `0-(C-1)` (`docker --cpuset-cpus`): a slower group on the same network, e.g. to see whether a quorum waits for it.
+  Part of the config hash, listed in the summary.
+  - 5 nodes give quorum 4: one slow node leaves a fast quorum, two put a slow node in every quorum.
+  - Pinning, not `--cpus`: a quota stops every thread of the container for the rest of its 100 ms period once C cores'
+    worth of time is used, a stall a smaller machine does not have.
+  - Network bandwidth stays the node type's, unlike a smaller `--node-type`.
 - `--node-type`, `--ctl-type`: both types share one architecture. Preflight picks the Ubuntu AMI and image platform to
   match. Type choice: [instance-types.md](instance-types.md).
 - `--prune [RETENTION]`: node0 (not the other query nodes) deletes data and state older than RETENTION (`90s`, `2m`,
@@ -580,6 +587,7 @@ Where:
 | `--node-env KEY=VALUE`                | none                           | per run      | repeatable; node environment                                                                  |
 | `--leader-trace`, `--no-leader-trace` | off                            | per run      | leader trace CSVs and plots                                                                   |
 | `--submit-nodes`                      | nodes                          | per run      | nodes receiving txs, 1..nodes                                                                 |
+| `--slow-nodes`, `--slow-cores`        | off                            | per run      | the last N validator-only nodes run espresso-node on C cores                                  |
 | `--latency`                           | `off`                          | per run      | `off`, `decaf-2025`, `decaf-2026`, `mainnet`; `decaf-2025` with `--chaos`                     |
 | `--no-intra-latency`                  | off                            | per run      | with `--latency`: no same-location delay                                                      |
 | `--tcp-cc`                            | bbr                            | per run      | with `--latency`: TCP congestion control, `bbr`, `cubic`, `bbr_hold` or `bbr3`                |
