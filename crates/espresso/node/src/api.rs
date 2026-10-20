@@ -7784,7 +7784,8 @@ mod test {
 
         let deadline = Instant::now() + Duration::from_secs(180);
         let start = wait_for_state_start(&db, deadline).await?;
-        check_state_start(expected, start, pruned, tip)?;
+        let state_start = db.read().await?.load_state_start_height().await?;
+        check_state_start(expected, start, state_start, pruned, tip)?;
         let past = start.max(pruned) + PRUNED_START_EPOCH_HEIGHT;
         wait_for_state_head_above(&db, past, start, deadline).await?;
         let lowest = lowest_block_tree_node(&db).await?;
@@ -7969,13 +7970,19 @@ mod test {
     }
 
     /// Check that the state loop started where `expected` says, given the data pruned height and
-    /// the tip when the query node started.
+    /// the tip when the query node started, and that it recorded a start from a boundary.
     fn check_state_start(
         expected: EmptyStateStart,
         start: u64,
+        state_start: Option<u64>,
         pruned: u64,
         tip: u64,
     ) -> anyhow::Result<()> {
+        let recorded = (expected == EmptyStateStart::RecentBoundary).then_some(start);
+        ensure!(
+            state_start == recorded,
+            "the recorded state start is {state_start:?}, not {recorded:?}"
+        );
         match expected {
             // The boundary is recent only if the node's first local block was the consensus tip,
             // not a lower block it filled in first.

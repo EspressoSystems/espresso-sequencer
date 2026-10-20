@@ -154,6 +154,10 @@ where
     async fn load_state_pruned_height(&self) -> anyhow::Result<Option<u64>> {
         self.data_source.load_state_pruned_height().await
     }
+
+    async fn load_state_start_height(&self) -> anyhow::Result<Option<u64>> {
+        self.data_source.load_state_start_height().await
+    }
 }
 
 #[async_trait]
@@ -453,6 +457,10 @@ where
 
     async fn set_state_pruned_height(&mut self, height: u64) -> anyhow::Result<()> {
         self.data_source.set_state_pruned_height(height).await
+    }
+
+    async fn set_state_start_height(&mut self, height: u64) -> anyhow::Result<()> {
+        self.data_source.set_state_start_height(height).await
     }
 
     async fn insert_merkle_nodes(

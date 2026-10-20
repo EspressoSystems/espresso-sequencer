@@ -439,6 +439,9 @@ where
     {
         last_height = boundary;
     }
+    if last_height > 0 && empty_state_start == EmptyStateStart::Genesis {
+        report_incomplete_trees(&*storage).await;
+    }
     let current_height = storage.block_height().await.ok();
     tracing::info!(
         node_id = instance.node_id,
@@ -485,6 +488,26 @@ where
 
     follow_leaves(&storage, &instance, &provider, parent_leaf, parent_state).await;
     Ok(())
+}
+
+/// Archive nodes and nodes without a pruner are meant to have complete trees, which a state that
+/// started from a boundary snapshot, as on a node that was pruned before, never gets: the loop only
+/// moves forward. So say so.
+async fn report_incomplete_trees<T>(storage: &T)
+where
+    T: SequencerStateDataSource,
+{
+    match storage.load_state_start_height().await {
+        Ok(Some(start)) => tracing::error!(
+            start,
+            "the merklized state started from a snapshot at height {start}, not from genesis, so \
+             its trees lack block proofs below it and fee accounts that no block since has \
+             touched; complete trees need a replay from genesis, which runs only on a database \
+             with no merklized state"
+        ),
+        Ok(None) => {},
+        Err(err) => tracing::warn!("failed to load the state start height: {err:#}"),
+    }
 }
 
 /// Run `f` until it succeeds. An error would end the loop for good, possibly after a seed that
@@ -680,7 +703,9 @@ async fn fetch_boundary_state(
 /// Store `state`, the state at the epoch boundary `height`, as the loop's head snapshot. The reward
 /// tree goes first: the loop reads it at the head when it resumes, so a head without it would fail
 /// every start. No state is stored below the boundary, so the state pruned height goes just below
-/// it: queries for lower heights then fail as pruned, not on nodes that are missing.
+/// it: queries for lower heights then fail as pruned, not on nodes that are missing. The boundary
+/// is also recorded as where the state starts, so that a node meant to have complete trees can tell
+/// that it does not.
 async fn store_boundary_snapshot<T>(
     storage: &T,
     height: u64,
@@ -715,6 +740,11 @@ where
     )
     .await
     .context("setting state pruned height")?;
+    UpdateStateData::<SeqTypes, _, { BlockMerkleTree::ARITY }>::set_state_start_height(
+        &mut tx, height,
+    )
+    .await
+    .context("setting state start height")?;
     tx.commit().await
 }
 

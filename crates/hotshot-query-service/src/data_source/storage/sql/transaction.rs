@@ -704,6 +704,7 @@ impl Transaction<Prune> {
 impl<Mode> Transaction<Mode> {
     pub(super) const PRUNED_HEIGHT_ID: i32 = 1;
     pub(super) const STATE_PRUNED_HEIGHT_ID: i32 = 2;
+    const STATE_START_HEIGHT_ID: i32 = 3;
 }
 
 /// Query service specific mutations.
@@ -969,6 +970,17 @@ impl<Types: NodeType, State: MerklizedState<Types, ARITY>, const ARITY: usize>
         Ok(())
     }
 
+    async fn set_state_start_height(&mut self, height: u64) -> anyhow::Result<()> {
+        self.upsert(
+            "pruned_height",
+            ["id", "last_height"],
+            ["id"],
+            [(Self::STATE_START_HEIGHT_ID, height as i64)],
+        )
+        .await
+        .context("updating state start height")
+    }
+
     async fn insert_merkle_nodes(
         &mut self,
         proof: MerkleProof<State::Entry, State::Key, State::T, ARITY>,
@@ -1114,6 +1126,19 @@ impl<Mode: TransactionMode> PrunedHeightStorage for Transaction<Mode> {
                 .fetch_optional(self.as_mut())
                 .await
                 .context("loading state pruned height")?
+        else {
+            return Ok(None);
+        };
+        Ok(Some(height as u64))
+    }
+
+    async fn load_state_start_height(&mut self) -> anyhow::Result<Option<u64>> {
+        let Some((height,)) =
+            query_as::<(i64,)>("SELECT last_height FROM pruned_height WHERE id = $1 LIMIT 1")
+                .bind(Self::STATE_START_HEIGHT_ID)
+                .fetch_optional(self.as_mut())
+                .await
+                .context("loading state start height")?
         else {
             return Ok(None);
         };

@@ -255,7 +255,8 @@ pub struct Options {
     /// - interval: 1 hour
     ///
     /// A pruned node with no merklized state starts it from a recent epoch boundary. Its trees then
-    /// lack block proofs below that boundary and fee accounts that no block after it touched.
+    /// lack block proofs below that boundary and fee accounts that no block after it touched, also
+    /// after a switch to `--archive`.
     #[clap(long, env = "ESPRESSO_NODE_DATABASE_PRUNE")]
     pub(crate) prune: bool,
 
