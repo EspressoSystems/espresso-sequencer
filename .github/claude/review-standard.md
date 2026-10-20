@@ -19,8 +19,6 @@ How to look for bugs, whatever the focus area:
    - Check for potential security vulnerabilities
    - Validate input sanitization
    - Review authentication/authorization logic
-   - Flag credentials (RPC URLs with API keys, private keys, tokens) that can reach logs, error messages, metrics,
-     telemetry or API responses
    - For each security finding, say who can trigger it: any peer, an unauthenticated HTTP caller, L1 data, a staked
      validator, or an operator or admin key holder
 
