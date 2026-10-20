@@ -584,15 +584,11 @@ where
     C: ApiContext,
 {
     let epoch_height = instance.epoch_height.filter(|height| *height > 0)?;
-    // A database error here would end the loop for good, so this read and the store below retry
-    // until they succeed.
-    let pruned = loop {
-        match storage.load_pruned_height().await {
-            Ok(pruned) => break pruned.unwrap_or(0),
-            Err(err) => tracing::warn!("failed to load the data pruned height: {err:#}"),
-        }
-        sleep(BOUNDARY_RETRY_INTERVAL).await;
-    };
+    let pruned = retry_until_ok("loading the data pruned height", || {
+        storage.load_pruned_height()
+    })
+    .await
+    .unwrap_or(0);
     // Each request is sent once, because this loop retries: peers never answer a request for a
     // boundary they have pruned, and the next try then picks the boundary again from the tip. Each
     // try passes its number on, so that peers get longer to answer.
@@ -626,13 +622,11 @@ where
     };
     let height = leaf.height();
     // Every write is an upsert, so a retry after a partial store is safe.
-    while let Err(err) = store_boundary_snapshot(&**storage, height, &state).await {
-        tracing::error!(
-            height,
-            "storing the boundary snapshot failed, retrying: {err:#}"
-        );
-        sleep(BOUNDARY_RETRY_INTERVAL).await;
-    }
+    retry_until_ok(
+        &format!("storing the boundary snapshot at height {height}"),
+        || store_boundary_snapshot(&**storage, height, &state),
+    )
+    .await;
     tracing::info!(
         height,
         pruned,
