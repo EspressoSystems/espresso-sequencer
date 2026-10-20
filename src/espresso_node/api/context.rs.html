@@ -7,7 +7,7 @@
 <a href=#7 id=7 data-nosnippet>7</a><span class="kw">use </span>::light_client::{
 <a href=#8 id=8 data-nosnippet>8</a>    LightClient,
 <a href=#9 id=9 data-nosnippet>9</a>    client::{FallbackClient, QueryServiceClient},
-<a href=#10 id=10 data-nosnippet>10</a>    storage::SqliteStorage,
+<a href=#10 id=10 data-nosnippet>10</a>    storage::SqlStorage,
 <a href=#11 id=11 data-nosnippet>11</a>};
 <a href=#12 id=12 data-nosnippet>12</a><span class="kw">use </span>async_lock::RwLock;
 <a href=#13 id=13 data-nosnippet>13</a><span class="kw">use </span>async_trait::async_trait;
@@ -34,7 +34,7 @@
 <a href=#34 id=34 data-nosnippet>34</a>    state_signature::StateSignatureMemStorage,
 <a href=#35 id=35 data-nosnippet>35</a>};
 <a href=#36 id=36 data-nosnippet>36</a>
-<a href=#37 id=37 data-nosnippet>37</a><span class="kw">pub type </span>NodeLightClient = LightClient&lt;SqliteStorage, FallbackClient&lt;QueryServiceClient&gt;&gt;;
+<a href=#37 id=37 data-nosnippet>37</a><span class="kw">pub type </span>NodeLightClient = LightClient&lt;SqlStorage, FallbackClient&lt;QueryServiceClient&gt;&gt;;
 <a href=#38 id=38 data-nosnippet>38</a>
 <a href=#39 id=39 data-nosnippet>39</a><span class="kw">pub type </span>Delta = &lt;ValidatedState <span class="kw">as </span>hotshot_types::traits::ValidatedState&lt;SeqTypes&gt;&gt;::Delta;
 <a href=#40 id=40 data-nosnippet>40</a>

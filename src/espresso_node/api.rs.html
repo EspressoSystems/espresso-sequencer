@@ -4,7 +4,7 @@
 <a href=#4 id=4 data-nosnippet>4</a>    LightClient,
 <a href=#5 id=5 data-nosnippet>5</a>    client::{FallbackClient, QueryServiceClient},
 <a href=#6 id=6 data-nosnippet>6</a>    state::{Genesis, LightClientOptions},
-<a href=#7 id=7 data-nosnippet>7</a>    storage::LightClientSqliteOptions,
+<a href=#7 id=7 data-nosnippet>7</a>    storage::LightClientDbOptions,
 <a href=#8 id=8 data-nosnippet>8</a>};
 <a href=#9 id=9 data-nosnippet>9</a><span class="kw">use </span>alloy::primitives::U256;
 <a href=#10 id=10 data-nosnippet>10</a><span class="kw">use </span>anyhow::{Context, bail, ensure};
@@ -1711,7 +1711,7 @@
 <a href=#1711 id=1711 data-nosnippet>1711</a>    state: ApiState&lt;C&gt;,
 <a href=#1712 id=1712 data-nosnippet>1712</a>    client: FallbackClient&lt;QueryServiceClient&gt;,
 <a href=#1713 id=1713 data-nosnippet>1713</a>    opt: LightClientOptions,
-<a href=#1714 id=1714 data-nosnippet>1714</a>    db_opt: LightClientSqliteOptions,
+<a href=#1714 id=1714 data-nosnippet>1714</a>    db_opt: LightClientDbOptions,
 <a href=#1715 id=1715 data-nosnippet>1715</a>}
 <a href=#1716 id=1716 data-nosnippet>1716</a>
 <a href=#1717 id=1717 data-nosnippet>1717</a><span class="kw">impl</span>&lt;C: ApiContext&gt; LightClientProvider&lt;C&gt; {
@@ -1719,7 +1719,7 @@
 <a href=#1719 id=1719 data-nosnippet>1719</a>        peers: <span class="kw">impl </span>IntoIterator&lt;Item = Url&gt;,
 <a href=#1720 id=1720 data-nosnippet>1720</a>        state: ApiState&lt;C&gt;,
 <a href=#1721 id=1721 data-nosnippet>1721</a>        opt: LightClientOptions,
-<a href=#1722 id=1722 data-nosnippet>1722</a>        db_opt: LightClientSqliteOptions,
+<a href=#1722 id=1722 data-nosnippet>1722</a>        db_opt: LightClientDbOptions,
 <a href=#1723 id=1723 data-nosnippet>1723</a>    ) -&gt; anyhow::Result&lt;<span class="self">Self</span>&gt; {
 <a href=#1724 id=1724 data-nosnippet>1724</a>        <span class="kw">let </span>client = FallbackClient::new(peers.into_iter().map(QueryServiceClient::new).collect())<span class="question-mark">?</span>;
 <a href=#1725 id=1725 data-nosnippet>1725</a>        <span class="prelude-val">Ok</span>(<span class="self">Self </span>{
@@ -1753,7 +1753,7 @@
 <a href=#1753 id=1753 data-nosnippet>1753</a>            .clone()
 <a href=#1754 id=1754 data-nosnippet>1754</a>            .connect()
 <a href=#1755 id=1755 data-nosnippet>1755</a>            .<span class="kw">await
-<a href=#1756 id=1756 data-nosnippet>1756</a>            </span>.context(<span class="string">"creating SQLite database for light client"</span>)<span class="question-mark">?</span>;
+<a href=#1756 id=1756 data-nosnippet>1756</a>            </span>.context(<span class="string">"opening the light client database"</span>)<span class="question-mark">?</span>;
 <a href=#1757 id=1757 data-nosnippet>1757</a>        <span class="kw">let </span>chain_id = ctx.node_state().genesis_chain_config.chain_id;
 <a href=#1758 id=1758 data-nosnippet>1758</a>        <span class="kw">let </span>genesis = light_client_genesis(<span class="kw-2">&amp;</span>ctx.network_config(), chain_id);
 <a href=#1759 id=1759 data-nosnippet>1759</a>        <span class="prelude-val">Ok</span>(Arc::new(LightClient::from_genesis_with_options(

@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["WRITE_BACKOFF","WRITE_RETRY_MAX"],"enum":["LeafRequest"],"struct":["LightClientSqliteOptions","Recency","SqliteStorage"],"trait":["Storage"]};
+window.SIDEBAR_ITEMS = {"constant":["WRITE_BACKOFF","WRITE_RETRY_MAX"],"enum":["DbPool","LeafRequest","LightClientDbOptions"],"macro":[["with_pool",1]],"struct":["LightClientPostgresOptions","LightClientSqliteOptions","Recency","SqlStorage"],"trait":["Storage"]};

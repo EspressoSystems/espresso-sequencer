@@ -14,7 +14,7 @@
 <a href=#14 id=14 data-nosnippet>14</a>    LightClient,
 <a href=#15 id=15 data-nosnippet>15</a>    client::{FallbackClient, QueryServiceClient},
 <a href=#16 id=16 data-nosnippet>16</a>    state::{Genesis <span class="kw">as </span>LightClientGenesis, LightClientOptions},
-<a href=#17 id=17 data-nosnippet>17</a>    storage::LightClientSqliteOptions,
+<a href=#17 id=17 data-nosnippet>17</a>    storage::LightClientDbOptions,
 <a href=#18 id=18 data-nosnippet>18</a>};
 <a href=#19 id=19 data-nosnippet>19</a><span class="kw">use </span>alloy::primitives::U256;
 <a href=#20 id=20 data-nosnippet>20</a><span class="kw">use </span>anyhow::{Context, anyhow, bail, ensure};
@@ -79,7 +79,7 @@
 <a href=#79 id=79 data-nosnippet>79</a>    <span class="doccomment">/// Older heights are left to the query service's backfill.
 <a href=#80 id=80 data-nosnippet>80</a>    </span><span class="kw">pub </span>max_blocks_per_poll: u64,
 <a href=#81 id=81 data-nosnippet>81</a>    <span class="kw">pub </span>light_client: LightClientOptions,
-<a href=#82 id=82 data-nosnippet>82</a>    <span class="kw">pub </span>light_client_db: LightClientSqliteOptions,
+<a href=#82 id=82 data-nosnippet>82</a>    <span class="kw">pub </span>light_client_db: LightClientDbOptions,
 <a href=#83 id=83 data-nosnippet>83</a>    <span class="doccomment">/// Derived from the network config when unset.
 <a href=#84 id=84 data-nosnippet>84</a>    </span><span class="kw">pub </span>light_client_genesis: <span class="prelude-ty">Option</span>&lt;LightClientGenesis&gt;,
 <a href=#85 id=85 data-nosnippet>85</a>}
