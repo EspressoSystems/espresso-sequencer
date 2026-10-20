@@ -137,7 +137,9 @@ def checkOne (δ : Nat) (coverage : Option (IO.Ref Coverage)) (path : System.Fil
           return .unreadable s!"step {n} released more outputs than it has"
         let ms := moments h time.steps time.releases
         if let some cov := coverage then
-          cov.modify (·.add (said.configFor h) leader ⟨said.node⟩ h ms)
+          -- Counted outside the reference, which the other traces' tasks wait on.
+          let mine := ({} : Coverage).add (said.configFor h) leader ⟨said.node⟩ h ms
+          cov.modify (·.merge mine)
         let faults := promptFaults (said.configFor h) leader ⟨said.node⟩ ms time.ended δ
         let timers := timerFaults (said.configFor h) ⟨said.node⟩ ms time.ended δ
         let late := lateness describeObligation text ms δ faults
@@ -182,8 +184,15 @@ public def main (args : List String) : IO UInt32 := do
   let mut skipped := 0
   let mut signingOnly := 0
   let mut excused := 0
-  for path in traces do
-    match ← checkOne δ coverage path with
+  -- Each trace in a task of its own, so the checks use every core.
+  let tasks ← traces.mapM fun path => IO.asTask (checkOne δ coverage path)
+  for (path, task) in traces.zip tasks do
+    -- A trace that cannot be read, gone since it was listed for one, is reported
+    -- with the others rather than ending the run.
+    let finding := match task.get with
+      | .ok finding => finding
+      | .error e => .unreadable (toString e)
+    match finding with
     | .unreadable e =>
       failed := true
       IO.println s!"unreadable: {path}: {e}"

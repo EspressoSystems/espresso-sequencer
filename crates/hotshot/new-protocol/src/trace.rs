@@ -47,8 +47,8 @@
 //! all the same.
 
 use std::{
-    cell::Cell,
-    collections::BTreeMap,
+    cell::{Cell, RefCell},
+    collections::{BTreeMap, HashMap},
     fs::create_dir_all,
     path::PathBuf,
     sync::atomic::{AtomicUsize, Ordering},
@@ -91,7 +91,18 @@ const UNSIGNED_LOCKS: &str = "# timeouts sign no lock";
 /// A failing test has left the path it was written for, often because it was
 /// written for another version, so its run says nothing about whether the node
 /// conforms. A checker leaves such a run out rather than report its breaks.
+///
+/// The note is best-effort: it is written when the recorder drops while its
+/// thread panics. A test that drops the recorder before it fails, fails by
+/// returning an error, or panics on another thread leaves no note.
 const TEST_FAILED: &str = "# test failed";
+
+/// The note saying no certificate for the anchor was named, so the locks that
+/// stand for it are written as `null`.
+///
+/// The model's lock is a certificate, so a checker cannot read such a trace.
+/// The note says why, rather than leaving only the decoding error.
+const ANCHOR_UNKNOWN: &str = "# anchor lock unknown: no certificate for the anchor was named";
 
 /// Distinguishes recorders sharing a label.
 ///
@@ -150,6 +161,10 @@ pub struct Recorder {
     /// A certificate for the anchor to name when the run gives none, as
     /// [`Recorder::fallback_anchor`] was told.
     fallback_anchor: Option<String>,
+    /// The timeout evidence of each proposal the run had, by its identity.
+    ///
+    /// A decided leaf no longer carries it, and the model's decided block does.
+    evidence: RefCell<HashMap<String, String>>,
     /// When the recorder was made, which step times count from.
     started: Instant,
 }
@@ -181,6 +196,7 @@ impl Recorder {
             anchor_lock: None,
             unsigned_locks: Cell::new(false),
             fallback_anchor: None,
+            evidence: RefCell::new(HashMap::new()),
             started: Instant::now(),
         };
         let Ok(dir) = std::env::var(TRACE_DIR) else {
@@ -206,6 +222,7 @@ impl Recorder {
             anchor_lock: None,
             unsigned_locks: Cell::new(false),
             fallback_anchor: None,
+            evidence: RefCell::new(HashMap::new()),
             started: Instant::now(),
         }
     }
@@ -436,12 +453,15 @@ impl Recorder {
             steps.push((carried, Vec::new()));
         }
 
+        // The input first: a block decided in the same step is written with the
+        // timeout evidence of the proposal this input carries.
+        let taken = self.input_json(input);
         let emitted: Vec<String> = outputs
             .iter()
             .copied()
             .filter_map(|o| self.output_json(o))
             .collect();
-        match self.input_json(input) {
+        match taken {
             Ok(json) => steps.push((json, emitted)),
             Err(dropped) => {
                 // The step cannot be written, because the model has no such
@@ -465,6 +485,26 @@ impl Recorder {
         for (input, outputs) in steps {
             self.push_step(input, outputs, t);
         }
+    }
+
+    /// Record a proposal the node took and refused before consensus saw it, with
+    /// the share it came with if any: a step that emits nothing.
+    pub fn refused<T: NodeType>(
+        &mut self,
+        sender: &T::SignatureKey,
+        proposal: &Proposal<T>,
+        share: Option<&VidDisperseShare2<T>>,
+    ) {
+        if self.path.is_none() {
+            return;
+        }
+        let t = self.now();
+        let body = self.proposal_json(proposal);
+        let input = match share {
+            Some(share) => paired_proposal_json(body, share, Some(ident(sender))),
+            None => bare_proposal_json(&ident(sender), body),
+        };
+        self.push_step(input, Vec::new(), t);
     }
 
     /// Write a step, and keep it as the one later outputs join.
@@ -573,20 +613,36 @@ impl Drop for Recorder {
         }
         let mut text = self.lines.join("\n");
         text.push('\n');
-        let text = match (&self.anchor_lock, &self.fallback_anchor) {
-            (Some(anchor), _) => text.replace(ANCHOR_LOCK, anchor),
-            (None, Some(fallback)) if text.contains(ANCHOR_LOCK) => text
-                .replacen(
-                    "# trace {",
-                    &format!("# trace {{\"anchorCert\":{fallback},"),
-                    1,
-                )
-                .replace(ANCHOR_LOCK, fallback),
-            (None, _) => text.replace(ANCHOR_LOCK, "null"),
-        };
+        let text = fill_anchor_lock(
+            &text,
+            self.anchor_lock.as_deref(),
+            self.fallback_anchor.as_deref(),
+        );
         if let Err(err) = std::fs::write(path, text) {
             eprintln!("trace: cannot write {}: {err}", path.display());
         }
+    }
+}
+
+/// `text` with the placeholder for the anchor's certificate filled in.
+///
+/// With no certificate named for the anchor, `fallback` is used and written into
+/// the identity line, so the checker holds it too. With neither, the locks are
+/// written as `null` and the trace says why.
+fn fill_anchor_lock(text: &str, anchor: Option<&str>, fallback: Option<&str>) -> String {
+    if !text.contains(ANCHOR_LOCK) {
+        return text.to_string();
+    }
+    match (anchor, fallback) {
+        (Some(anchor), _) => text.replace(ANCHOR_LOCK, anchor),
+        (None, Some(fallback)) => text
+            .replacen(
+                "# trace {",
+                &format!("# trace {{\"anchorCert\":{fallback},"),
+                1,
+            )
+            .replace(ANCHOR_LOCK, fallback),
+        (None, None) => format!("{}{ANCHOR_UNKNOWN}\n", text.replace(ANCHOR_LOCK, "null")),
     }
 }
 
@@ -747,11 +803,14 @@ impl Recorder {
             ConsensusInput::DrbResult(..) => return Err(Dropped("DrbResult")),
             ConsensusInput::ReVote(message) => {
                 let revote = &message.revote;
+                // Unnamed when the node's membership does not have the request's
+                // epoch, as for a fetched proposal.
                 let sender = self
                     .led
                     .get(&(revote.epoch, revote.view))
-                    .cloned()
-                    .unwrap_or_else(|| "null".to_string());
+                    .filter(|named| *named != "unknown")
+                    .map_or(NO_SENDER, String::as_str)
+                    .to_string();
                 tagged(
                     "revote",
                     obj(&[("sender", sender), ("r", self.revote_json(revote))]),
@@ -861,7 +920,7 @@ impl Recorder {
                 let cert2 = cert2.as_ref()?;
                 let blocks: Vec<String> = leaves
                     .iter()
-                    .map(|l| leaf_json(l, self.epoch_height))
+                    .map(|l| leaf_json(l, self.epoch_height, &self.evidence.borrow()))
                     .collect();
                 return Some(tagged(
                     "decided",
@@ -884,22 +943,21 @@ impl Recorder {
 
     /// A proposal we sent or received.
     fn proposal_json<T: NodeType>(&self, proposal: &Proposal<T>) -> String {
+        let identity = ident(&crate::helpers::proposal_commitment(proposal));
+        let evidence = match &proposal.view_change_evidence {
+            Some(tc) => self.timeout_cert_json(tc),
+            None => "null".to_string(),
+        };
+        self.evidence
+            .borrow_mut()
+            .insert(identity.clone(), evidence.clone());
         obj(&[
             ("blockHeader", header_json::<T>(&proposal.block_header)),
             ("viewNumber", view_json(proposal.view_number)),
             ("epoch", proposal.epoch.to_string()),
             ("parentCert", cert1_json_raw(&proposal.justify_qc)),
-            (
-                "timeoutEvidence",
-                match &proposal.view_change_evidence {
-                    Some(tc) => self.timeout_cert_json(tc),
-                    None => "null".to_string(),
-                },
-            ),
-            (
-                "identity",
-                ident(&crate::helpers::proposal_commitment(proposal)),
-            ),
+            ("timeoutEvidence", evidence),
+            ("identity", identity),
         ])
     }
 
@@ -1044,9 +1102,19 @@ fn header_json<T: NodeType>(header: &T::BlockHeader) -> String {
 
 /// A decided leaf, as the model's `Block`.
 ///
-/// Only the view numbers are compared, so the remaining fields are filled as
-/// faithfully as a leaf allows and no further.
-fn leaf_json<T: NodeType>(leaf: &Leaf2<T>, epoch_height: u64) -> String {
+/// The model compares a decided block with the proposal the node holds, field by
+/// field. A leaf does not carry the proposal's timeout evidence, so it is taken
+/// from the proposal of the same identity the run had, as `evidence` maps them.
+fn leaf_json<T: NodeType>(
+    leaf: &Leaf2<T>,
+    epoch_height: u64,
+    evidence: &HashMap<String, String>,
+) -> String {
+    let identity = ident(&leaf.commit());
+    let timeout_evidence = evidence
+        .get(&identity)
+        .cloned()
+        .unwrap_or_else(|| "null".to_string());
     obj(&[
         ("blockHeader", header_json::<T>(leaf.block_header())),
         ("viewNumber", view_json(leaf.view_number())),
@@ -1056,8 +1124,8 @@ fn leaf_json<T: NodeType>(leaf: &Leaf2<T>, epoch_height: u64) -> String {
                 .map_or_else(|| "0".to_string(), |e| e.to_string()),
         ),
         ("parentCert", cert1_json_raw(leaf.justify_qc())),
-        ("timeoutEvidence", "null".to_string()),
-        ("identity", ident(&leaf.commit())),
+        ("timeoutEvidence", timeout_evidence),
+        ("identity", identity),
     ])
 }
 
@@ -1161,4 +1229,46 @@ fn quoted(text: &str) -> String {
 
 fn tagged(tag: &str, body: String) -> String {
     obj(&[(tag, body)])
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{ANCHOR_LOCK, ANCHOR_UNKNOWN, fill_anchor_lock};
+
+    /// A trace whose identity line names no anchor, and whose step has a lock
+    /// standing for the anchor's certificate.
+    fn trace() -> String {
+        format!("# trace {{\"node\":1}}\n{{\"lock\":{ANCHOR_LOCK}}}\n")
+    }
+
+    #[test]
+    fn the_anchor_named_fills_the_lock() {
+        assert_eq!(
+            fill_anchor_lock(&trace(), Some("\"A\""), Some("\"F\"")),
+            "# trace {\"node\":1}\n{\"lock\":\"A\"}\n"
+        );
+    }
+
+    #[test]
+    fn the_fallback_fills_the_lock_and_the_identity_line() {
+        assert_eq!(
+            fill_anchor_lock(&trace(), None, Some("\"F\"")),
+            "# trace {\"anchorCert\":\"F\",\"node\":1}\n{\"lock\":\"F\"}\n"
+        );
+    }
+
+    #[test]
+    fn with_neither_the_lock_is_null_and_the_trace_says_why() {
+        assert_eq!(
+            fill_anchor_lock(&trace(), None, None),
+            format!("# trace {{\"node\":1}}\n{{\"lock\":null}}\n{ANCHOR_UNKNOWN}\n")
+        );
+    }
+
+    #[test]
+    fn a_trace_without_the_placeholder_is_unchanged() {
+        let text = "# trace {\"node\":1}\n{\"lock\":\"L\"}\n";
+        assert_eq!(fill_anchor_lock(text, None, Some("\"F\"")), text);
+        assert_eq!(fill_anchor_lock(text, None, None), text);
+    }
 }

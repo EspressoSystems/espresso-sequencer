@@ -24,3 +24,7 @@ Perform a comprehensive code review with the following focus areas:
    - Ensure code is properly documented
    - Verify README updates for new features
    - Check API documentation accuracy
+
+6. **Operator notes**
+   - If the change requires operator intervention and adds no `doc/operator-notes/*.md` fragment, flag it and suggest
+     the fragment. Otherwise stay silent.

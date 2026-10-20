@@ -7,7 +7,7 @@ use std::{collections::HashMap, sync::Arc, time::Duration};
 use ::light_client::{
     LightClient,
     client::{FallbackClient, QueryServiceClient},
-    storage::SqliteStorage,
+    storage::SqlStorage,
 };
 use async_lock::RwLock;
 use async_trait::async_trait;
@@ -34,7 +34,7 @@ use crate::{
     state_signature::StateSignatureMemStorage,
 };
 
-pub type NodeLightClient = LightClient<SqliteStorage, FallbackClient<QueryServiceClient>>;
+pub type NodeLightClient = LightClient<SqlStorage, FallbackClient<QueryServiceClient>>;
 
 pub type Delta = <ValidatedState as hotshot_types::traits::ValidatedState<SeqTypes>>::Delta;
 
