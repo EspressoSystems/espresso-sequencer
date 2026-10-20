@@ -6154,50 +6154,17 @@ mod test {
         let cfg = network.cfg.clone();
         let peer_url = api_url.clone();
         let start_query_node = move |db: persistence::sql::Options| {
-            let cfg = cfg.clone();
-            let genesis_state = genesis_state.clone();
-            let peer_url = peer_url.clone();
-            async move {
-                let opt = Options::with_port(query_port)
+            serve_query_node(
+                cfg.clone(),
+                genesis_state.clone(),
+                db.clone(),
+                db,
+                Options::with_port(query_port)
                     .catchup(Default::default())
-                    .light_client(Default::default())
-                    .query_sql(
-                        Query {
-                            peers: vec![peer_url.clone()],
-                            ..Default::default()
-                        },
-                        db.clone(),
-                    );
-                let ctx = opt
-                    .serve(move |metrics, consumer, storage| {
-                        async move {
-                            Ok(cfg
-                                .init_node(
-                                    1,
-                                    genesis_state,
-                                    db,
-                                    Some(StatePeers::<SequencerApiVersion>::from_urls(
-                                        vec![peer_url],
-                                        Default::default(),
-                                        Duration::from_secs(2),
-                                        &NoMetrics,
-                                    )),
-                                    storage,
-                                    &*metrics,
-                                    test_helpers::STAKE_TABLE_CAPACITY_FOR_TEST,
-                                    consumer,
-                                    TEST_UPGRADE,
-                                    Default::default(),
-                                )
-                                .await)
-                        }
-                        .boxed()
-                    })
-                    .await
-                    .expect("second query node should start");
-                ctx.start_consensus().await;
-                ctx
-            }
+                    .light_client(Default::default()),
+                vec![peer_url.clone()],
+                peer_url.clone(),
+            )
         };
 
         let mut query_node = start_query_node(tmp_options(&storage[1])).await;
@@ -7334,49 +7301,15 @@ mod test {
             let db_opt = db_opt.clone();
             let api_url = api_url.clone();
             move || {
-                let cfg = cfg.clone();
-                let genesis_state = genesis_state.clone();
-                let node_persistence = node_persistence.clone();
-                let db_opt = db_opt.clone();
-                let api_url = api_url.clone();
-                async move {
-                    let opt = Options::with_port(query_port).query_sql(
-                        Query {
-                            peers: vec![api_url.clone()],
-                            ..Default::default()
-                        },
-                        db_opt,
-                    );
-                    let ctx = opt
-                        .serve(move |metrics, consumer, storage| {
-                            async move {
-                                Ok(cfg
-                                    .init_node(
-                                        1,
-                                        genesis_state,
-                                        node_persistence,
-                                        Some(StatePeers::<StaticVersion<0, 1>>::from_urls(
-                                            vec![api_url],
-                                            Default::default(),
-                                            Duration::from_secs(2),
-                                            &NoMetrics,
-                                        )),
-                                        storage,
-                                        &*metrics,
-                                        STAKE_TABLE_CAPACITY_FOR_TEST,
-                                        consumer,
-                                        TEST_UPGRADE,
-                                        Default::default(),
-                                    )
-                                    .await)
-                            }
-                            .boxed()
-                        })
-                        .await
-                        .expect("query node should start");
-                    ctx.start_consensus().await;
-                    ctx
-                }
+                serve_query_node(
+                    cfg.clone(),
+                    genesis_state.clone(),
+                    node_persistence.clone(),
+                    db_opt.clone(),
+                    Options::with_port(query_port),
+                    vec![api_url.clone()],
+                    api_url.clone(),
+                )
             }
         };
 
@@ -7568,49 +7501,15 @@ mod test {
             let db_opt = db_opt.clone();
             let api_url = api_url.clone();
             move |availability_peers: Vec<Url>| {
-                let cfg = cfg.clone();
-                let genesis_state = genesis_state.clone();
-                let node_persistence = node_persistence.clone();
-                let db_opt = db_opt.clone();
-                let api_url = api_url.clone();
-                async move {
-                    let opt = Options::with_port(query_port).query_sql(
-                        Query {
-                            peers: availability_peers,
-                            ..Default::default()
-                        },
-                        db_opt,
-                    );
-                    let ctx = opt
-                        .serve(move |metrics, consumer, storage| {
-                            async move {
-                                Ok(cfg
-                                    .init_node(
-                                        1,
-                                        genesis_state,
-                                        node_persistence,
-                                        Some(StatePeers::<StaticVersion<0, 1>>::from_urls(
-                                            vec![api_url],
-                                            Default::default(),
-                                            Duration::from_secs(2),
-                                            &NoMetrics,
-                                        )),
-                                        storage,
-                                        &*metrics,
-                                        STAKE_TABLE_CAPACITY_FOR_TEST,
-                                        consumer,
-                                        TEST_UPGRADE,
-                                        Default::default(),
-                                    )
-                                    .await)
-                            }
-                            .boxed()
-                        })
-                        .await
-                        .expect("query node should start");
-                    ctx.start_consensus().await;
-                    ctx
-                }
+                serve_query_node(
+                    cfg.clone(),
+                    genesis_state.clone(),
+                    node_persistence.clone(),
+                    db_opt.clone(),
+                    Options::with_port(query_port),
+                    availability_peers,
+                    api_url.clone(),
+                )
             }
         };
 
@@ -7909,44 +7808,66 @@ mod test {
             Client<ClientErr, StaticVersion<0, 1>>,
         ) {
             let query_port = reserve_tcp_port().expect("OS should have ephemeral ports available");
-            let opt = Options::with_port(query_port).query_sql(
-                Query {
-                    peers: vec![self.api_url.clone()],
-                    ..Default::default()
-                },
+            let query_node = serve_query_node(
+                self.network.cfg.clone(),
+                self.genesis_state.clone(),
+                self.persistence.clone(),
                 db_opt,
-            );
-            let cfg = self.network.cfg.clone();
-            let genesis_state = self.genesis_state.clone();
-            let node_persistence = self.persistence.clone();
-            let state_peers = api_state_peers(&self.api_url);
-            let query_node = opt
-                .serve(move |metrics, consumer, storage| {
-                    async move {
-                        Ok(cfg
-                            .init_node(
-                                1,
-                                genesis_state,
-                                node_persistence,
-                                Some(state_peers),
-                                storage,
-                                &*metrics,
-                                STAKE_TABLE_CAPACITY_FOR_TEST,
-                                consumer,
-                                TEST_UPGRADE,
-                                Default::default(),
-                            )
-                            .await)
-                    }
-                    .boxed()
-                })
-                .await
-                .expect("query node should start");
-            query_node.start_consensus().await;
+                Options::with_port(query_port),
+                vec![self.api_url.clone()],
+                self.api_url.clone(),
+            )
+            .await;
             let query_client =
                 Client::new(format!("http://localhost:{query_port}").parse().unwrap());
             (query_node, query_client)
         }
+    }
+
+    /// Start node 1 of the network `cfg` as a query node on `db_opt`. It serves the API `api`, plus
+    /// the query module. Its availability fetcher asks `availability_peers`, and its state catchup
+    /// the API node at `api_url` alone.
+    async fn serve_query_node<const N: usize>(
+        cfg: TestConfig<N>,
+        genesis_state: ValidatedState,
+        node_persistence: persistence::sql::Options,
+        db_opt: persistence::sql::Options,
+        api: Options,
+        availability_peers: Vec<Url>,
+        api_url: Url,
+    ) -> SequencerContext<<persistence::sql::Options as PersistenceOptions>::Persistence> {
+        let opt = api.query_sql(
+            Query {
+                peers: availability_peers,
+                ..Default::default()
+            },
+            db_opt,
+        );
+        let state_peers = api_state_peers(&api_url);
+        let query_node = opt
+            .serve(move |metrics, consumer, storage| {
+                async move {
+                    Ok(cfg
+                        .init_node(
+                            1,
+                            genesis_state,
+                            node_persistence,
+                            Some(state_peers),
+                            storage,
+                            &*metrics,
+                            STAKE_TABLE_CAPACITY_FOR_TEST,
+                            consumer,
+                            TEST_UPGRADE,
+                            Default::default(),
+                        )
+                        .await)
+                }
+                .boxed()
+            })
+            .await
+            .expect("query node should start");
+        query_node.start_consensus().await;
+        query_node
     }
 
     /// State peers that are just the API node at `api_url`.
