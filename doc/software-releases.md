@@ -31,8 +31,8 @@ its body on every push to `main` or `release-*`, when a PR against a release bra
 or cut, and on tracker commands. Sections:
 
 - Deployed line: the release each network runs.
-- Tag log: tags on the branch with date, commit, GitHub release state (pre-release, release, networks), new
-  operator-notes fragments and build runs.
+- Tag log: tags on the branch with date, commit, GitHub release (`-` until published, then a link with the networks),
+  new operator-notes fragments and build runs.
 - Backports from `main` to the branch: commits on `main` since the `.0` tag. A row shows ✅ when the commit is on the
   branch: its backport PR (head `backport-<PR>-to-<branch>`) merged, `git cherry` finds the same patch, a branch commit
   has the same PR number, or a `[Backport ...]` commit has the same title. Backport PR status is appended when one
@@ -48,7 +48,7 @@ ignored. `<sha>` is a commit sha prefix of at least 7 characters.
 
 | Command                  | Effect                                                                               |
 | ------------------------ | ------------------------------------------------------------------------------------ |
-| `/tag`                   | Tag the branch tip with the next patch, create a GitHub pre-release, build.          |
+| `/tag`                   | Tag the branch tip with the next patch and build it. Creates no GitHub release.      |
 | `/tag X.Y.Z.N`           | Same with an explicit tag. Must match the branch version and be new.                 |
 | `/publish X.Y.Z.N decaf` | Publish the tag to `decaf` or `mainnet`. Lines 2..n are notes for that network only. |
 | `/done <sha>`            | Mark a commit ☑️ that was ported outside the backport workflow.                      |
@@ -61,14 +61,17 @@ Marks are replayed from the issue's comment history, so the body can always be r
 ### Operator notes
 
 A PR that needs operator action adds `doc/operator-notes/<topic>.md` (template in its `README.md`); backports carry it.
-Release bodies list the fragments added or edited since the previous release: `/tag` since the previous tag (for `.0`,
-the last tag of the previous release line), `/publish` since the previous release on that network, across release lines.
-Without fragments the body says `No operator action required.` Fix a wrong fragment with a PR and tag again.
+`/publish` writes them into the release body: the fragments added or edited since the previous release on that network,
+across release lines. The first publish on a network starts at the previous tag of the line, for `.0` the last tag of
+the previous line. Without fragments the body says `No operator action required.` Fix a wrong fragment with a PR and tag
+again.
 
 ### Publishing to a network
 
-`/publish X.Y.Z.N decaf|mainnet` turns the pre-release into the release operators deploy on that network. Lines 2..n are
-notes for that network only, such as an upgrade deadline.
+`/publish X.Y.Z.N decaf|mainnet` makes the tag the release operators deploy on that network. It creates the GitHub
+release when the tag has none, and edits it otherwise. Generated notes start at the same base as the operator notes and
+follow the first publish of the tag. Lines 2..n are notes for that network only, such as an upgrade deadline. Tags that
+are never published have no release.
 
 - The title gets `[decaf]`, `[mainnet]` or both. The previous release on that network loses its marker and is marked
   superseded. Latest always follows mainnet.
@@ -77,8 +80,9 @@ notes for that network only, such as an upgrade deadline.
 - Do not edit release titles or the bot's `<!-- ... -->` markers by hand: they record what each network runs.
 - Preview without writing: `just release-publish-preview X.Y.Z.N decaf`.
 
-Operators follow releases with Watch > Custom > Releases (it also fires for `/tag` pre-releases) and look for the
-network marker in the title, or poll `GET /repos/EspressoSystems/espresso-network/releases`.
+Operators follow releases with Watch > Custom > Releases. The alert fires when a tag's first `/publish` creates the
+release. A second network's `/publish` of the same tag only edits it: the marker appears in the title and API, no alert.
+Look for the network marker in the title, or poll `GET /repos/EspressoSystems/espresso-network/releases`.
 
 ## Process
 
@@ -88,14 +92,14 @@ network marker in the title, or poll `GET /repos/EspressoSystems/espresso-networ
    get a new cut after a newer one exists, while a `MINOR` or `MAJOR` bump only applies to the highest version overall.
    An optional second argument is the source ref, default `main`. The recipe pushes the branch from your machine, since
    repository rules stop the workflow token from creating `release-*` branches, then runs the Release Branch workflow,
-   which tags `X.Y.Z.0` as a pre-release, creates the backport label and the tracker issue, and builds images. Running
-   the workflow from the Actions UI works once the branch exists, with `source_ref` set to the branch tip sha.
+   which tags `X.Y.Z.0`, creates the backport label and the tracker issue, and builds images. Running the workflow from
+   the Actions UI works once the branch exists, with `source_ref` set to the branch tip sha.
 2. Land backport PRs and fixes on the release branch. Watch the tracker checklist.
-3. Comment `/tag` on the tracker after each batch worth testing. The bot replies with the tag, the GitHub pre-release
-   and a link to the `build.yml` run.
+3. Comment `/tag` on the tracker after each batch worth testing. The bot replies with the tag and a link to the
+   `build.yml` runs.
 4. Validate the tag on devnet, or push an experimental branch for ad hoc changes.
-5. Once a tag is validated, comment `/publish X.Y.Z.N decaf`, later `/publish X.Y.Z.N mainnet`. Only releases are meant
-   for operators. Announce with the release link.
+5. Once a tag is validated, comment `/publish X.Y.Z.N decaf`, later `/publish X.Y.Z.N mainnet`. Announce with the
+   release link.
 6. Delete the release branch when it is no longer needed, shipped or abandoned. The tracker is closed with a final tag
    list and labelled `release-closed`.
 
@@ -141,11 +145,10 @@ scripts/release tag --dry-run --local --branch release-0.0.1
 
 ## Recovery
 
-`/tag` pushes the git tag first, then creates the pre-release, then dispatches `build.yml`. If a later step fails, the
-bot comments the error on the tracker and the tag stays. Finish by hand rather than tagging again:
+`/tag` pushes the git tag first, then dispatches `build.yml` and the tracker refresh. If a later step fails, the bot
+comments the error on the tracker and the tag stays. Finish by hand rather than tagging again:
 
 ```sh
-gh release create X.Y.Z.N --target <sha> --title X.Y.Z.N --generate-notes --prerelease
 gh workflow run build.yml --ref X.Y.Z.N
 ```
 
