@@ -69,8 +69,9 @@ again.
 ### Publishing to a network
 
 `/publish X.Y.Z.N decaf|mainnet` makes the tag the release operators deploy on that network. It creates the GitHub
-release when the tag has none, and edits it otherwise. Generated notes start at the same base as the operator notes and
-follow the first publish of the tag. Lines 2..n are notes for that network only, such as an upgrade deadline. Tags that
+release when the tag has none, and edits it otherwise. Every publish regenerates the "What's Changed" section
+(`<!-- whats-changed -->` markers) from the previous holder on mainnet once the release has a mainnet block, else on
+decaf. A rollback leaves it as is. Lines 2..n are notes for that network only, such as an upgrade deadline. Tags that
 are never published have no release.
 
 - The title gets `[decaf]`, `[mainnet]` or both. The previous release on that network loses its marker and is marked

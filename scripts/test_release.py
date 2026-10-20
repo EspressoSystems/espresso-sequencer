@@ -1547,6 +1547,11 @@ class Fragments(unittest.TestCase):
 # REQ:release-publish
 
 
+GENERATED = (
+    "## What's Changed\n* a in #1\n\n**Full Changelog**: https://x/compare/a...b"
+)
+
+
 def t(text: str) -> "rel.Tag":
     parsed = rel.parse_tag(text)
     assert parsed is not None
@@ -1561,6 +1566,7 @@ def plan(
     tags=None,
     date="2026-10-21",
     collect=None,
+    whats_changed=None,
 ):
     tags = tags or [t(r.tag) for r in releases]
     return rel.plan_publish(
@@ -1570,6 +1576,7 @@ def plan(
         notes,
         lambda: tags,
         collect or (lambda *_: []),
+        whats_changed or (lambda *_: GENERATED),
         date,
         REPO,
     )
@@ -1907,32 +1914,81 @@ class PlanPublish(unittest.TestCase):
         self.assertIsNone(prev)
         self.assertTrue(create.create)
         self.assertEqual(create.title, "0.7.0.5 [decaf]")
-        self.assertEqual(create.start_tag, "0.7.0.0")
         self.assertTrue(create.body.startswith("<!-- publish:decaf prev=none"))
+        self.assertIn(f"{rel.WHATS_CHANGED_OPEN}\n{GENERATED}\n", create.body)
 
-    def test_release_plan_create_starts_at_previous_holder_ok(self):
+    def test_release_plan_whats_changed_decaf_uses_decaf_prev_ok(self):
+        calls = []
         releases = published([release("0.7.0.1")], "0.7.0.1")
-        prev, (create, old) = plan(releases, "0.7.0.3", tags=[t("0.7.0.2")])
-        self.assertEqual(prev, t("0.7.0.1"))
-        self.assertTrue(create.create)
-        self.assertEqual(create.start_tag, "0.7.0.1")
-        self.assertFalse(old.create)
-        self.assertIsNone(old.start_tag)
-
-    def test_release_plan_create_rollback_has_no_start_tag_ok(self):
-        releases = published([release("0.7.0.3")], "0.7.0.3")
-        prev, (create, _old) = plan(releases, "0.7.0.1")
-        self.assertEqual(prev, t("0.7.0.3"))
-        self.assertTrue(create.create)
-        self.assertIsNone(create.start_tag)
-
-    def test_release_plan_create_rollback_starts_at_fragment_base_ok(self):
-        releases = published([release("0.7.0.3")], "0.7.0.3")
-        _prev, (create, _old) = plan(
-            releases, "0.7.0.2", tags=[t("0.7.0.1"), t("0.7.0.3")]
+        plan(
+            releases + [release("0.7.0.3")],
+            "0.7.0.3",
+            tags=[t("0.7.0.2")],
+            whats_changed=lambda *a: calls.append(a) or GENERATED,
         )
+        self.assertEqual(calls, [(t("0.7.0.3"), t("0.7.0.1"))])
+
+    def test_release_plan_whats_changed_mainnet_prev_wins_ok(self):
+        calls = []
+        releases = [
+            release("0.6.3.12", "0.6.3.12 [decaf, mainnet]"),
+            release("0.6.3.14", "0.6.3.14 [decaf]"),
+            release("0.6.3.15"),
+        ]
+        releases = published(releases, "0.6.3.15", tags=[t("0.6.3.14")])
+        releases = published(releases, "0.6.3.15", "mainnet", tags=[t("0.6.3.14")])
+        for network in ("decaf", "mainnet"):
+            plan(
+                releases,
+                "0.6.3.15",
+                network,
+                whats_changed=lambda *a: calls.append(a) or GENERATED,
+            )
+        self.assertEqual([c[1] for c in calls], [t("0.6.3.12")] * 2)
+
+    def test_release_plan_whats_changed_mainnet_without_prev_uses_previous_tag_ok(self):
+        calls = []
+        releases = published([release("0.7.0.1")], "0.7.0.1")
+        releases = published(releases + [release("0.7.0.3")], "0.7.0.3")
+        plan(
+            releases,
+            "0.7.0.3",
+            "mainnet",
+            tags=[t("0.7.0.1"), t("0.7.0.2"), t("0.7.0.3")],
+            whats_changed=lambda *a: calls.append(a) or GENERATED,
+        )
+        self.assertEqual(calls, [(t("0.7.0.3"), t("0.7.0.2"))])
+
+    def test_release_plan_whats_changed_no_prev_uses_previous_tag_ok(self):
+        calls = []
+        plan(
+            [release("0.7.0.0")],
+            "0.7.0.5",
+            whats_changed=lambda *a: calls.append(a) or GENERATED,
+        )
+        self.assertEqual(calls, [(t("0.7.0.5"), t("0.7.0.0"))])
+
+    def test_release_plan_whats_changed_rollback_untouched_ok(self):
+        calls = []
+        generate = lambda *a: calls.append(a) or GENERATED
+        marked = f"{rel.WHATS_CHANGED_OPEN}\nOLD\n{rel.WHATS_CHANGED_CLOSE}"
+        releases = published(
+            [release("0.7.0.1", body=marked), release("0.7.0.3")], "0.7.0.3"
+        )
+        _prev, (edit, *_) = plan(releases, "0.7.0.1", whats_changed=generate)
+        self.assertEqual(calls, [])
+        self.assertIn(marked, edit.body)
+
+    def test_release_plan_whats_changed_create_rollback_has_no_section_ok(self):
+        releases = published([release("0.7.0.3")], "0.7.0.3")
+        _prev, (create, _old) = plan(releases, "0.7.0.1")
         self.assertTrue(create.create)
-        self.assertEqual(create.start_tag, "0.7.0.1")
+        self.assertNotIn(rel.WHATS_CHANGED_OPEN, create.body)
+
+    def test_release_plan_whats_changed_rerun_idempotent_ok(self):
+        releases = published([release("0.7.0.1"), release("0.7.0.2")], "0.7.0.2")
+        _prev, (again,) = plan(releases, "0.7.0.2")
+        self.assertEqual(again.body, releases[1].body)
 
     def test_release_plan_create_mainnet_takes_latest_ok(self):
         _prev, (create,) = plan([release("0.7.0.0")], "0.7.0.5", "mainnet")
@@ -1941,7 +1997,6 @@ class PlanPublish(unittest.TestCase):
     def test_release_plan_existing_release_is_edited_ok(self):
         _prev, (edit,) = plan([release("0.7.0.1")], "0.7.0.1")
         self.assertFalse(edit.create)
-        self.assertIsNone(edit.start_tag)
 
     def test_release_plan_rerun_keeps_prev_date_and_notes_ok(self):
         releases = published(
@@ -2090,6 +2145,11 @@ class CmdPublish(unittest.TestCase):
                     rows
                 )
                 + "\n",
+                (
+                    "gh",
+                    "api",
+                    "repos/{owner}/{repo}/releases/generate-notes",
+                ): json.dumps({"name": "n", "body": GENERATED}),
                 ("gh", "release", "edit"): "",
                 ("curl", "-fsS"): '{"token": "anon"}',
                 ("curl", "-sS"): status,
@@ -2149,7 +2209,7 @@ class CmdPublish(unittest.TestCase):
         create = next(c for c in runner.calls if c[:3] == ["gh", "release", "create"])
         self.assertEqual(create[3], "0.7.0.2")
         self.assertIn("--verify-tag", create)
-        self.assertEqual(create[create.index("--notes-start-tag") + 1], "0.7.0.1")
+        self.assertNotIn("--generate-notes", create)
         self.assertFalse(runner.ran("gh", "release", "edit"))
         comments = [c for c in runner.calls if c[:3] == ["gh", "issue", "comment"]]
         self.assertIn("Published `0.7.0.2` on `decaf`", comments[0][-1])
@@ -2442,27 +2502,81 @@ class GhReleaseEdit(unittest.TestCase):
 class GhReleaseCreate(unittest.TestCase):
     def test_release_gh_release_create_flags_ok(self):
         runner = FakeRunner({("gh", "release", "create"): ""})
-        edit = rel.ReleaseEdit("0.7.0.1", "0.7.0.1 [mainnet]", "body", True, "0.7.0.0")
+        edit = rel.ReleaseEdit("0.7.0.1", "0.7.0.1 [mainnet]", "body", True)
         rel.Gh(runner).release_create(edit)
         call = runner.calls[-1]
         self.assertEqual(call[:4], ["gh", "release", "create", "0.7.0.1"])
-        for flag in (
-            "--verify-tag",
-            "--generate-notes",
-            "--notes-file",
-            "--latest=true",
-        ):
+        for flag in ("--verify-tag", "--notes-file", "--latest=true"):
             self.assertIn(flag, call)
-        self.assertEqual(call[call.index("--notes-start-tag") + 1], "0.7.0.0")
+        self.assertNotIn("--generate-notes", call)
+        self.assertNotIn("--notes-start-tag", call)
         self.assertEqual(call[call.index("--title") + 1], "0.7.0.1 [mainnet]")
         self.assertNotIn("--prerelease", call)
 
-    def test_release_gh_release_create_omits_start_tag_ok(self):
-        runner = FakeRunner({("gh", "release", "create"): ""})
-        edit = rel.ReleaseEdit("0.7.0.1", "0.7.0.1 [decaf]", "body", True)
-        rel.Gh(runner).release_create(edit)
-        self.assertNotIn("--notes-start-tag", runner.calls[-1])
-        self.assertIn("--latest=false", runner.calls[-1])
+    def test_release_gh_generate_notes_argv_ok(self):
+        prefix = ("gh", "api", "repos/{owner}/{repo}/releases/generate-notes")
+        runner = FakeRunner({prefix: json.dumps({"name": "n", "body": "md"})})
+        gh = rel.Gh(runner)
+        self.assertEqual(gh.generate_notes(t("0.7.0.2"), t("0.7.0.1")), "md")
+        self.assertEqual(
+            runner.calls[-1],
+            [*prefix, "-f", "tag_name=0.7.0.2", "-f", "previous_tag_name=0.7.0.1"],
+        )
+        gh.generate_notes(t("0.7.0.2"), None)
+        self.assertEqual(runner.calls[-1], [*prefix, "-f", "tag_name=0.7.0.2"])
+
+
+class WhatsChanged(unittest.TestCase):
+    SECTION = f"{rel.WHATS_CHANGED_OPEN}\nNEW\n{rel.WHATS_CHANGED_CLOSE}"
+
+    def test_release_whats_changed_replaces_legacy_section_ok(self):
+        body = (
+            "<!-- publish:decaf prev=none date=d -->\nx\n<!-- /publish:decaf -->\n\n"
+            "## What's Changed\n* old in #1\n\n\n**Full Changelog**: https://x/a...b\n"
+            "tail\n"
+        )
+        self.assertEqual(
+            rel.with_whats_changed(body, "NEW"),
+            "<!-- publish:decaf prev=none date=d -->\nx\n<!-- /publish:decaf -->\n\n"
+            f"{self.SECTION}\ntail\n",
+        )
+
+    def test_release_whats_changed_replaces_marked_section_ok(self):
+        body = f"top\n\n{rel.WHATS_CHANGED_OPEN}\nOLD\n{rel.WHATS_CHANGED_CLOSE}\n"
+        self.assertEqual(
+            rel.with_whats_changed(body, "NEW"), f"top\n\n{self.SECTION}\n"
+        )
+
+    def test_release_whats_changed_marker_in_title_ok(self):
+        body = (
+            f"top\n\n{rel.WHATS_CHANGED_OPEN}\n* a {rel.WHATS_CHANGED_CLOSE} by @x in #1\n"
+            f"* b in #2\n{rel.WHATS_CHANGED_CLOSE}\n"
+        )
+        self.assertEqual(
+            rel.with_whats_changed(body, "NEW"), f"top\n\n{self.SECTION}\n"
+        )
+
+    def test_release_whats_changed_legacy_new_contributors_ok(self):
+        body = (
+            "top\n\n## What's Changed\n* a in #1\n\n## New Contributors\n* @b\n\n"
+            "**Full Changelog**: https://x/a...b\n"
+        )
+        self.assertEqual(
+            rel.with_whats_changed(body, "NEW"), f"top\n\n{self.SECTION}\n"
+        )
+
+    def test_release_whats_changed_legacy_without_changelog_line_ok(self):
+        body = "top\n\n## What's Changed\n* a in #1\n"
+        self.assertEqual(rel.with_whats_changed(body, "NEW"), f"top\n\n{self.SECTION}")
+        body = "top\n\n## What's Changed\n* a in #1\n\n## Other\nx\n"
+        self.assertEqual(
+            rel.with_whats_changed(body, "NEW"), f"top\n\n{self.SECTION}\n## Other\nx\n"
+        )
+
+    def test_release_whats_changed_appended_when_absent_ok(self):
+        self.assertEqual(
+            rel.with_whats_changed("top\n", "NEW"), f"top\n\n{self.SECTION}\n"
+        )
 
 
 # EDGE:release-no-tags
