@@ -74,7 +74,7 @@ variable "pg_volume" {
 }
 
 variable "rds" {
-  description = "RDS PostgreSQL query database and the one-shot schedule that deletes it, or null for none."
+  description = "RDS PostgreSQL query database, deleted by the reaper schedule, or null for none."
   type = object({
     instance_class = string
     engine_version = string
@@ -82,7 +82,6 @@ variable "rds" {
     iops           = number
     mbps           = number
     parameters     = map(string)
-    delete_at      = string
   })
   default = null
 
@@ -97,4 +96,23 @@ variable "rds_password" {
   sensitive   = true
   default     = null
   description = "Master password of the rds instance; kept out of `rds` so the count expressions stay plannable."
+}
+
+variable "fargate" {
+  description = "ECS Fargate query nodes: their names. null creates no cluster and no file system."
+  type = object({
+    nodes = list(string)
+  })
+  default = null
+}
+
+variable "reaper_at" {
+  type        = string
+  default     = null
+  description = "UTC time, YYYY-MM-DDThh:mm:ss, when the schedules delete the rds instance and the efs mount target and access points; the file system follows 30 minutes later. Required with rds, which fargate needs too."
+
+  validation {
+    condition     = var.reaper_at == null || can(regex("^\\d{4}-\\d\\d-\\d\\dT\\d\\d:\\d\\d:\\d\\d$", var.reaper_at))
+    error_message = "reaper_at must look like 2026-10-01T12:30:00."
+  }
 }

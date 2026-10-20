@@ -1,7 +1,6 @@
 import argparse
 import json
 import re
-import shlex
 import signal
 import subprocess
 from datetime import datetime, timedelta
@@ -26,6 +25,7 @@ from fakes import (
     completed,
     fake_image,
     fake_preflight,
+    respond_to_pulls,
     ssh_calls,
     valid_result,
     volume_runner,
@@ -417,35 +417,6 @@ def test_the_lockout_window_counts_against_the_ttl(harness, runner):
     awsb.check_run_allowed(
         {**manifest, "expires_at": awsb.expiry_stamp(enough)}, cfg, NOW
     )
-
-
-def respond_to_pulls(runner: FakeRunner, wrong: dict[str, str]) -> None:
-    """Pulls report the requested digests except those in `wrong`; the record script echoes
-    the digests it was given."""
-
-    def pull(argv: list[str]) -> subprocess.CompletedProcess:
-        if not argv[-1].startswith("sudo timeout"):
-            return runner.default(argv)
-        script = shlex.split(argv[-1])[-1]
-        pulls = re.findall(r"docker pull (\S+)@(\S+) >&2", script)
-        names = re.findall(r"--arg name (\S+) ", script)
-        digests = {
-            name: f"{ref}@{wrong.get(name, digest)}"
-            for name, (ref, digest) in zip(names, pulls, strict=True)
-        }
-        return completed(stdout=json.dumps(digests))
-
-    def record(argv: list[str]) -> subprocess.CompletedProcess:
-        if not argv[-1].startswith("sudo timeout"):
-            return runner.default(argv)
-        script = shlex.split(argv[-1])[-1]
-        printf = next(l for l in script.splitlines() if l.startswith("printf"))
-        return completed(
-            stdout=json.dumps({"digests": json.loads(shlex.split(printf)[2])})
-        )
-
-    runner.respond("docker pull", pull)
-    runner.respond("digests.json.tmp", record)
 
 
 @pytest.fixture

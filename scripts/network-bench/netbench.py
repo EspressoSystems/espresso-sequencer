@@ -384,6 +384,9 @@ class LatencyMeta(TypedDict):
     nodes: dict[str, int]
     assignment: dict[str, str]  # node name -> location
     matrix_sha256: str
+    # Fargate nodes: their links are folded into their peers'. Absent before they were supported.
+    unshaped: NotRequired[list[int]]
+    fold: NotRequired[str]
     # Runs from before the host tuning have neither key.
     sysctls: NotRequired[dict[str, str]]
     mtu: NotRequired[int]

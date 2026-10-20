@@ -162,14 +162,27 @@ def test_plan_hosts_gives_the_first_query_nodes_the_query_role():
     "kw",
     [
         {"query_db": "volume"},
-        {"query_db": "rds"},
         {"query_db": "tmpfs"},
         {"db_modes": ("colocated", "volume")},
     ],
 )
-def test_plan_hosts_refuses_several_query_nodes_off_colocated(kw):
-    with pytest.raises(awsb.Refused, match="--query-db colocated"):
+def test_plan_hosts_refuses_several_query_nodes_off_colocated_and_rds(kw):
+    with pytest.raises(awsb.Refused, match="--query-db colocated or rds"):
         awsb.plan_hosts(small_cfg(nodes=4, query_nodes=2, **kw))
+
+
+# TEST:rds-query-nodes-2-plan-ok
+def test_plan_hosts_takes_several_query_nodes_on_rds():
+    hosts = awsb.plan_hosts(
+        small_cfg(nodes=4, query_nodes=2, query_db="rds", db_modes=("rds",))
+    )
+    assert [h["role"] for h in hosts] == [
+        "ctl",
+        "query",
+        "query",
+        "validator",
+        "validator",
+    ]
 
 
 @pytest.mark.parametrize("query_nodes", [0, 5])
@@ -1062,7 +1075,9 @@ TOFU = shutil.which("tofu")
 @pytest.mark.slow
 @pytest.mark.skipif(TOFU is None, reason="tofu/opentofu not on PATH")
 def test_tofu_validate(tmp_path):
-    """TEST:awsbench-tofu-validate-ok: `init` needs the network for the providers."""
+    """TEST:awsbench-tofu-validate-ok, TEST:fargate-tofu-validate-ok (the module holds the
+    fargate resources, inert without the `fargate` variable): `init` needs the network for
+    the providers."""
     assert TOFU is not None
     module = tmp_path / "terraform"
     shutil.copytree(HERE / "aws" / "terraform", module)

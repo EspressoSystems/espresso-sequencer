@@ -355,6 +355,12 @@ def test_tls_is_counted_by_the_load_samples_not_the_collect_query() -> None:
     assert "pid <> pg_backend_pid()" in ssl
 
 
+def test_the_samples_follow_the_database_of_the_connection() -> None:
+    """A query node's database is not always `espresso`: rds gives each its own."""
+    assert "'espresso'" not in awsb.pg_sample_sql()
+    assert "'espresso'" not in awsb.PG_STATS_SQL
+
+
 def check_aws(
     result: dict | None = None, manifest: dict | None = None, **evidence: Any
 ) -> dict:
@@ -758,6 +764,8 @@ def test_actual_cost_prices_the_observed_duration() -> None:
     lines = awsb._cost_lines(manifest["hosts"], 1800.0, None, INSTANCE_PRICES)
     assert cost["actual"] == pytest.approx(sum(line["usd"] for line in lines))
     assert cost["bound"] == manifest["estimate"]["bound_usd"]
+    assert "efs_write_gb" not in cost
+    assert not any("AWS/EFS" in " ".join(call) for call in runner.calls)
 
 
 def test_actual_cost_skips_rows_without_a_reason() -> None:
@@ -945,7 +953,7 @@ def test_collect_ebs_queries_node0_over_the_padded_window(tmp_path: Path) -> Non
     assert argv[argv.index("--end-time") + 1] == "1970-01-01T00:03:40+00:00"
     assert saved["instance_id"] == "i-000000000002"
     assert saved["metrics"]["EBSByteBalance%"] == {
-        "timestamps": [60.0, 120.0, 180.0],
+        "timestamps": [180.0, 120.0, 60.0],
         "values": [100.0, 100.0, 100.0],
     }
 
