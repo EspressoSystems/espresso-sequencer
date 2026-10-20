@@ -1017,6 +1017,10 @@ impl ValidatedState {
     ///   * Resolves [`ChainConfig`].
     ///   * Performs catchup.
     ///   * Charges fees.
+    ///
+    /// Also returns the fee accounts that catchup fetched. The [`Delta`] lists only the accounts
+    /// the block changes, so it can miss some of the fetched ones: from V0.6 on, where no fee is
+    /// charged, the block reads the fee recipient and the builders without changing them.
     pub async fn apply_header(
         &self,
         instance: &NodeState,
@@ -1025,7 +1029,7 @@ impl ValidatedState {
         proposed_header: &Header,
         version: Version,
         view_number: ViewNumber,
-    ) -> anyhow::Result<(Self, Delta, Option<RewardAmount>)> {
+    ) -> anyhow::Result<(Self, Delta, Option<RewardAmount>, Vec<FeeAccount>)> {
         // Clone state to avoid mutation. Consumer can take update
         // through returned value.
         let mut validated_state = self.clone();
@@ -1058,13 +1062,6 @@ impl ValidatedState {
                 .chain(proposed_header.fee_info().accounts())
                 .chain(l1_deposits.accounts()),
         );
-        // The delta also lists the accounts fetched here, even those the update does not change.
-        // From V0.6 on no fee is charged, so the recipient and the builders do not change. But
-        // whoever stores the new state lacked them before, so it has to store them now.
-        let mut delta = Delta {
-            fees_delta: missing_accounts.iter().copied().collect(),
-            ..Default::default()
-        };
 
         let parent_height = parent_leaf.height();
         let parent_view = parent_leaf.view_number();
@@ -1101,7 +1098,7 @@ impl ValidatedState {
                     parent_height,
                     parent_view,
                     validated_state.fee_merkle_tree.commitment(),
-                    missing_accounts,
+                    missing_accounts.clone(),
                 )
                 .await?;
 
@@ -1113,6 +1110,7 @@ impl ValidatedState {
             }
         }
 
+        let mut delta = Delta::default();
         validated_state.apply_proposal(&mut delta, parent_leaf, l1_deposits);
 
         // TODO(abdul): builder is unfunded error
@@ -1182,7 +1180,12 @@ impl ValidatedState {
             Some(Default::default())
         };
 
-        Ok((validated_state, delta, total_rewards_distributed))
+        Ok((
+            validated_state,
+            delta,
+            total_rewards_distributed,
+            missing_accounts,
+        ))
     }
 
     /// Updates the `ValidatedState` if a protocol upgrade has occurred.
@@ -1362,7 +1365,7 @@ impl HotShotState<SeqTypes> for ValidatedState {
             // timestamp drift.
             let validation_start_time = OffsetDateTime::now_utc();
 
-            let (validated_state, delta, total_rewards_distributed) = self
+            let (validated_state, delta, total_rewards_distributed, _) = self
                 // TODO We can add this logic to `ValidatedTransition` or do something similar to that here.
                 .apply_header(
                     instance,
