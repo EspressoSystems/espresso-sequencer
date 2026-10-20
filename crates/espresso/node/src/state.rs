@@ -59,7 +59,7 @@ pub(crate) async fn compute_state_update(
         parent_state.chain_config = proposed_leaf.block_header().chain_config()
     }
 
-    let (state, mut delta, total_rewards_distributed, fetched_accounts) = parent_state
+    let (state, delta, total_rewards_distributed) = parent_state
         .apply_header(
             instance,
             peers,
@@ -69,10 +69,6 @@ pub(crate) async fn compute_state_update(
             proposed_leaf.view_number(),
         )
         .await?;
-    // A caller that stores the new state stores the accounts in the delta, so add the ones the
-    // update fetched but did not change. A loop that started from a boundary snapshot holds them
-    // nowhere else, so it could not serve them, and would fetch them again after every restart.
-    delta.fees_delta.extend(fetched_accounts);
 
     // Check internal consistency.
     ensure!(

@@ -1017,10 +1017,6 @@ impl ValidatedState {
     ///   * Resolves [`ChainConfig`].
     ///   * Performs catchup.
     ///   * Charges fees.
-    ///
-    /// Also returns the fee accounts that catchup fetched. The [`Delta`] lists only the accounts
-    /// the block changes, so it can miss some of the fetched ones: from V0.6 on, where no fee is
-    /// charged, the block reads the fee recipient and the builders without changing them.
     pub async fn apply_header(
         &self,
         instance: &NodeState,
@@ -1029,7 +1025,7 @@ impl ValidatedState {
         proposed_header: &Header,
         version: Version,
         view_number: ViewNumber,
-    ) -> anyhow::Result<(Self, Delta, Option<RewardAmount>, Vec<FeeAccount>)> {
+    ) -> anyhow::Result<(Self, Delta, Option<RewardAmount>)> {
         // Clone state to avoid mutation. Consumer can take update
         // through returned value.
         let mut validated_state = self.clone();
@@ -1104,7 +1100,7 @@ impl ValidatedState {
                     parent_height,
                     parent_view,
                     validated_state.fee_merkle_tree.commitment(),
-                    missing_accounts.clone(),
+                    missing_accounts,
                 )
                 .await?;
 
@@ -1186,12 +1182,7 @@ impl ValidatedState {
             Some(Default::default())
         };
 
-        Ok((
-            validated_state,
-            delta,
-            total_rewards_distributed,
-            missing_accounts,
-        ))
+        Ok((validated_state, delta, total_rewards_distributed))
     }
 
     /// Updates the `ValidatedState` if a protocol upgrade has occurred.
@@ -1371,7 +1362,7 @@ impl HotShotState<SeqTypes> for ValidatedState {
             // timestamp drift.
             let validation_start_time = OffsetDateTime::now_utc();
 
-            let (validated_state, delta, total_rewards_distributed, _) = self
+            let (validated_state, delta, total_rewards_distributed) = self
                 // TODO We can add this logic to `ValidatedTransition` or do something similar to that here.
                 .apply_header(
                     instance,
