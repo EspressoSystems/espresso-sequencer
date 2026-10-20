@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"struct":["TestMerkleTreeMigration","TmpDb"]};
+window.SIDEBAR_ITEMS = {"struct":["TestMerkleTreeMigration","TmpDb","TmpPostgres"]};

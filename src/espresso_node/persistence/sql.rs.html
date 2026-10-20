@@ -4176,5 +4176,60 @@
 <a href=#4176 id=4176 data-nosnippet>4176</a>        <span class="kw">let </span>latest = storage.load_latest_acted_view().<span class="kw">await</span>.unwrap();
 <a href=#4177 id=4177 data-nosnippet>4177</a>        <span class="macro">assert_eq!</span>(latest, <span class="prelude-val">Some</span>(ViewNumber::new(<span class="number">19</span>)));
 <a href=#4178 id=4178 data-nosnippet>4178</a>    }
-<a href=#4179 id=4179 data-nosnippet>4179</a>}
+<a href=#4179 id=4179 data-nosnippet>4179</a>
+<a href=#4180 id=4180 data-nosnippet>4180</a>    <span class="attr">#[test_log::test(tokio::test(flavor = <span class="string">"multi_thread"</span>))]
+<a href=#4181 id=4181 data-nosnippet>4181</a>    </span><span class="kw">async fn </span>test_light_client_shares_the_node_database() {
+<a href=#4182 id=4182 data-nosnippet>4182</a>        <span class="kw">use </span>hotshot_query_service::availability::LeafId;
+<a href=#4183 id=4183 data-nosnippet>4183</a>        <span class="kw">use </span>light_client::storage::Storage <span class="kw">as _</span>;
+<a href=#4184 id=4184 data-nosnippet>4184</a>
+<a href=#4185 id=4185 data-nosnippet>4185</a>        <span class="kw">use </span><span class="kw">crate</span>::api::{data_source::DataSourceOptions <span class="kw">as _</span>, options::Query};
+<a href=#4186 id=4186 data-nosnippet>4186</a>
+<a href=#4187 id=4187 data-nosnippet>4187</a>        <span class="kw">let </span>tmp = Persistence::tmp_storage().<span class="kw">await</span>;
+<a href=#4188 id=4188 data-nosnippet>4188</a>        <span class="kw">let </span><span class="kw-2">mut </span>opt = Persistence::options(<span class="kw-2">&amp;</span>tmp);
+<a href=#4189 id=4189 data-nosnippet>4189</a>        <span class="kw">let </span>persistence = opt.create().<span class="kw">await</span>.unwrap();
+<a href=#4190 id=4190 data-nosnippet>4190</a>
+<a href=#4191 id=4191 data-nosnippet>4191</a>        <span class="kw">let </span>db = opt
+<a href=#4192 id=4192 data-nosnippet>4192</a>            .light_client_db(<span class="kw-2">&amp;</span>Query::default())
+<a href=#4193 id=4193 data-nosnippet>4193</a>            .unwrap()
+<a href=#4194 id=4194 data-nosnippet>4194</a>            .connect()
+<a href=#4195 id=4195 data-nosnippet>4195</a>            .<span class="kw">await
+<a href=#4196 id=4196 data-nosnippet>4196</a>            </span>.unwrap();
+<a href=#4197 id=4197 data-nosnippet>4197</a>        <span class="kw">let </span>leaf = light_client::testing::leaf_chain(<span class="number">0</span>..<span class="number">1</span>, versions::EPOCH_VERSION)
+<a href=#4198 id=4198 data-nosnippet>4198</a>            .<span class="kw">await
+<a href=#4199 id=4199 data-nosnippet>4199</a>            </span>.remove(<span class="number">0</span>);
+<a href=#4200 id=4200 data-nosnippet>4200</a>        db.insert_leaf(leaf.clone()).<span class="kw">await</span>.unwrap();
+<a href=#4201 id=4201 data-nosnippet>4201</a>        <span class="macro">assert_eq!</span>(
+<a href=#4202 id=4202 data-nosnippet>4202</a>            db.leaf_upper_bound(LeafId::Number(<span class="number">0</span>)).<span class="kw">await</span>.unwrap(),
+<a href=#4203 id=4203 data-nosnippet>4203</a>            <span class="prelude-val">Some</span>(leaf)
+<a href=#4204 id=4204 data-nosnippet>4204</a>        );
+<a href=#4205 id=4205 data-nosnippet>4205</a>
+<a href=#4206 id=4206 data-nosnippet>4206</a>        <span class="kw">let </span>(leaves,): (i64,) = sqlx::query_as(<span class="string">"SELECT count(*) FROM light_client.leaf"</span>)
+<a href=#4207 id=4207 data-nosnippet>4207</a>            .fetch_one(<span class="kw-2">&amp;</span>persistence.db.pool())
+<a href=#4208 id=4208 data-nosnippet>4208</a>            .<span class="kw">await
+<a href=#4209 id=4209 data-nosnippet>4209</a>            </span>.unwrap();
+<a href=#4210 id=4210 data-nosnippet>4210</a>        <span class="macro">assert_eq!</span>(leaves, <span class="number">1</span>);
+<a href=#4211 id=4211 data-nosnippet>4211</a>    }
+<a href=#4212 id=4212 data-nosnippet>4212</a>
+<a href=#4213 id=4213 data-nosnippet>4213</a>    <span class="attr">#[test_log::test(tokio::test(flavor = <span class="string">"multi_thread"</span>))]
+<a href=#4214 id=4214 data-nosnippet>4214</a>    </span><span class="kw">async fn </span>test_reset_drops_light_client_cache() {
+<a href=#4215 id=4215 data-nosnippet>4215</a>        <span class="kw">use </span>light_client::storage::Storage <span class="kw">as _</span>;
+<a href=#4216 id=4216 data-nosnippet>4216</a>
+<a href=#4217 id=4217 data-nosnippet>4217</a>        <span class="kw">use </span><span class="kw">crate</span>::api::{data_source::DataSourceOptions <span class="kw">as _</span>, options::Query};
+<a href=#4218 id=4218 data-nosnippet>4218</a>
+<a href=#4219 id=4219 data-nosnippet>4219</a>        <span class="kw">let </span>tmp = Persistence::tmp_storage().<span class="kw">await</span>;
+<a href=#4220 id=4220 data-nosnippet>4220</a>        <span class="kw">let </span>opt = Persistence::options(<span class="kw-2">&amp;</span>tmp);
+<a href=#4221 id=4221 data-nosnippet>4221</a>        <span class="kw">let </span>light_client = || opt.light_client_db(<span class="kw-2">&amp;</span>Query::default()).unwrap().connect();
+<a href=#4222 id=4222 data-nosnippet>4222</a>        <span class="kw">let </span>leaf = light_client::testing::leaf_chain(<span class="number">0</span>..<span class="number">1</span>, versions::EPOCH_VERSION)
+<a href=#4223 id=4223 data-nosnippet>4223</a>            .<span class="kw">await
+<a href=#4224 id=4224 data-nosnippet>4224</a>            </span>.remove(<span class="number">0</span>);
+<a href=#4225 id=4225 data-nosnippet>4225</a>        <span class="kw">let </span>db = light_client().<span class="kw">await</span>.unwrap();
+<a href=#4226 id=4226 data-nosnippet>4226</a>        db.insert_leaf(leaf).<span class="kw">await</span>.unwrap();
+<a href=#4227 id=4227 data-nosnippet>4227</a>        drop(db);
+<a href=#4228 id=4228 data-nosnippet>4228</a>
+<a href=#4229 id=4229 data-nosnippet>4229</a>        opt.clone().reset().<span class="kw">await</span>.unwrap();
+<a href=#4230 id=4230 data-nosnippet>4230</a>
+<a href=#4231 id=4231 data-nosnippet>4231</a>        <span class="kw">let </span>db = light_client().<span class="kw">await</span>.unwrap();
+<a href=#4232 id=4232 data-nosnippet>4232</a>        <span class="macro">assert_eq!</span>(db.block_height().<span class="kw">await</span>.unwrap(), <span class="number">0</span>);
+<a href=#4233 id=4233 data-nosnippet>4233</a>    }
+<a href=#4234 id=4234 data-nosnippet>4234</a>}
 </code></pre></div></section></main></body></html>
