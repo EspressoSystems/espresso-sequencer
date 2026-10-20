@@ -48,6 +48,8 @@ FRAGMENT_README = f"{FRAGMENT_DIR}/README.md"
 BOT_MARKER = "<!--"
 NETWORK_NOTES_OPEN = "<!-- network-notes -->"
 NETWORK_NOTES_CLOSE = "<!-- /network-notes -->"
+WHATS_CHANGED_OPEN = "<!-- whats-changed -->"
+WHATS_CHANGED_CLOSE = "<!-- /whats-changed -->"
 MANIFEST_TYPES = ", ".join(
     f"application/vnd.{kind}"
     for kind in (
@@ -82,6 +84,15 @@ _COMMAND_RE = re.compile(
     r"(?:[ \t]+(\S+))?(?:[ \t]+(\S+))?[ \t]*(?:\r?\n|\Z)"
 )
 _TITLE_RE = re.compile(r"^\S+ \[([^\]]+)\]$")
+_WHATS_CHANGED_RE = re.compile(
+    rf"{re.escape(WHATS_CHANGED_OPEN)}.*?{re.escape(WHATS_CHANGED_CLOSE)}", re.DOTALL
+)
+# GitHub's unmarked section ends at its Full Changelog line, which is absent without a previous tag
+_LEGACY_WHATS_CHANGED_RE = re.compile(
+    r"## What's Changed\n.*?"
+    r"(?:\*\*Full Changelog\*\*:[^\n]*|(?=\n## (?!New Contributors))|\Z)",
+    re.DOTALL,
+)
 _NETWORK_NOTES_RE = re.compile(
     rf"{re.escape(NETWORK_NOTES_OPEN)}\n(.*?)\n{re.escape(NETWORK_NOTES_CLOSE)}",
     re.DOTALL,
@@ -181,7 +192,6 @@ class ReleaseEdit:
     title: str
     body: str
     create: bool = False
-    start_tag: str | None = None  # base of the generated notes, when creating
 
     @property
     def make_latest(self) -> bool:
@@ -693,6 +703,8 @@ def mark_superseded(body: str, network: Network, by: str, date: str) -> str:
 
 # `collect(base, target)` lists the fragments added between two tags.
 Collect = Callable[[Tag, Tag], list[Fragment]]
+# `whats_changed(target, base)` is GitHub's generated "What's Changed" markdown.
+WhatsChanged = Callable[[Tag, Tag | None], str]
 
 
 def plan_publish(
@@ -702,6 +714,7 @@ def plan_publish(
     network_notes: str | None,
     tags: Callable[[], list[Tag]],
     collect: Collect,
+    whats_changed: WhatsChanged,
     date: str,
     repo: str,
 ) -> tuple[Tag | None, list[ReleaseEdit]]:
@@ -722,20 +735,48 @@ def plan_publish(
         release, others, network, network_notes, date
     )
     base = publish_base(prev, target, tags() if prev is None else [])
-    start = base or (fragment_base(target, tags()) if existing is None else None)
     fragments = collect(base, target) if base is not None else []
     block = render_publish_block(
         network, prev, target, since, network_notes, fragments, repo, base
     )
+    body = with_block(release.body, network, block)
     edit = ReleaseEdit(
         release.tag,
         render_title(release.tag, title_networks(release.title) | {network}),
-        with_block(release.body, network, block),
+        refresh_whats_changed(body, target, tags, whats_changed),
         existing is None,
-        str(start) if start is not None else None,
     )
     superseded = [_supersede(other, network, release.tag, date) for other in others]
     return prev, [edit, *superseded]
+
+
+def refresh_whats_changed(
+    body: str, target: Tag, tags: Callable[[], list[Tag]], generate: WhatsChanged
+) -> str:
+    """Regenerates the "What's Changed" section from the range of the governing network: mainnet
+    once it has a publish block, else decaf. A rollback keeps the section as it is."""
+    stored = next(
+        (p for n in reversed(NETWORKS) if (p := publish_block_prev(body, n))), None
+    )
+    stored_prev, _date = stored or (None, "")
+    prev = parse_tag(stored_prev) if stored_prev else None
+    if prev is None:
+        base = fragment_base(target, tags())
+    elif prev < target:
+        base = prev
+    else:
+        return body
+    return with_whats_changed(body, generate(target, base))
+
+
+def with_whats_changed(body: str, notes: str) -> str:
+    """Replaces the marked section, else GitHub's unmarked one, else appends it."""
+    body = normalize_newlines(body)
+    section = f"{WHATS_CHANGED_OPEN}\n{notes.strip()}\n{WHATS_CHANGED_CLOSE}"
+    for pattern in (_WHATS_CHANGED_RE, _LEGACY_WHATS_CHANGED_RE):
+        if pattern.search(body):
+            return pattern.sub(lambda _match: section, body, count=1)
+    return f"{body.rstrip()}\n\n{section}\n"
 
 
 def _previous_holder(
@@ -1429,6 +1470,20 @@ class Gh:
         )
         return backport_index(data, branch)
 
+    def generate_notes(self, target: Tag, base: Tag | None) -> str:
+        """GitHub's "What's Changed" markdown for the range `base`...`target`."""
+        out = self._run(
+            [
+                "gh",
+                "api",
+                "repos/{owner}/{repo}/releases/generate-notes",
+                "-f",
+                f"tag_name={target}",
+                *(["-f", f"previous_tag_name={base}"] if base else []),
+            ]
+        )
+        return json.loads(out)["body"]
+
     def release_create(self, edit: ReleaseEdit) -> None:
         with _body_file(edit.body) as path:
             self._run(
@@ -1442,8 +1497,6 @@ class Gh:
                     edit.title,
                     "--notes-file",
                     str(path),
-                    "--generate-notes",
-                    *(["--notes-start-tag", edit.start_tag] if edit.start_tag else []),
                     f"--latest={str(edit.make_latest).lower()}",
                 ]
             )
@@ -1856,6 +1909,7 @@ def _plan_publish(
         command.text,
         partial(_base_tags, git, target),
         partial(_collect_fragments, git),
+        gh.generate_notes,
         datetime.now(UTC).date().isoformat(),
         repo,
     )
