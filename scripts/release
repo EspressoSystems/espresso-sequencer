@@ -85,7 +85,8 @@ _COMMAND_RE = re.compile(
 )
 _TITLE_RE = re.compile(r"^\S+ \[([^\]]+)\]$")
 _WHATS_CHANGED_RE = re.compile(
-    rf"{re.escape(WHATS_CHANGED_OPEN)}.*?{re.escape(WHATS_CHANGED_CLOSE)}", re.DOTALL
+    rf"^{re.escape(WHATS_CHANGED_OPEN)}\n.*?\n{re.escape(WHATS_CHANGED_CLOSE)}$",
+    re.DOTALL | re.MULTILINE,
 )
 # GitHub's unmarked section ends at its Full Changelog line, which is absent without a previous tag
 _LEGACY_WHATS_CHANGED_RE = re.compile(

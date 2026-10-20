@@ -1946,6 +1946,19 @@ class PlanPublish(unittest.TestCase):
             )
         self.assertEqual([c[1] for c in calls], [t("0.6.3.12")] * 2)
 
+    def test_release_plan_whats_changed_mainnet_without_prev_uses_previous_tag_ok(self):
+        calls = []
+        releases = published([release("0.7.0.1")], "0.7.0.1")
+        releases = published(releases + [release("0.7.0.3")], "0.7.0.3")
+        plan(
+            releases,
+            "0.7.0.3",
+            "mainnet",
+            tags=[t("0.7.0.1"), t("0.7.0.2"), t("0.7.0.3")],
+            whats_changed=lambda *a: calls.append(a) or GENERATED,
+        )
+        self.assertEqual(calls, [(t("0.7.0.3"), t("0.7.0.2"))])
+
     def test_release_plan_whats_changed_no_prev_uses_previous_tag_ok(self):
         calls = []
         plan(
@@ -2530,6 +2543,15 @@ class WhatsChanged(unittest.TestCase):
 
     def test_release_whats_changed_replaces_marked_section_ok(self):
         body = f"top\n\n{rel.WHATS_CHANGED_OPEN}\nOLD\n{rel.WHATS_CHANGED_CLOSE}\n"
+        self.assertEqual(
+            rel.with_whats_changed(body, "NEW"), f"top\n\n{self.SECTION}\n"
+        )
+
+    def test_release_whats_changed_marker_in_title_ok(self):
+        body = (
+            f"top\n\n{rel.WHATS_CHANGED_OPEN}\n* a {rel.WHATS_CHANGED_CLOSE} by @x in #1\n"
+            f"* b in #2\n{rel.WHATS_CHANGED_CLOSE}\n"
+        )
         self.assertEqual(
             rel.with_whats_changed(body, "NEW"), f"top\n\n{self.SECTION}\n"
         )
