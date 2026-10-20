@@ -364,6 +364,11 @@ const PRUNED_LEAF_CHECK_INTERVAL: Duration = Duration::from_secs(10);
 /// How long the loop waits before it tries again to start from a recent epoch boundary.
 const BOUNDARY_RETRY_INTERVAL: Duration = Duration::from_secs(10);
 
+/// How long the loop waits on a local catchup read before it asks peers. Consensus cuts local reads
+/// short, so that it can still vote in time. The loop has no such deadline, while peers may have
+/// pruned the heights it reads, so a slow read cut short on every try would stall it.
+const LOCAL_CATCHUP_TIMEOUT: Duration = Duration::from_secs(60);
+
 /// Where the state loop starts when it has no state of its own.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum EmptyStateStart {
@@ -403,6 +408,13 @@ where
     // Use a separate rewards calculator for the state loop so it doesn't
     // interfere with consensus, which may be on a very different epoch.
     instance.epoch_rewards_calculator = Arc::new(Mutex::new(EpochRewardsCalculator::new()));
+    // The loop can wait longer on its own database than consensus can.
+    if let Some(catchup) = instance
+        .state_catchup
+        .with_local_timeout(LOCAL_CATCHUP_TIMEOUT)
+    {
+        instance.state_catchup = catchup;
+    }
 
     // Resume from the newest snapshot in storage. The loop cannot start anywhere else:
     // `from_header` gives it a bare state, and its catchup fills in the block frontier and any fee
