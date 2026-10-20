@@ -4,7 +4,7 @@ use ::light_client::{
     LightClient,
     client::{FallbackClient, QueryServiceClient},
     state::{Genesis, LightClientOptions},
-    storage::LightClientSqliteOptions,
+    storage::LightClientDbOptions,
 };
 use alloy::primitives::U256;
 use anyhow::{Context, bail, ensure};
@@ -1723,7 +1723,7 @@ pub(crate) struct LightClientProvider<C: ApiContext> {
     state: ApiState<C>,
     client: FallbackClient<QueryServiceClient>,
     opt: LightClientOptions,
-    db_opt: LightClientSqliteOptions,
+    db_opt: LightClientDbOptions,
 }
 
 impl<C: ApiContext> LightClientProvider<C> {
@@ -1731,7 +1731,7 @@ impl<C: ApiContext> LightClientProvider<C> {
         peers: impl IntoIterator<Item = Url>,
         state: ApiState<C>,
         opt: LightClientOptions,
-        db_opt: LightClientSqliteOptions,
+        db_opt: LightClientDbOptions,
     ) -> anyhow::Result<Self> {
         let client = FallbackClient::new(peers.into_iter().map(QueryServiceClient::new).collect())?;
         Ok(Self {
@@ -1765,7 +1765,7 @@ impl<C: ApiContext> LightClientProvider<C> {
             .clone()
             .connect()
             .await
-            .context("creating SQLite database for light client")?;
+            .context("opening the light client database")?;
         let chain_id = ctx.node_state().genesis_chain_config.chain_id;
         let genesis = light_client_genesis(&ctx.network_config(), chain_id);
         Ok(Arc::new(LightClient::from_genesis_with_options(
@@ -3899,13 +3899,22 @@ mod test {
         .await
         .expect("network did not reach block height 2");
 
+        let past_limit =
+            hotshot_query_service::availability::Options::default().large_object_range_limit + 1;
         for (path, status) in [
             // A finalized height must be past the requested leaf.
-            ("leaf/1/1", reqwest::StatusCode::BAD_REQUEST),
+            ("leaf/1/1".to_string(), reqwest::StatusCode::BAD_REQUEST),
             // A header proof's root must be past the requested header.
-            ("header/1/1", reqwest::StatusCode::BAD_REQUEST),
+            ("header/1/1".to_string(), reqwest::StatusCode::BAD_REQUEST),
             // This 404 comes from the header proof helper, exercising `lc_error`.
-            ("header/1000001/1000000", reqwest::StatusCode::NOT_FOUND),
+            (
+                "header/1000001/1000000".to_string(),
+                reqwest::StatusCode::NOT_FOUND,
+            ),
+            (
+                format!("payload/0/{past_limit}"),
+                reqwest::StatusCode::BAD_REQUEST,
+            ),
         ] {
             let res = reqwest::get(format!("http://localhost:{port}/v1/light-client/{path}"))
                 .await
@@ -5724,6 +5733,7 @@ mod test {
                 backoff: Default::default(),
                 base_timeout: Duration::from_secs(2),
                 local_timeout: Duration::from_secs(5),
+                http_delay: Duration::ZERO,
             },
             bootstrap_epoch_catchup_timeout: Duration::from_secs(30),
             options: FollowerOptions {

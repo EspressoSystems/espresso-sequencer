@@ -59,7 +59,7 @@ pub(crate) fn default_telemetry_endpoint(chain_id: ChainId) -> Option<&'static s
 pub use espresso_types::RECENT_STAKE_TABLES_LIMIT;
 use genesis::L1Finalized;
 pub use genesis::{Genesis, GenesisSource};
-use hotshot::{traits::implementations::MemoryNetwork, types::SignatureKey};
+use hotshot::traits::implementations::MemoryNetwork;
 use hotshot_new_protocol::network::{Cliquenet, message_limit};
 use hotshot_orchestrator::client::{OrchestratorClient, get_complete_config};
 use hotshot_types::{
@@ -73,6 +73,7 @@ use hotshot_types::{
     traits::{
         metrics::{Metrics, NoMetrics},
         node_implementation::{NodeImplementation, NodeType},
+        signature_key::SignatureKey,
         storage::Storage,
     },
     x25519,
@@ -154,6 +155,7 @@ pub struct CatchupParams {
     pub backoff: BackoffParams,
     pub base_timeout: Duration,
     pub local_timeout: Duration,
+    pub http_delay: Duration,
 }
 
 pub(crate) enum LoadedNetworkConfig {
@@ -641,15 +643,20 @@ where
         genesis_state.prefund_account(*address, *amount);
     }
 
-    let state_catchup_providers = ParallelStateCatchup::new(&[], catchup.local_timeout);
+    let state_catchup_providers = ParallelStateCatchup::new(&[], catchup.local_timeout)
+        .with_fallback_delay(catchup.http_delay);
     let state_peers = StatePeers::<SequencerApiVersion>::from_urls(
         catchup.state_peers,
         catchup.backoff,
         catchup.base_timeout,
         metrics,
     );
-    state_catchup_providers.add_provider(Arc::new(state_peers));
-    match persistence.clone().into_catchup_provider(catchup.backoff) {
+    state_catchup_providers.add_fallback_provider(Arc::new(state_peers));
+    // Local is a single attempt per call; remote providers retry.
+    match persistence
+        .clone()
+        .into_catchup_provider(BackoffParams::disabled())
+    {
         Ok(provider) => {
             state_catchup_providers.add_provider(Arc::new(provider));
         },
@@ -876,7 +883,6 @@ pub mod testing {
         future::join_all,
         stream::{Stream, StreamExt},
     };
-    use hotshot::traits::BlockPayload;
     use hotshot_contract_adapter::stake_table::StakeTableContractVersion;
     use hotshot_types::{
         HotShotConfig, PeerConfig, PeerConnectInfo,
@@ -885,7 +891,7 @@ pub mod testing {
         light_client::StateKeyPair,
         new_protocol::CoordinatorEvent,
         traits::{
-            EncodeBytes, block_contents::BlockHeader, metrics::NoMetrics,
+            BlockPayload, EncodeBytes, block_contents::BlockHeader, metrics::NoMetrics,
             signature_key::BuilderSignatureKey,
         },
     };
@@ -1526,9 +1532,10 @@ pub mod testing {
             }
 
             // If we have a working local catchup provider, add it
+            // Local is a single attempt per call; remote providers retry.
             match persistence
                 .clone()
-                .into_catchup_provider(BackoffParams::default())
+                .into_catchup_provider(BackoffParams::disabled())
             {
                 Ok(local_catchup) => {
                     catchup_providers.add_provider(local_catchup);

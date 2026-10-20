@@ -220,7 +220,9 @@ where
     S: DataSourceOptions,
 {
     let follower_params = match (&modules.follower, &modules.query) {
-        (Some(follower), Some(query)) => Some(opt.follower_params(follower, query)?),
+        (Some(follower), Some(query)) => {
+            Some(opt.follower_params(follower, query, storage_opt.light_client_db(query)?)?)
+        },
         _ => None,
     };
     let l1_params = L1Params {
@@ -263,6 +265,7 @@ where
             backoff: opt.catchup_backoff,
             base_timeout: opt.catchup_base_timeout,
             local_timeout: opt.local_catchup_timeout,
+            http_delay: opt.http_catchup_delay,
         },
         bootstrap_epoch_catchup_timeout: opt.bootstrap_epoch_catchup_timeout,
     };

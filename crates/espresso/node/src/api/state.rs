@@ -2198,6 +2198,7 @@ impl From<crate::options::PublicNodeConfig> for proto::RuntimeConfigResponse {
             identity,
             catchup_base_timeout: _,
             local_catchup_timeout: _,
+            http_catchup_delay: _,
             bootstrap_epoch_catchup_timeout: _,
             catchup_backoff: _,
             follower,
@@ -3205,6 +3206,7 @@ where
         let fetch_timeout = FETCH_TIMEOUT;
         let start = start as usize;
         let end = end as usize;
+        enforce_range(start, end, lc_large_object_range_limit())?;
 
         let payloads_stream = AvailabilityDataSource::get_payload_range(ds, start..end).await;
         let vid_stream = AvailabilityDataSource::get_vid_common_range(ds, start..end).await;
@@ -5951,7 +5953,16 @@ mod tests {
                         light_client_db: Some(proto::LightClientDbOptions {
                             num_connections: 7,
                             num_leaves: 11,
-                            lc_path: None,
+                            // Not pinned to `None`: it defaults under ESPRESSO_NODE_STORAGE_PATH.
+                            lc_path: cfg
+                                .modules
+                                .query
+                                .as_ref()
+                                .unwrap()
+                                .light_client_db
+                                .lc_path
+                                .as_ref()
+                                .map(|path| path.display().to_string()),
                         }),
                     }),
                     submit: false,
