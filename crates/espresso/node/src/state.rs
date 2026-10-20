@@ -365,7 +365,8 @@ where
 /// passed the height it is waiting for.
 const PRUNED_LEAF_CHECK_INTERVAL: Duration = Duration::from_secs(10);
 
-/// How long the loop waits before it tries again to start from a recent epoch boundary.
+/// How long the loop waits before it retries a step of its start that failed, such as a try to
+/// start from a recent epoch boundary.
 const BOUNDARY_RETRY_INTERVAL: Duration = Duration::from_secs(10);
 
 /// How long the loop waits on a local catchup read before it asks peers. Consensus cuts local reads
@@ -425,7 +426,10 @@ where
     // account it has not seen from the parent's snapshot in this database, which exists only up to
     // the head. The state pruner in turn never advances to the head, so that snapshot stays
     // readable however far behind the chain the loop has fallen.
-    let mut last_height = storage.get_last_state_height().await? as u64;
+    let mut last_height = retry_until_ok("loading the state head", || async {
+        Ok(storage.get_last_state_height().await? as u64)
+    })
+    .await;
     // With no state of its own on a pruned database, as on a fresh pruned node, the loop would
     // replay the whole chain from genesis, mostly on leaves from peers. A pruned node serves recent
     // state only, so give it a recent snapshot to resume from instead.
@@ -435,11 +439,11 @@ where
     {
         last_height = boundary;
     }
-    let current_height = storage.block_height().await?;
+    let current_height = storage.block_height().await.ok();
     tracing::info!(
         node_id = instance.node_id,
         last_height,
-        current_height,
+        ?current_height,
         "updating state storage"
     );
 
@@ -460,9 +464,11 @@ where
     // Load the parent's tree from storage to avoid this. Doing it once is enough
     // every later iteration carries the tree forward in `parent_state`.
     if parent_leaf.block_header().version() > EPOCH_VERSION && parent_leaf.height() > 0 {
-        parent_state.reward_merkle_tree_v2 = load_parent_reward_tree(&*storage, &parent_leaf)
+        parent_state.reward_merkle_tree_v2 =
+            retry_until_ok("loading the parent's reward tree", || {
+                load_parent_reward_tree(&*storage, &parent_leaf)
+            })
             .await
-            .context("Error starting the state storage update loop")?
             .tree;
     }
 
@@ -470,13 +476,30 @@ where
         // If the last height is 0, we need to insert the genesis state, since this state is
         // never the result of a state update and thus is not inserted in the loop below.
         tracing::info!("storing genesis merklized state");
-        store_genesis_state(&*storage, instance.chain_config, &instance.genesis_state)
-            .await
-            .context("storing genesis state")?;
+        // Every write is an upsert, so a retry after a partial store is safe.
+        retry_until_ok("storing the genesis state", || {
+            store_genesis_state(&*storage, instance.chain_config, &instance.genesis_state)
+        })
+        .await;
     }
 
     follow_leaves(&storage, &instance, &provider, parent_leaf, parent_state).await;
     Ok(())
+}
+
+/// Run `f` until it succeeds. An error would end the loop for good, possibly after a seed that
+/// waited minutes for peers, so the steps of its start retry, as the leaves it applies do.
+async fn retry_until_ok<R, Fut>(step: &str, mut f: impl FnMut() -> Fut) -> R
+where
+    Fut: Future<Output = anyhow::Result<R>>,
+{
+    loop {
+        match f().await {
+            Ok(res) => return res,
+            Err(err) => tracing::error!("{step} failed, retrying: {err:#}"),
+        }
+        sleep(BOUNDARY_RETRY_INTERVAL).await;
+    }
 }
 
 /// The reward tree of `parent_leaf`, from storage.
