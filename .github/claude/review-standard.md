@@ -16,6 +16,8 @@ How to look for bugs, whatever the focus area:
    - Check for potential security vulnerabilities
    - Validate input sanitization
    - Review authentication/authorization logic
+   - Flag credentials (RPC URLs with API keys, private keys, tokens) that can reach logs, error messages, metrics,
+     telemetry or API responses
 
 3. **Performance**
    - Identify potential performance bottlenecks
