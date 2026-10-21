@@ -481,4 +481,6 @@ where
 
 // These tests run the `postgres` Docker image, which doesn't work on Windows.
 #[cfg(all(test, not(target_os = "windows")))]
-mod tests;
+mod postgres;
+#[cfg(all(test, not(target_os = "windows")))]
+mod sqlite;

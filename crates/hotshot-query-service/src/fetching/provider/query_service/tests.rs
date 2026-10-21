@@ -17,7 +17,10 @@ use hotshot_types::{
 use jf_advz::VidScheme;
 use tokio::{task::JoinHandle, time::timeout};
 
-use super::*;
+use super::{
+    sql::{self, SqlDataSource, SqlStorage, testing::TmpDb},
+    *,
+};
 use crate::{
     availability::{
         AvailabilityDataSource, BlockId, BlockInfo, BlockQueryData, BlockWithTransaction,
@@ -25,7 +28,6 @@ use crate::{
     },
     data_source::{
         AvailabilityProvider, FetchingDataSource, Transaction, VersionedDataSource,
-        sql::postgres::{self as sql, SqlDataSource, SqlStorage, testing::TmpDb},
         storage::{
             AvailabilityStorage, StorageConnectionType, UpdateAvailabilityStorage,
             fail_storage::{FailStorage, FailableAction},

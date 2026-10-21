@@ -16,16 +16,23 @@ use hotshot_types::new_protocol::CoordinatorEvent;
 use super::mocks::MockTypes;
 use crate::{
     availability::{AvailabilityDataSource, UpdateAvailabilityData},
-    data_source::{
-        FileSystemDataSource, VersionedDataSource, fetching::Builder, sql::postgres::SqlDataSource,
-    },
+    data_source::{FileSystemDataSource, VersionedDataSource, fetching::Builder, sql},
     fetching::provider::NoFetching,
     node::NodeDataSource,
     status::StatusDataSource,
 };
 
 pub type MockDataSource = FileSystemDataSource<MockTypes, NoFetching>;
-pub type MockSqlDataSource = SqlDataSource<MockTypes, NoFetching>;
+pub type MockPostgresDataSource = sql::postgres::SqlDataSource<MockTypes, NoFetching>;
+pub type MockSqliteDataSource = sql::sqlite::SqlDataSource<MockTypes, NoFetching>;
+
+#[cfg(test)]
+#[rstest_reuse::template]
+#[rstest::rstest]
+#[case::postgres(std::marker::PhantomData::<crate::testing::consensus::MockPostgresDataSource>)]
+#[case::sqlite(std::marker::PhantomData::<crate::testing::consensus::MockSqliteDataSource>)]
+#[test_log::test(tokio::test(flavor = "multi_thread"))]
+pub fn sql_data_sources<D: TestableDataSource>(#[case] _d: std::marker::PhantomData<D>) {}
 
 #[async_trait]
 pub trait DataSourceLifeCycle: Clone + Send + Sync + Sized + 'static {
@@ -77,4 +84,12 @@ impl<T> TestableDataSource for T where
         + StatusDataSource
         + VersionedDataSource
 {
+}
+
+/// Write access a test needs that no storage trait offers.
+#[cfg(test)]
+#[async_trait]
+pub trait TestTransaction {
+    /// Mark everything up to and including `height` as pruned.
+    async fn save_pruned_height(&mut self, height: u64) -> anyhow::Result<()>;
 }
