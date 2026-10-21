@@ -1010,6 +1010,10 @@ class RunConfig:
     chaos: ch.ChaosConfig | None = None
     # node0 prunes its data and state older than this many seconds; None for no pruning.
     prune: int | None = None
+    # The last `slow_nodes` nodes, all validator-only, run espresso-node on `slow_cores` cores:
+    # a slower group on the same network.
+    slow_nodes: int = 0
+    slow_cores: int | None = None
 
 
 # Callers need the return code and stderr, unlike scripts/release's Runner, to report a
@@ -1313,6 +1317,7 @@ def plan_hosts(cfg: RunConfig) -> list[HostSpec]:
     if cfg.nodes < 2:
         raise Refused(f"--nodes must be at least 2: {cfg.nodes}")
     check_submit_nodes(cfg)
+    check_slow_nodes(cfg)
     if not 1 <= cfg.query_nodes <= cfg.nodes:
         raise Refused(
             f"--query-nodes must be between 1 and nodes ({cfg.nodes}): {cfg.query_nodes}"
@@ -1650,6 +1655,7 @@ def format_node_summary(cfg: RunConfig) -> list[str]:
             f"leader-trace {'on' if cfg.leader_trace else 'off'}"
         ),
         f"node-env: {' '.join(cfg.node_env) or 'none'}",
+        *([format_slow_nodes_summary(cfg)] if cfg.slow_nodes else []),
         *([format_chaos_summary(cfg.chaos, cfg.latency)] if cfg.chaos else []),
         *(
             [f"prune: data and state older than {cfg.prune}s, every {PRUNE_INTERVAL}"]
@@ -1657,6 +1663,11 @@ def format_node_summary(cfg: RunConfig) -> list[str]:
             else []
         ),
     ]
+
+
+def format_slow_nodes_summary(cfg: RunConfig) -> str:
+    names = ", ".join(slow_node_names(cfg))
+    return f"slow nodes: {names} on {cfg.slow_cores} cores (docker --cpuset-cpus)"
 
 
 def format_chaos_summary(chaos: ch.ChaosConfig, latency: str) -> str:
@@ -2607,10 +2618,12 @@ def render_start_sh(
     leader_trace: bool = False,
     consensus_storage: ConsensusStorage = "fs",
     query_engine: QueryEngine = "postgres",
+    cores: int | None = None,
 ) -> str:
     """Deviates from the plan signature (drops unused `hosts`, `cfg`): every value start.sh
     needs is already in `host`, `images` and the host's `memory_mib`, or in ctl.env/node.env
-    rendered separately. With `query_db` rds or `query_engine` sqlite there is no postgres container."""
+    rendered separately. With `query_db` rds or `query_engine` sqlite there is no postgres container.
+    `cores` limits espresso-node to that many cores; None leaves it the whole host."""
     script = (
         "#!/usr/bin/env bash\nset -eEu -o pipefail\n\n"
         f"echo '{{}}' > {BENCH_DIR}/containers.json\n\n"
@@ -2690,6 +2703,7 @@ def render_start_sh(
         consensus_storage,
         query_engine,
         f"{BENCH_DIR}/node.env",
+        cores,
     )
     script += _docker_create("espresso-node", argv)
     return script
@@ -2703,8 +2717,11 @@ def node_create_argv(
     consensus_storage: ConsensusStorage,
     query_engine: QueryEngine,
     env_file: str,
+    cores: int | None = None,
 ) -> list[str]:
-    """`docker create` arguments of the espresso-node container."""
+    """`docker create` arguments of the espresso-node container. `cores` pins it to the first
+    that many cores: a smaller machine, without the stalls a `--cpus` quota adds when more
+    threads than that are runnable."""
     node = images["espresso-node"]
     role: NodeRole = "query" if host["role"] == "query" else "validator"
     storage = STORAGE_MODULES[consensus_storage, role]
@@ -2727,6 +2744,8 @@ def node_create_argv(
             argv += ["--tmpfs", f"{SQLITE_CONTAINER_DIR}:size={SQLITE_TMPFS_GB}g"]
     if leader_trace:
         argv += ["-v", f"{TRACE_HOST_DIR}:{TRACE_CONTAINER_DIR}"]
+    if cores is not None:
+        argv += ["--cpuset-cpus", f"0-{cores - 1}"]
     argv.append(f"{node['ref']}@{node['digest']}")
     argv.append("/bin/espresso-node")
     for module in modules:
@@ -2741,6 +2760,7 @@ def render_recreate_sh(
     leader_trace: bool = False,
     consensus_storage: ConsensusStorage = "fs",
     query_engine: QueryEngine = "postgres",
+    cores: int | None = None,
 ) -> str:
     """Recreates the espresso-node container from `node-rejoin.env`; same arguments as start.sh
     otherwise."""
@@ -2752,6 +2772,7 @@ def render_recreate_sh(
         consensus_storage,
         query_engine,
         f"{BENCH_DIR}/node-rejoin.env",
+        cores,
     )
     return "#!/usr/bin/env bash\nset -eEu -o pipefail\n\n" + _docker_create(
         "espresso-node", argv
@@ -3117,6 +3138,22 @@ def add_submit_nodes_flag(parser: argparse.ArgumentParser) -> None:
     )
 
 
+def add_slow_nodes_flags(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--slow-nodes",
+        type=positive_int,
+        default=RunConfig(tag="").slow_nodes,
+        help="the last N nodes, validator-only, run espresso-node on --slow-cores cores",
+    )
+    parser.add_argument(
+        "--slow-cores",
+        type=positive_int,
+        default=RunConfig(tag="").slow_cores,
+        help="cores of each --slow-nodes node (docker --cpuset-cpus 0-(C-1)); at most the "
+        "node type's vCPUs",
+    )
+
+
 def submit_nodes(args: argparse.Namespace, nodes: int) -> int:
     return nodes if args.submit_nodes is None else args.submit_nodes
 
@@ -3126,6 +3163,21 @@ def check_submit_nodes(cfg: RunConfig) -> None:
         raise Refused(
             f"--submit-nodes must be at most --nodes ({cfg.nodes}): "
             f"{cfg.load.submit_nodes}"
+        )
+
+
+def check_slow_nodes(cfg: RunConfig) -> None:
+    if cfg.slow_cores is not None and not cfg.slow_nodes:
+        raise Refused("--slow-cores needs --slow-nodes")
+    if not cfg.slow_nodes:
+        return
+    if cfg.slow_cores is None:
+        raise Refused("--slow-nodes needs --slow-cores")
+    validators = cfg.nodes - cfg.query_nodes
+    if cfg.slow_nodes > validators:
+        raise Refused(
+            f"--slow-nodes must be at most the {validators} validator-only nodes: "
+            f"{cfg.slow_nodes}"
         )
 
 
@@ -3230,6 +3282,8 @@ def config_from_args(args: argparse.Namespace) -> RunConfig:
         epoch_height=args.epoch_height,
         consensus_storage=args.consensus_storage,
         prune=args.prune,
+        slow_nodes=args.slow_nodes,
+        slow_cores=args.slow_cores,
         root_gb=args.root_gb,
         pg_iops=args.pg_iops,
         pg_mbps=args.pg_mbps,
@@ -3392,6 +3446,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     add_consensus_storage_flag(plan_p)
     add_prune_flag(plan_p)
     add_submit_nodes_flag(plan_p)
+    add_slow_nodes_flags(plan_p)
     add_chaos_flags(plan_p)
     add_ttl_flag(plan_p)
     plan_p.add_argument("--db-modes", type=parse_db_modes, default=defaults.db_modes)
@@ -3422,6 +3477,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         consensus_storage=defaults.consensus_storage,
         prune=defaults.prune,
         submit_nodes=None,
+        slow_nodes=defaults.slow_nodes,
+        slow_cores=defaults.slow_cores,
         chaos=False,
         fleet=None,
         force=False,
@@ -3447,6 +3504,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     add_consensus_storage_flag(run_p)
     add_prune_flag(run_p)
     add_submit_nodes_flag(run_p)
+    add_slow_nodes_flags(run_p)
     add_chaos_flags(run_p)
     add_ttl_flag(run_p)
     run_p.add_argument(
@@ -4700,11 +4758,14 @@ def fleet_run_config(args: argparse.Namespace, saved: FleetManifest) -> RunConfi
         epoch_height=cli.epoch_height,
         consensus_storage=cli.consensus_storage,
         prune=cli.prune,
+        slow_nodes=cli.slow_nodes,
+        slow_cores=cli.slow_cores,
         fleet=cli.fleet,
         force=cli.force,
         search=cli.search,
     )
     check_submit_nodes(cfg)
+    check_slow_nodes(cfg)
     check_search(cfg)
     check_chaos(cfg)
     check_fleet_disks(saved, cfg)
@@ -5327,6 +5388,11 @@ def run_config_hash(
             *([b"leader-trace"] if cfg.leader_trace else []),
             f"prune={cfg.prune}".encode(),
             *(
+                [f"slow-nodes={cfg.slow_nodes},cores={cfg.slow_cores}".encode()]
+                if cfg.slow_nodes
+                else []
+            ),
+            *(
                 [json.dumps(dataclasses.asdict(cfg.chaos), sort_keys=True).encode()]
                 if cfg.chaos
                 else []
@@ -5550,15 +5616,22 @@ def node_hosts(hosts: dict[str, HostInfo]) -> list[HostInfo]:
     return [hosts[name] for name in _node_names(hosts)]
 
 
+def slow_node_names(cfg: RunConfig) -> list[str]:
+    """The last `cfg.slow_nodes` nodes; `check_slow_nodes` keeps them validator-only."""
+    return [f"node{i}" for i in range(cfg.nodes - cfg.slow_nodes, cfg.nodes)]
+
+
 def render_host_files(
     run_dir: Path,
     cfg: RunConfig,
     manifest: FleetManifest,
     hosts: dict[str, HostInfo],
 ) -> None:
+    slow = slow_node_names(cfg)
     for spec in manifest["hosts"]:
         host_dir = run_dir / "hosts" / spec["name"]
         host_dir.mkdir(parents=True, exist_ok=True)
+        cores = cfg.slow_cores if spec["name"] in slow else None
         (host_dir / "start.sh").write_text(
             render_start_sh(
                 spec,
@@ -5568,6 +5641,7 @@ def render_host_files(
                 leader_trace=cfg.leader_trace,
                 consensus_storage=cfg.consensus_storage,
                 query_engine=cfg.query_engine,
+                cores=cores,
             )
         )
         if spec["role"] == "ctl":
@@ -5601,6 +5675,7 @@ def render_host_files(
                         leader_trace=cfg.leader_trace,
                         consensus_storage=cfg.consensus_storage,
                         query_engine=cfg.query_engine,
+                        cores=cores,
                     )
                 )
             if pg is not None:
@@ -8349,6 +8424,14 @@ def deployment_meta(manifest: Manifest, evidence: Evidence) -> nb.DeploymentMeta
             else {}
         ),
         **({"prune": f"{config['prune']} s"} if config.get("prune") else {}),
+        **(
+            {
+                "slow_nodes": slow_node_names(config_from_manifest(config)),
+                "slow_cores": config["slow_cores"],
+            }
+            if config.get("slow_nodes")
+            else {}
+        ),
     }
 
 
