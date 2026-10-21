@@ -6,9 +6,10 @@ them.
 How to look for bugs, whatever the focus area:
 
 - For every deleted or replaced line, name the behavior it enforced and find where the new code re-establishes it. If
-  you can't find it, that's a finding.
+  you can't find it and the PR doesn't say the removal is intended, that's a finding.
 - Give every finding a concrete failure scenario: the input or state, and the wrong result it produces.
-- If you find a plausible behavior change, report it as a finding. Don't downgrade it to a question.
+- If you find a plausible behavior change the PR doesn't state as intended, report it as a finding. Don't downgrade it
+  to a question.
 
 1. **Code Quality**
    - Clean code principles and best practices
