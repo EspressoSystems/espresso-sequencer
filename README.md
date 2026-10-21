@@ -144,8 +144,7 @@ us if you have thoughts on licensing.
 
 # Disclaimer
 
-**DISCLAIMER:** This software is provided "as is" and its security has not been externally audited. Use at your own
-risk.
+**DISCLAIMER:** This software is provided "as is", use at your own risk. The code has been audited internally, and smart contract components have been [audited](https://github.com/EspressoSystems/espresso-audits) externally.
 
 **DISCLAIMER:** The Rust library crates provided in this repository are intended primarily for use by the binary targets
 in this repository. We make no guarantees of public API stability. If you are building on these crates, reach out by
