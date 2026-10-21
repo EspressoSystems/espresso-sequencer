@@ -20,8 +20,7 @@ How to look for bugs, whatever the focus area:
    - Check for potential security vulnerabilities
    - Validate input sanitization
    - Review authentication/authorization logic
-   - For each security finding, say who can trigger it, e.g. any peer, an unauthenticated HTTP caller, L1 data, a
-     builder, a staked validator, or an operator or admin key holder (name another actor if none fit)
+   - For each security finding, say who can trigger it, using the actors in `.github/claude/review-participants.md`
 
 3. **Performance**
    - Identify potential performance bottlenecks
