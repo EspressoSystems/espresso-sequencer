@@ -1,5 +1,21 @@
 # Software Releases
 
+## Operators
+
+- Run the release titled with your network: `[decaf]`, `[mainnet]` or `[decaf, mainnet]`.
+- Mainnet: <https://github.com/EspressoSystems/espresso-network/releases/latest>
+- Both:
+
+  ```sh
+  curl -fsS 'https://api.github.com/repos/EspressoSystems/espresso-network/releases?per_page=100' | jq -r '.[] | select(.name | test("\\[")) | .name'
+  ```
+
+- Image: `ghcr.io/espressosystems/espresso-network/espresso-node:<tag>`.
+- Required actions: the release body, section for your network.
+- Alerts: Watch > Custom > Releases. An alert means the release is ready to deploy on the network in its title.
+
+## Tags
+
 Release tags have the form `MAJOR.MINOR.PHASE.PATCH`, for example `0.6.0.7`.
 
 | Part          | Meaning                                                                                                         |
@@ -12,29 +28,6 @@ Tags are immutable. A bad tag is superseded by the next one and never deployed.
 
 Docker images are tagged with the git tag: git tag `0.6.0.7` produces
 `ghcr.io/espressosystems/espresso-network/espresso-node:0.6.0.7`.
-
-## Operators
-
-Each network runs the release whose title carries its marker: `[decaf]`, `[mainnet]` or `[decaf, mainnet]`.
-
-- Mainnet: <https://github.com/EspressoSystems/espresso-network/releases/latest>
-- Both networks:
-
-  ```sh
-  curl -fsS 'https://api.github.com/repos/EspressoSystems/espresso-network/releases?per_page=100' | jq -r '.[] | select(.name | test("\\[")) | .name'
-  ```
-
-  ```
-  0.6.3.16 [decaf]
-  0.6.3.12 [mainnet]
-  ```
-
-- Image: `ghcr.io/espressosystems/espresso-network/espresso-node:<tag>`.
-- The release body has one section per network: deploy date, the release it supersedes, the `docker pull` line, the
-  operator actions since that release (or `No operator action required.`) and network notes such as an upgrade deadline.
-- When a network moves to a newer release, the old release loses the marker and its section is marked superseded.
-- Alerts: Watch > Custom > Releases. An alert arrives when a release is published for decaf, and again when mainnet
-  adopts it or rolls back to it. Edits to a release, including updated notes, send no alert.
 
 ## Branches
 
@@ -120,9 +113,11 @@ operators for a release decaf already created.
 
 - A recreate keeps the tag and the URL `/releases/tag/<tag>`. Reactions, uploaded assets and the release id are lost,
   and `published_at` resets.
-- If the create fails after the delete, the workflow log holds the old title and body between `# old release` and
-  `# end old release`. Restore the release with
-  `gh release create <tag> --verify-tag --title "<logged title>" --notes-file <logged body>`, then rerun `/publish`.
+- If the create fails after the delete, the script recreates the old release. If that also fails, the tag has no release
+  and the workflow log holds the old title and body between `# old release` and `# end old release`. A plain rerun then
+  recreates the release without the decaf block. Restore it first with
+  `gh release create <tag> --verify-tag --latest=false --title "<logged title>" --notes-file <logged body>`, then rerun
+  `/publish`.
 
 ## Process
 
