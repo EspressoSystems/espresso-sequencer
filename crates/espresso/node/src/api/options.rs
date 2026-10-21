@@ -19,7 +19,7 @@ use url::Url;
 use super::{
     ApiState, StorageState,
     context::ApiContext,
-    data_source::{PruningDataSource, SequencerDataSource, provider},
+    data_source::{DataSourceOptions, PruningDataSource, SequencerDataSource, provider},
     fs, sql,
     state::NodeApiStateImpl,
     update::{ApiEventConsumer, ApiSink},
@@ -266,7 +266,7 @@ impl Options {
         Box<dyn ApiSink>,
         Option<RequestResponseStorage>,
     )> {
-        let light_client_db = query_opt.light_client_db();
+        let light_client_db = mod_opt.light_client_db(&query_opt)?;
         let ds = <fs::DataSource as SequencerDataSource>::create(
             mod_opt,
             provider(
@@ -385,14 +385,14 @@ pub struct Query {
     #[clap(flatten)]
     pub light_client_db: LightClientSqliteOptions,
 
-    /// Node storage directory. When `--light-client-db-path` is unset, the light client database
+    /// Node storage directory. A SQLite light client database without `--light-client-db-path`
     /// is kept under it, so the stake tables it verified survive a restart.
     #[clap(long, env = "ESPRESSO_NODE_STORAGE_PATH")]
     pub storage_path: Option<PathBuf>,
 }
 
 impl Query {
-    pub fn light_client_db(&self) -> LightClientSqliteOptions {
+    pub fn sqlite_light_client_db(&self) -> LightClientSqliteOptions {
         let lc_path = self.light_client_db.lc_path.clone().or_else(|| {
             self.storage_path
                 .as_ref()

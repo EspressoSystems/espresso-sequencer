@@ -17,7 +17,6 @@ use anyhow::Context;
 use async_trait::async_trait;
 use backon::{BackoffBuilder, ExponentialBuilder};
 use chrono::Utc;
-use futures::future::FutureExt;
 use hotshot_types::{
     data::VidShare,
     traits::{
@@ -504,11 +503,7 @@ impl SqlStorage {
         }
 
         let schema = config.schema.clone();
-        let pool = if Db::EMBEDDED {
-            pool
-        } else {
-            with_postgres_session_hooks(pool, schema.clone())
-        };
+        let pool = Db::session_hooks(pool, schema.clone());
 
         if config.reset {
             Db::delete_file(&config.db_opt)?;
@@ -704,39 +699,6 @@ impl SerializableRetryConfig {
 /// serialization conflict (SQLSTATE 40001, message "could not serialize access").
 fn is_serialization_conflict_err<E: std::fmt::Display>(err: &E) -> bool {
     format!("{err:#}").contains("could not serialize access")
-}
-
-/// Point every connection at `schema`, and discard a connection released with a transaction open.
-fn with_postgres_session_hooks(pool: PoolOptions<Db>, schema: String) -> PoolOptions<Db> {
-    pool.after_connect(move |conn, _| {
-        let schema = schema.clone();
-        async move {
-            query(&format!("SET search_path TO {schema}"))
-                .execute(conn)
-                .await?;
-            Ok(())
-        }
-        .boxed()
-    })
-    // TODO(abdul): remove once a sqlx release includes launchbadge/sqlx#4394.
-    // In sqlx 0.8.6, if `begin()` is cancelled, the connection can go back to the pool with a
-    // transaction still open, and sqlx does not know about it. Ask Postgres and drop it.
-    // With no transaction open, this query starts its own, so both timestamps are the same.
-    // Inside an open transaction, the transaction started earlier, so they differ.
-    // Keep `raw_sql`. A normal query is sent in several messages and Postgres moves
-    // `statement_timestamp()` forward on each one, so the timestamps would always differ.
-    .after_release(|conn, _| {
-        async move {
-            let row = conn
-                .fetch_one(sqlx::raw_sql(
-                    "SELECT transaction_timestamp() <> statement_timestamp()",
-                ))
-                .await?;
-            let in_transaction: bool = row.try_get(0)?;
-            Ok(!in_transaction)
-        }
-        .boxed()
-    })
 }
 
 /// Like [`is_serialization_conflict_err`] but also logs concurrent DB sessions for diagnostics.
@@ -1510,7 +1472,7 @@ impl VersionedDataSource for SqlStorage {
     }
 }
 
-// These tests run the `postgres` Docker image, which doesn't work on Windows.
+// These tests start `postgres` from PATH, which doesn't work on Windows.
 #[cfg(all(any(test, feature = "testing"), not(target_os = "windows")))]
 pub mod testing {
     use refinery::Migration;
@@ -1575,7 +1537,7 @@ pub mod testing {
     }
 }
 
-// These tests run the `postgres` Docker image, which doesn't work on Windows.
+// These tests start `postgres` from PATH, which doesn't work on Windows.
 #[cfg(all(test, not(target_os = "windows")))]
 mod test {
     use std::time::Duration;

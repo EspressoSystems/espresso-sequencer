@@ -53,6 +53,7 @@ use hotshot_types::{
 };
 use indexmap::IndexMap;
 use itertools::Itertools;
+use light_client::storage::LightClientDbOptions;
 use sqlx::{Decode, Executor, QueryBuilder, Row, Type, query};
 
 use super::{
@@ -64,6 +65,7 @@ use super::{
 };
 use crate::{
     NodeType, RECENT_STAKE_TABLES_LIMIT, SeqTypes, ViewNumber,
+    api::options::Query,
     catchup::SqlStateCatchup,
     persistence::{
         migrate_network_config,
@@ -122,9 +124,13 @@ pub(super) async fn read_pragmas(pool: &sqlx::Pool<Db>) -> Option<SqlitePragmas>
     })
 }
 
-/// The part of [`SqlOptions`] that only one backend reads.
+/// Node setup that differs between the SQL backends.
 pub(crate) trait BackendOptions {
     fn apply(cfg: Config, opt: &SqlOptions) -> anyhow::Result<Config>;
+
+    fn light_client_db(cfg: &Config, query: &Query) -> LightClientDbOptions;
+
+    async fn reset_light_client(cfg: &Config) -> anyhow::Result<()>;
 }
 
 impl TryFrom<&SqlOptions> for Config {
@@ -217,11 +223,9 @@ impl PersistenceOptions for Options {
     }
 
     async fn reset(self) -> anyhow::Result<()> {
-        SqlStorage::connect(
-            Config::try_from(&self.0)?.reset_schema(),
-            StorageConnectionType::Sequencer,
-        )
-        .await?;
+        let config = Config::try_from(&self.0)?;
+        Db::reset_light_client(&config).await?;
+        SqlStorage::connect(config.reset_schema(), StorageConnectionType::Sequencer).await?;
         Ok(())
     }
 }

@@ -43,6 +43,7 @@ use jf_merkle_tree_compat::{
     ForgetableMerkleTreeScheme, ForgetableUniversalMerkleTreeScheme, LookupResult,
     MerkleTreeScheme, prelude::MerkleNode,
 };
+use light_client::storage::LightClientDbOptions;
 use process_metrics::ProcessMetrics;
 use sqlx::{Encode, Row, Type};
 use tokio::time::sleep;
@@ -52,7 +53,7 @@ use versions::{
 };
 
 use super::{
-    persistence::Options,
+    persistence::{BackendOptions as _, Options},
     qs::{
         Backend as _, Config, Db, SqlDataSource, SqlStorage, Transaction, TransactionMode, Write,
         query_as,
@@ -84,6 +85,10 @@ impl DataSourceOptions for Options {
 
     fn enable_query_module(&self, opt: options::Options, query: Query) -> options::Options {
         opt.query_sql(query, self.0.clone())
+    }
+
+    fn light_client_db(&self, query: &Query) -> anyhow::Result<LightClientDbOptions> {
+        Ok(Db::light_client_db(&Config::try_from(&self.0)?, query))
     }
 }
 
@@ -163,7 +168,7 @@ pub(in crate::api) async fn init_query_module<C: ApiContext>(
         .with_block_provider(db_provider.clone())
         .with_vid_common_provider(db_provider);
     // If that fails, fetch missing data from peers.
-    let light_client_db = query_opt.light_client_db();
+    let light_client_db = mod_opt.light_client_db(&query_opt)?;
     let light_client = Arc::new(LightClientProvider::new(
         query_opt.peers,
         state.clone(),

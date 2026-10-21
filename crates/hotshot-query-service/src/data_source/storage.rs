@@ -160,6 +160,14 @@ pub mod sql {
     pub mod postgres;
     pub mod sqlite;
 
+    pub use postgres::release_only_idle;
+
+    // These tests start `postgres` from PATH, which doesn't work on Windows.
+    #[cfg(all(any(test, feature = "testing"), not(target_os = "windows")))]
+    pub mod testing {
+        pub use super::postgres::tmp_db::TmpPostgres;
+    }
+
     #[derive(PartialEq)]
     pub enum StorageConnectionType {
         Sequencer,

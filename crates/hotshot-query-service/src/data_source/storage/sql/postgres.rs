@@ -15,9 +15,10 @@
 use std::{collections::HashMap, time::Duration};
 
 use anyhow::Context as _;
-use futures::stream::TryStreamExt;
+use futures::{FutureExt as _, stream::TryStreamExt};
 use sqlx::{
-    Row as _,
+    Executor as _, Row as _,
+    pool::PoolOptions,
     postgres::{PgConnectOptions, PgRow, PgSslMode},
 };
 
@@ -30,6 +31,29 @@ use imp::queries::state::Node;
 pub use imp::*;
 
 use crate::{QueryError, QueryResult, include_migrations};
+
+/// Drop connections that come back to the pool with a transaction still open.
+///
+/// In sqlx 0.8.6, a `begin()` cancelled mid-flight can return its connection to the pool inside
+/// a transaction that sqlx does not know about.
+pub fn release_only_idle(pool: PoolOptions<sqlx::Postgres>) -> PoolOptions<sqlx::Postgres> {
+    // TODO(abdul): remove once a sqlx release includes launchbadge/sqlx#4394.
+    // With no transaction open, this query starts its own, so both timestamps are the same.
+    // Keep `raw_sql`. A normal query is sent in several messages and Postgres moves
+    // `statement_timestamp()` forward on each one, so the timestamps would always differ.
+    pool.after_release(|conn, _| {
+        async move {
+            let row = conn
+                .fetch_one(sqlx::raw_sql(
+                    "SELECT transaction_timestamp() <> statement_timestamp()",
+                ))
+                .await?;
+            let in_transaction: bool = row.try_get(0)?;
+            Ok(!in_transaction)
+        }
+        .boxed()
+    })
+}
 
 impl Backend for Db {
     type ConnectOptions = PgConnectOptions;
@@ -52,6 +76,20 @@ impl Backend for Db {
 
     fn delete_file(_opts: &PgConnectOptions) -> std::io::Result<()> {
         Ok(())
+    }
+
+    fn session_hooks(pool: PoolOptions<Db>, schema: String) -> PoolOptions<Db> {
+        let pool = pool.after_connect(move |conn, _| {
+            let schema = schema.clone();
+            async move {
+                query(&format!("SET search_path TO {schema}"))
+                    .execute(conn)
+                    .await?;
+                Ok(())
+            }
+            .boxed()
+        });
+        release_only_idle(pool)
     }
 }
 
@@ -243,6 +281,10 @@ impl Config {
         self
     }
 
+    pub fn connect_options(&self) -> &PgConnectOptions {
+        &self.db_opt
+    }
+
     /// Set the name of the schema to use for queries.
     ///
     /// The default schema is named `hotshot` and is created via the default migrations.
@@ -266,7 +308,7 @@ impl Config {
 }
 
 #[cfg(all(any(test, feature = "testing"), not(target_os = "windows")))]
-mod tmp_db {
+pub(super) mod tmp_db {
     use std::{
         env,
         process::{Child, Command, Stdio},
@@ -281,23 +323,48 @@ mod tmp_db {
 
     #[derive(Debug)]
     pub struct TmpDb {
-        host: String,
-        port: u16,
-        data_dir: std::path::PathBuf,
-        postgres: Option<Child>,
-        persistent: bool,
+        postgres: TmpPostgres,
     }
 
     impl TmpDb {
         pub async fn init() -> Self {
-            Self::init_postgres(false).await
+            Self {
+                postgres: TmpPostgres::init().await,
+            }
         }
 
-        pub async fn persistent() -> Self {
-            Self::init_postgres(true).await
+        pub fn host(&self) -> String {
+            self.postgres.host()
         }
 
-        async fn init_postgres(persistent: bool) -> Self {
+        pub fn port(&self) -> u16 {
+            self.postgres.port()
+        }
+
+        pub fn config(&self) -> Config {
+            Config::default()
+                .user("postgres")
+                .password("password")
+                .host(self.host())
+                .port(self.port())
+                .migrations(test_migrations())
+        }
+    }
+
+    /// A throwaway Postgres server with user `postgres` and trust auth, removed on drop.
+    ///
+    /// Available whichever database the query service is built for, for crates that keep data of
+    /// their own in Postgres.
+    #[derive(Debug)]
+    pub struct TmpPostgres {
+        host: String,
+        port: u16,
+        data_dir: std::path::PathBuf,
+        postgres: Option<Child>,
+    }
+
+    impl TmpPostgres {
+        pub async fn init() -> Self {
             let port = reserve_tcp_port().unwrap();
             let host = "127.0.0.1".to_string();
 
@@ -323,10 +390,9 @@ mod tmp_db {
                 port,
                 data_dir,
                 postgres: None,
-                persistent,
             };
 
-            db.start_postgres().await;
+            db.start().await;
             db
         }
 
@@ -338,16 +404,7 @@ mod tmp_db {
             self.port
         }
 
-        pub fn config(&self) -> Config {
-            Config::default()
-                .user("postgres")
-                .password("password")
-                .host(self.host())
-                .port(self.port())
-                .migrations(test_migrations())
-        }
-
-        pub fn stop_postgres(&mut self) {
+        fn stop(&mut self) {
             let Some(mut postgres) = self.postgres.take() else {
                 return;
             };
@@ -369,8 +426,7 @@ mod tmp_db {
             let _ = postgres.wait();
         }
 
-        pub async fn start_postgres(&mut self) {
-            self.stop_postgres();
+        async fn start(&mut self) {
             tracing::info!(port = self.port, "starting postgres");
             let postgres = Command::new("postgres")
                 .arg("-D")
@@ -423,12 +479,10 @@ mod tmp_db {
         }
     }
 
-    impl Drop for TmpDb {
+    impl Drop for TmpPostgres {
         fn drop(&mut self) {
-            self.stop_postgres();
-            if !self.persistent {
-                let _ = std::fs::remove_dir_all(&self.data_dir);
-            }
+            self.stop();
+            let _ = std::fs::remove_dir_all(&self.data_dir);
         }
     }
 }

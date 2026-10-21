@@ -4,6 +4,7 @@ use std::time::Duration;
 
 use anyhow::Context as _;
 use hotshot_query_service::{data_source::storage::sql::sqlite as qs, include_migrations};
+use light_client::storage::LightClientDbOptions;
 
 #[expect(
     clippy::duplicate_mod,
@@ -16,6 +17,7 @@ pub use imp::*;
 use qs::Config;
 
 use super::{Options as SqlOptions, SqliteOptions};
+use crate::api::options::Query;
 
 impl BackendOptions for qs::Db {
     fn apply(mut cfg: Config, opt: &SqlOptions) -> anyhow::Result<Config> {
@@ -34,6 +36,14 @@ impl BackendOptions for qs::Db {
         ));
 
         Ok(cfg.db_path(path))
+    }
+
+    fn light_client_db(_cfg: &Config, query: &Query) -> LightClientDbOptions {
+        LightClientDbOptions::Sqlite(query.sqlite_light_client_db())
+    }
+
+    async fn reset_light_client(_cfg: &Config) -> anyhow::Result<()> {
+        Ok(())
     }
 }
 
