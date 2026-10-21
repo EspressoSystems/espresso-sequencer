@@ -8,6 +8,7 @@
 - Run `cargo test -p espresso-types reference` after modifying any serializable type
 - Run `cargo fmt` and `cargo check -p <package>` after changes
 - Update all three storage backends (PostgreSQL, SQLite, filesystem) when changing persistence
+- Add a `doc/operator-notes/` fragment when a change requires operator intervention (see its `README.md`)
 
 **NEVER:**
 

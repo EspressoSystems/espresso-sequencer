@@ -232,7 +232,9 @@ where
     S: DataSourceOptions,
 {
     let follower_params = match (&modules.follower, &modules.query) {
-        (Some(follower), Some(query)) => Some(opt.follower_params(follower, query)?),
+        (Some(follower), Some(query)) => {
+            Some(opt.follower_params(follower, query, storage_opt.light_client_db(query)?)?)
+        },
         _ => None,
     };
     let l1_params = L1Params {

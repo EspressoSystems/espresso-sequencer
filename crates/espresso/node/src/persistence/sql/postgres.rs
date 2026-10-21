@@ -6,6 +6,7 @@ use hotshot_query_service::{
     data_source::storage::sql::postgres::{self as qs, set_no_deferrable_on_read},
     include_migrations,
 };
+use light_client::storage::{LightClientDbOptions, LightClientPostgresOptions};
 
 #[path = "../sql.rs"]
 mod imp;
@@ -14,6 +15,7 @@ pub use imp::*;
 use qs::Config;
 
 use super::{Options as SqlOptions, PostgresOptions};
+use crate::api::options::Query;
 
 impl BackendOptions for qs::Db {
     fn apply(mut cfg: Config, opt: &SqlOptions) -> anyhow::Result<Config> {
@@ -52,6 +54,20 @@ impl BackendOptions for qs::Db {
         }
 
         Ok(cfg)
+    }
+
+    /// A Postgres node keeps its light client in the same database, so it survives restarts and
+    /// container replacement without any extra volume.
+    fn light_client_db(cfg: &Config, query: &Query) -> LightClientDbOptions {
+        LightClientDbOptions::Postgres(Box::new(LightClientPostgresOptions {
+            connect: cfg.connect_options().clone(),
+            num_connections: query.light_client_db.num_connections,
+            num_leaves: query.light_client_db.num_leaves,
+        }))
+    }
+
+    async fn reset_light_client(cfg: &Config) -> anyhow::Result<()> {
+        LightClientPostgresOptions::reset(cfg.connect_options()).await
     }
 }
 
@@ -285,5 +301,60 @@ mod test {
 
         let latest = storage.load_latest_acted_view().await.unwrap();
         assert_eq!(latest, Some(ViewNumber::new(19)));
+    }
+
+    #[test_log::test(tokio::test(flavor = "multi_thread"))]
+    async fn test_light_client_shares_the_node_database() {
+        use hotshot_query_service::availability::LeafId;
+        use light_client::storage::Storage as _;
+
+        use crate::api::{data_source::DataSourceOptions as _, options::Query};
+
+        let tmp = Persistence::tmp_storage().await;
+        let mut opt = Persistence::options(&tmp);
+        let persistence = opt.create().await.unwrap();
+
+        let db = opt
+            .light_client_db(&Query::default())
+            .unwrap()
+            .connect()
+            .await
+            .unwrap();
+        let leaf = light_client::testing::leaf_chain(0..1, versions::EPOCH_VERSION)
+            .await
+            .remove(0);
+        db.insert_leaf(leaf.clone()).await.unwrap();
+        assert_eq!(
+            db.leaf_upper_bound(LeafId::Number(0)).await.unwrap(),
+            Some(leaf)
+        );
+
+        let (leaves,): (i64,) = sqlx::query_as("SELECT count(*) FROM light_client.leaf")
+            .fetch_one(&persistence.db.pool())
+            .await
+            .unwrap();
+        assert_eq!(leaves, 1);
+    }
+
+    #[test_log::test(tokio::test(flavor = "multi_thread"))]
+    async fn test_reset_drops_light_client_cache() {
+        use light_client::storage::Storage as _;
+
+        use crate::api::{data_source::DataSourceOptions as _, options::Query};
+
+        let tmp = Persistence::tmp_storage().await;
+        let opt = Persistence::options(&tmp);
+        let light_client = || opt.light_client_db(&Query::default()).unwrap().connect();
+        let leaf = light_client::testing::leaf_chain(0..1, versions::EPOCH_VERSION)
+            .await
+            .remove(0);
+        let db = light_client().await.unwrap();
+        db.insert_leaf(leaf).await.unwrap();
+        drop(db);
+
+        opt.clone().reset().await.unwrap();
+
+        let db = light_client().await.unwrap();
+        assert_eq!(db.block_height().await.unwrap(), 0);
     }
 }

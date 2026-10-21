@@ -35,7 +35,7 @@ use hotshot_types::{
     x25519,
 };
 use indexmap::IndexMap;
-use light_client::{state::LightClientOptions, storage::LightClientSqliteOptions};
+use light_client::{state::LightClientOptions, storage::LightClientDbOptions};
 use serde::{Deserialize, Serialize};
 use url::Url;
 
@@ -54,6 +54,9 @@ pub trait DataSourceOptions: PersistenceOptions {
     type DataSource: SequencerDataSource<Options = Self>;
 
     fn enable_query_module(&self, opt: Options, query: Query) -> Options;
+
+    /// Where a node on this storage keeps its light client database.
+    fn light_client_db(&self, query: &Query) -> anyhow::Result<LightClientDbOptions>;
 }
 
 impl DataSourceOptions for persistence::fs::Options {
@@ -61,6 +64,10 @@ impl DataSourceOptions for persistence::fs::Options {
 
     fn enable_query_module(&self, opt: Options, query: Query) -> Options {
         opt.query_fs(query, self.clone())
+    }
+
+    fn light_client_db(&self, query: &Query) -> anyhow::Result<LightClientDbOptions> {
+        Ok(LightClientDbOptions::Sqlite(query.sqlite_light_client_db()))
     }
 }
 
@@ -91,7 +98,7 @@ pub(super) async fn provider<C: ApiContext>(
     peers: impl IntoIterator<Item = Url>,
     state: &ApiState<C>,
     opt: LightClientOptions,
-    db_opt: LightClientSqliteOptions,
+    db_opt: LightClientDbOptions,
 ) -> anyhow::Result<Provider> {
     Ok(Provider::default().with_provider(LightClientProvider::new(
         peers,
@@ -665,6 +672,31 @@ mod test {
         assert_eq!(keys["x25519_key"], x25519_key.to_string());
         assert_eq!(keys["p2p_addr"], validator["p2p_addr"]);
         assert_eq!(keys["p2p_addr"], "node.example.com:9977");
+    }
+
+    #[test]
+    fn sql_storage_keeps_light_client_in_postgres() {
+        use clap::Parser as _;
+
+        let opt = persistence::sql::postgres::Options(
+            persistence::sql::Options::try_parse_from([
+                "espresso-node",
+                "--host",
+                "db.example",
+                "--port",
+                "6543",
+                "--database",
+                "espresso",
+            ])
+            .unwrap(),
+        );
+        let LightClientDbOptions::Postgres(lc) = opt.light_client_db(&Query::default()).unwrap()
+        else {
+            panic!("expected the light client in Postgres");
+        };
+        assert_eq!(lc.connect.get_host(), "db.example");
+        assert_eq!(lc.connect.get_port(), 6543);
+        assert_eq!(lc.connect.get_database(), Some("espresso"));
     }
 }
 
