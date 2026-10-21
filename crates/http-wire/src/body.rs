@@ -2,7 +2,7 @@ use http::StatusCode;
 use serde::{Serialize, de::DeserializeOwned};
 use vbs::{
     BinarySerializer, Serializer,
-    version::{StaticVersion, StaticVersionType},
+    version::{StaticVersion, StaticVersionType, Version},
 };
 
 use crate::{content_type::ContentType, error::WireError};
@@ -66,13 +66,31 @@ pub(crate) fn decode_body<Ver: StaticVersionType, T: DeserializeOwned>(
     body: &[u8],
 ) -> Result<T, DecodeFailure> {
     match content_type.and_then(ContentType::parse) {
-        Some(ContentType::Binary) => Serializer::<Ver>::deserialize(body)
-            .map_err(|err| DecodeFailure::Binary(err.to_string())),
+        Some(ContentType::Binary) => decode_binary::<Ver, T>(body),
         Some(ContentType::Json) => {
             serde_json::from_slice(body).map_err(|err| DecodeFailure::Json(err.to_string()))
         },
         None => Err(DecodeFailure::UnsupportedContentType),
     }
+}
+
+/// Decode a VBS payload like [`vbs::Serializer::deserialize`], but through
+/// [`versions::deserialize_limited`] since the bytes come from a peer.
+pub(crate) fn decode_binary<Ver, T>(bytes: &[u8]) -> Result<T, DecodeFailure>
+where
+    Ver: StaticVersionType,
+    T: DeserializeOwned,
+{
+    let (version, rest) =
+        Version::deserialize(bytes).map_err(|err| DecodeFailure::Binary(err.to_string()))?;
+    if version != Ver::version() {
+        // The text, swapped arguments included, is the one `vbs` returns, which clients see.
+        return Err(DecodeFailure::Binary(format!(
+            "Version Mismatch! Expected {version}, got {}",
+            Ver::version()
+        )));
+    }
+    versions::deserialize_limited(rest).map_err(|err| DecodeFailure::Binary(err.to_string()))
 }
 
 /// Decode the client-side view of a complete response.

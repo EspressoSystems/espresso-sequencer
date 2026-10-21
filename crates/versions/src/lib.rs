@@ -6,6 +6,10 @@ use serde::{
 };
 pub use vbs::version::Version;
 
+pub use crate::depth::deserialize_limited;
+
+mod depth;
+
 // Known versions:
 
 pub const VERSION_0_0: Version = version(0, 0);
@@ -50,7 +54,7 @@ where
     T: DeserializeOwned,
 {
     let (version, bytes) = Version::deserialize(bytes).map_err(|_| VersionError::Decode)?;
-    let value = bincode::deserialize(bytes)?;
+    let value = deserialize_limited(bytes)?;
     Ok((version, value))
 }
 
