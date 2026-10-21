@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"enum":["BuildError","Error","RequestError","TransactionStatus"],"fn":["define_api","submit_api","try_extract_param"],"struct":["Options"]};

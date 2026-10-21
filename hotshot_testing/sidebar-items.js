@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"mod":["block_builder","helpers","node_stake","test_builder","test_launcher","view_generator"]};

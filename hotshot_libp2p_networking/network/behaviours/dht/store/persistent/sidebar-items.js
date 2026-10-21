@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"fn":["instant_to_unix_seconds","unix_seconds_to_instant"],"struct":["DhtFilePersistence","DhtNoPersistence","PersistentStore","SerializableRecord"],"trait":["DhtPersistentStorage"]};

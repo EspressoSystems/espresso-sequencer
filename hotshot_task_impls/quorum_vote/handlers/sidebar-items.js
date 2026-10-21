@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"fn":["handle_quorum_proposal_validated","store_drb_result","submit_vote","update_shared_state"]};

@@ -3191,7 +3191,7 @@
 <a href=#3191 id=3191 data-nosnippet>3191</a>
 <a href=#3192 id=3192 data-nosnippet>3192</a><span class="attr">#[cfg(test)]
 <a href=#3193 id=3193 data-nosnippet>3193</a></span><span class="kw">mod </span>test {
-<a href=#3194 id=3194 data-nosnippet>3194</a>    <span class="kw">use </span>espresso_types::{Leaf, NodeState, ValidatedState, traits::NullEventConsumer};
+<a href=#3194 id=3194 data-nosnippet>3194</a>    <span class="kw">use </span>espresso_types::{Leaf, NodeState, PubKey, ValidatedState, traits::NullEventConsumer};
 <a href=#3195 id=3195 data-nosnippet>3195</a>    <span class="kw">use </span>futures::stream::TryStreamExt;
 <a href=#3196 id=3196 data-nosnippet>3196</a>    <span class="kw">use </span>hotshot_example_types::node_types::TEST_VERSIONS;
 <a href=#3197 id=3197 data-nosnippet>3197</a>    <span class="attr">#[cfg(feature = <span class="string">"embedded-db"</span>)]
@@ -3209,7 +3209,7 @@
 <a href=#3209 id=3209 data-nosnippet>3209</a>    };
 <a href=#3210 id=3210 data-nosnippet>3210</a>
 <a href=#3211 id=3211 data-nosnippet>3211</a>    <span class="kw">use super</span>::<span class="kw-2">*</span>;
-<a href=#3212 id=3212 data-nosnippet>3212</a>    <span class="kw">use crate</span>::{BLSPubKey, PubKey, persistence::tests::TestablePersistence <span class="kw">as _</span>};
+<a href=#3212 id=3212 data-nosnippet>3212</a>    <span class="kw">use crate</span>::{BLSPubKey, persistence::tests::TestablePersistence <span class="kw">as _</span>};
 <a href=#3213 id=3213 data-nosnippet>3213</a>
 <a href=#3214 id=3214 data-nosnippet>3214</a>    <span class="attr">#[cfg(feature = <span class="string">"embedded-db"</span>)]
 <a href=#3215 id=3215 data-nosnippet>3215</a>    #[tokio::test]

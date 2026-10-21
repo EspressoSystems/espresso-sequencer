@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"fn":["build_assembled_sig","build_cert","build_da_certificate","build_vid_proposal","da_payload_commitment","key_pair_for_id"],"type":["TestNodeKeyMap"]};

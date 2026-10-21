@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"enum":["BuilderChange"],"fn":["default_hotshot_config","gen_node_lists"],"struct":["TestDescription","TimingData"]};

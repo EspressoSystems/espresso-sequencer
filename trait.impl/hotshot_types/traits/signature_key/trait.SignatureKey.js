@@ -1,9 +1,9 @@
 (function() {
-    const implementors = Object.fromEntries([["hotshot",[]],["hotshot_types",[]]]);
+    const implementors = Object.fromEntries([["hotshot_types",[]]]);
     if (window.register_implementors) {
         window.register_implementors(implementors);
     } else {
         window.pending_implementors = implementors;
     }
 })()
-//{"start":59,"fragment_lengths":[14,21]}
+//{"start":59,"fragment_lengths":[20]}
