@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["BacktraceLoggingMode"],"struct":["Config"],"type":["FmtSubscriber"]};
+window.SIDEBAR_ITEMS = {"enum":["BacktraceLoggingMode","Stream"],"fn":["fmt_layer","initialize_logging","initialize_logging_on_stderr","initialize_logging_with","parse_span_filter"],"struct":["Config"],"type":["ErasedFmtLayer","FmtSubscriber"]};
