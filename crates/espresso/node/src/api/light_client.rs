@@ -739,4 +739,6 @@ fn chain_too_long(requested: usize, chain_limit: usize) -> Error {
 }
 
 #[cfg(test)]
-mod tests;
+mod postgres;
+#[cfg(test)]
+mod sqlite;

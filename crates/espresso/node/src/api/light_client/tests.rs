@@ -9,7 +9,6 @@ use hotshot_query_service::{
     availability::{BlockQueryData, TransactionIndex, VidCommonQueryData},
     data_source::{
         Transaction,
-        sql::postgres::{Config, SqlStorage},
         storage::{AvailabilityStorage, UpdateAvailabilityStorage, pruning::PrunerCfg},
     },
     fetching::provider::TrustedQueryServiceProvider,
@@ -36,10 +35,13 @@ use versions::{
     NEW_PROTOCOL_VERSION, Upgrade,
 };
 
-use super::*;
-use crate::api::{
-    data_source::{Provider, SequencerDataSource, testing::TestableSequencerDataSource},
-    sql::postgres::DataSource,
+use super::{
+    qs::{Config, SqlStorage},
+    sql::DataSource,
+    *,
+};
+use crate::api::data_source::{
+    Provider, SequencerDataSource, testing::TestableSequencerDataSource,
 };
 
 const CHAIN_LIMIT: usize = 500;

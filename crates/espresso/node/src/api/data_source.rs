@@ -702,7 +702,10 @@ mod test {
 
 #[cfg(any(test, feature = "testing"))]
 pub mod testing {
+    use hotshot_query_service::data_source::storage::sql::StorageConnectionType;
+
     use super::{super::Options, *};
+    use crate::persistence::sql::Options as SqlOptions;
 
     #[async_trait]
     pub trait TestableSequencerDataSource: SequencerDataSource {
@@ -717,5 +720,77 @@ pub mod testing {
             anyhow::bail!("not supported")
         }
         fn options(storage: &Self::Storage, opt: Options) -> Options;
+    }
+
+    /// A [`TestableSequencerDataSource`] on a SQL database, with the direct access to its rows
+    /// that some tests need to set up or inspect a node's state.
+    #[async_trait]
+    pub trait TestableSqlDataSource: TestableSequencerDataSource<Storage: Send> {
+        /// A connection to the database, outside any node.
+        type SqlStorage: Send + Sync;
+
+        fn tmp_options(storage: &Self::Storage) -> SqlOptions;
+        fn sql_persistence_options(opt: SqlOptions) -> Self::Options;
+        async fn connect(
+            opt: &SqlOptions,
+            connection_type: StorageConnectionType,
+        ) -> anyhow::Result<Self::SqlStorage>;
+
+        /// The number of blocks in availability storage.
+        async fn local_block_height(db: &Self::SqlStorage) -> anyhow::Result<u64>;
+
+        /// The state pruned height, then the state head.
+        async fn state_heights(db: &Self::SqlStorage) -> (Option<u64>, u64);
+
+        async fn insert_leaf(
+            db: &Self::SqlStorage,
+            leaf: &LeafQueryData<SeqTypes>,
+        ) -> anyhow::Result<()>;
+
+        async fn set_last_state_height(db: &Self::SqlStorage, height: u64) -> anyhow::Result<()>;
+
+        /// Stamp the state pruned height without pruning anything.
+        async fn stamp_state_pruned_height(
+            db: &Self::SqlStorage,
+            height: u64,
+        ) -> anyhow::Result<()>;
+
+        /// Prune consensus data to `pruned` as a pruner batch would, stamping the data pruned
+        /// height and then deleting what `delete_batch` deletes.
+        async fn prune_data_to(db: &Self::SqlStorage, pruned: u64) -> anyhow::Result<()>;
+
+        /// Delete consensus data above `from` up to and including `to` without moving the data
+        /// pruned height, as if the node had never had it.
+        async fn delete_data_between(
+            db: &Self::SqlStorage,
+            from: u64,
+            to: u64,
+        ) -> anyhow::Result<()>;
+
+        /// The number of stored leaves at or below `height`.
+        async fn count_leaves_up_to(db: &Self::SqlStorage, height: u64) -> anyhow::Result<i64>;
+
+        /// Record a deferred migration, as the migration runner does when it starts one.
+        async fn insert_deferred_migration(
+            db: &Self::SqlStorage,
+            migration: DeferredMigration,
+        ) -> anyhow::Result<()>;
+
+        async fn reconstruct_state(
+            db: &Self::SqlStorage,
+            instance: &NodeState,
+            from_height: u64,
+            to_view: ViewNumber,
+            fee_accounts: &[FeeAccount],
+            reward_accounts: &[RewardAccountV2],
+        ) -> anyhow::Result<(espresso_types::ValidatedState, Leaf2)>;
+    }
+
+    /// A row of the `deferred_migrations` table.
+    pub struct DeferredMigration {
+        pub name: &'static str,
+        pub started_at: chrono::DateTime<chrono::Utc>,
+        pub completed_at: Option<chrono::DateTime<chrono::Utc>>,
+        pub last_offset: Option<i64>,
     }
 }
