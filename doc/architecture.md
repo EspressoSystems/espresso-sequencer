@@ -1,8 +1,10 @@
-# Espresso Confirmation Layer Architecture
+# Espresso Architecture
 
 ## Overview
 
-The diagram below shows how the Espresso Confirmation Layer fits into the rollup centric Ethereum ecosystem.
+Espresso finalizes transaction data for the chains and applications built on it. Each chain keeps its own sequencer and execution; Espresso orders and finalizes the blocks those chains submit, makes their data available, and publishes a proof of its finalized state to a light client contract so other chains can verify it.
+
+The walkthrough below uses the most common integration today as a concrete example: rollups that also settle their state to Ethereum. The same flow applies to any chain built on Espresso, with or without an L1.
 
 ![Overview](./espresso-overview.svg)
 
