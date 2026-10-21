@@ -147,6 +147,29 @@ macro_rules! include_migrations {
     };
 }
 
+/// Drop connections that come back to the pool with a transaction still open.
+///
+/// In sqlx 0.8.6, a `begin()` cancelled mid-flight can return its connection to the pool inside
+/// a transaction that sqlx does not know about.
+pub fn release_only_idle(pool: PoolOptions<sqlx::Postgres>) -> PoolOptions<sqlx::Postgres> {
+    // TODO(abdul): remove once a sqlx release includes launchbadge/sqlx#4394.
+    // With no transaction open, this query starts its own, so both timestamps are the same.
+    // Keep `raw_sql`. A normal query is sent in several messages and Postgres moves
+    // `statement_timestamp()` forward on each one, so the timestamps would always differ.
+    pool.after_release(|conn, _| {
+        async move {
+            let row = conn
+                .fetch_one(sqlx::raw_sql(
+                    "SELECT transaction_timestamp() <> statement_timestamp()",
+                ))
+                .await?;
+            let in_transaction: bool = row.try_get(0)?;
+            Ok(!in_transaction)
+        }
+        .boxed()
+    })
+}
+
 /// The migrations required to build the default schema for this version of [`SqlStorage`].
 pub fn default_migrations() -> Vec<Migration> {
     let mut migrations = Db::migrations();
@@ -579,11 +602,7 @@ impl SqlStorage {
         }
 
         let schema = config.schema.clone();
-        let pool = if Db::EMBEDDED {
-            pool
-        } else {
-            with_postgres_session_hooks(pool, schema.clone())
-        };
+        let pool = Db::session_hooks(pool, schema.clone());
 
         if config.reset {
             Db::delete_file(&config.db_opt)?;
@@ -779,39 +798,6 @@ impl SerializableRetryConfig {
 /// serialization conflict (SQLSTATE 40001, message "could not serialize access").
 fn is_serialization_conflict_err<E: std::fmt::Display>(err: &E) -> bool {
     format!("{err:#}").contains("could not serialize access")
-}
-
-/// Point every connection at `schema`, and discard a connection released with a transaction open.
-fn with_postgres_session_hooks(pool: PoolOptions<Db>, schema: String) -> PoolOptions<Db> {
-    pool.after_connect(move |conn, _| {
-        let schema = schema.clone();
-        async move {
-            query(&format!("SET search_path TO {schema}"))
-                .execute(conn)
-                .await?;
-            Ok(())
-        }
-        .boxed()
-    })
-    // TODO(abdul): remove once a sqlx release includes launchbadge/sqlx#4394.
-    // In sqlx 0.8.6, if `begin()` is cancelled, the connection can go back to the pool with a
-    // transaction still open, and sqlx does not know about it. Ask Postgres and drop it.
-    // With no transaction open, this query starts its own, so both timestamps are the same.
-    // Inside an open transaction, the transaction started earlier, so they differ.
-    // Keep `raw_sql`. A normal query is sent in several messages and Postgres moves
-    // `statement_timestamp()` forward on each one, so the timestamps would always differ.
-    .after_release(|conn, _| {
-        async move {
-            let row = conn
-                .fetch_one(sqlx::raw_sql(
-                    "SELECT transaction_timestamp() <> statement_timestamp()",
-                ))
-                .await?;
-            let in_transaction: bool = row.try_get(0)?;
-            Ok(!in_transaction)
-        }
-        .boxed()
-    })
 }
 
 /// Like [`is_serialization_conflict_err`] but also logs concurrent DB sessions for diagnostics.
@@ -1585,13 +1571,22 @@ impl VersionedDataSource for SqlStorage {
     }
 }
 
-// These tests run the `postgres` Docker image, which doesn't work on Windows.
+// These tests start `postgres` from PATH, which doesn't work on Windows.
 #[cfg(all(any(test, feature = "testing"), not(target_os = "windows")))]
 pub mod testing {
+    use std::{
+        env,
+        process::{Child, Command, Stdio},
+        time::Duration,
+    };
+
     use refinery::Migration;
+    use test_utils::reserve_tcp_port;
+    use tokio::time::timeout;
 
     pub use super::backend::tmp_db::TmpDb;
     use super::{Backend as _, Db};
+    use crate::testing::sleep;
 
     /// The migrations a [`TmpDb`] applies on top of the default schema.
     pub(crate) fn test_migrations() -> Vec<Migration> {
@@ -1600,6 +1595,141 @@ pub mod testing {
             &TestMerkleTreeMigration::create("test_tree"),
         )
         .unwrap()])
+    }
+
+    /// A throwaway Postgres server with user `postgres` and trust auth, removed on drop.
+    ///
+    /// Available whichever database the query service is built for, for crates that keep data of
+    /// their own in Postgres.
+    #[derive(Debug)]
+    pub struct TmpPostgres {
+        host: String,
+        port: u16,
+        data_dir: std::path::PathBuf,
+        postgres: Option<Child>,
+    }
+
+    impl TmpPostgres {
+        pub async fn init() -> Self {
+            let port = reserve_tcp_port().unwrap();
+            let host = "127.0.0.1".to_string();
+
+            // initdb requires an empty target; clear any dir left by a crashed run
+            // that reused this (recycled) ephemeral port.
+            let data_dir = env::temp_dir().join(format!("espresso-tmpdb-{port}"));
+            let _ = std::fs::remove_dir_all(&data_dir);
+
+            let output = Command::new("initdb")
+                .arg("-D")
+                .arg(&data_dir)
+                .args(["-U", "postgres", "--auth=trust"])
+                .output()
+                .expect("initdb failed to run; is postgres installed and on PATH?");
+            assert!(
+                output.status.success(),
+                "initdb failed for {data_dir:?}: {}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+
+            let mut db = Self {
+                host,
+                port,
+                data_dir,
+                postgres: None,
+            };
+
+            db.start().await;
+            db
+        }
+
+        pub fn host(&self) -> String {
+            self.host.clone()
+        }
+
+        pub fn port(&self) -> u16 {
+            self.port
+        }
+
+        fn stop(&mut self) {
+            let Some(mut postgres) = self.postgres.take() else {
+                return;
+            };
+            tracing::info!(port = self.port, "stopping postgres");
+            // Fast shutdown (SIGINT to the postmaster) releases the datadir before
+            // Drop removes it; fall back to SIGKILL if pg_ctl is unavailable.
+            let stopped = Command::new("pg_ctl")
+                .arg("-D")
+                .arg(&self.data_dir)
+                .args(["stop", "-m", "fast", "-w"])
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status()
+                .map(|status| status.success())
+                .unwrap_or(false);
+            if !stopped {
+                let _ = postgres.kill();
+            }
+            let _ = postgres.wait();
+        }
+
+        async fn start(&mut self) {
+            tracing::info!(port = self.port, "starting postgres");
+            let postgres = Command::new("postgres")
+                .arg("-D")
+                .arg(&self.data_dir)
+                .args(["-p", &self.port.to_string()])
+                .args(["-h", &self.host])
+                // Keep the unix socket inside the data dir instead of a shared /tmp.
+                .arg("-k")
+                .arg(&self.data_dir)
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .spawn()
+                .expect("failed to start postgres; is it installed and on PATH?");
+            self.postgres = Some(postgres);
+
+            self.wait_for_ready().await;
+        }
+
+        async fn wait_for_ready(&self) {
+            let timeout_duration = Duration::from_secs(
+                env::var("SQL_TMP_DB_CONNECT_TIMEOUT")
+                    .unwrap_or("60".to_string())
+                    .parse()
+                    .expect("SQL_TMP_DB_CONNECT_TIMEOUT must be an integer number of seconds"),
+            );
+
+            if let Err(err) = timeout(timeout_duration, async {
+                while !Command::new("pg_isready")
+                    .args(["-h", &self.host])
+                    .args(["-p", &self.port.to_string()])
+                    .args(["-U", "postgres"])
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::null())
+                    .status()
+                    .map(|status| status.success())
+                    .unwrap_or(false)
+                {
+                    tracing::warn!("database is not ready");
+                    sleep(Duration::from_secs(1)).await;
+                }
+            })
+            .await
+            {
+                panic!(
+                    "failed to connect to TmpDb within configured timeout {timeout_duration:?}: \
+                     {err:#}\n{}",
+                    "Consider increasing the timeout by setting SQL_TMP_DB_CONNECT_TIMEOUT"
+                );
+            }
+        }
+    }
+
+    impl Drop for TmpPostgres {
+        fn drop(&mut self) {
+            self.stop();
+            let _ = std::fs::remove_dir_all(&self.data_dir);
+        }
     }
 
     pub struct TestMerkleTreeMigration;
@@ -1650,7 +1780,7 @@ pub mod testing {
     }
 }
 
-// These tests run the `postgres` Docker image, which doesn't work on Windows.
+// These tests start `postgres` from PATH, which doesn't work on Windows.
 #[cfg(all(test, not(target_os = "windows")))]
 mod test {
     use std::time::Duration;

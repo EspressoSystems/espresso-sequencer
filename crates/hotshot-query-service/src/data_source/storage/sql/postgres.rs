@@ -15,15 +15,17 @@
 use std::{collections::HashMap, time::Duration};
 
 use anyhow::Context as _;
-use futures::stream::TryStreamExt;
+use futures::{FutureExt as _, stream::TryStreamExt};
 use sqlx::{
     Row as _,
+    pool::PoolOptions,
     postgres::{PgConnectOptions, PgRow, PgSslMode},
+    query,
 };
 
 use super::{
     Backend, Config, Db, Migration, QueryBuilder, StateQueries, Transaction, Write,
-    queries::state::Node,
+    queries::state::Node, release_only_idle,
 };
 use crate::{QueryError, QueryResult, include_migrations};
 
@@ -48,6 +50,20 @@ impl Backend for Db {
 
     fn delete_file(_opts: &PgConnectOptions) -> std::io::Result<()> {
         Ok(())
+    }
+
+    fn session_hooks(pool: PoolOptions<Db>, schema: String) -> PoolOptions<Db> {
+        let pool = pool.after_connect(move |conn, _| {
+            let schema = schema.clone();
+            async move {
+                query(&format!("SET search_path TO {schema}"))
+                    .execute(conn)
+                    .await?;
+                Ok(())
+            }
+            .boxed()
+        });
+        release_only_idle(pool)
     }
 }
 
@@ -239,6 +255,10 @@ impl Config {
         self
     }
 
+    pub fn connect_options(&self) -> &PgConnectOptions {
+        &self.db_opt
+    }
+
     /// Set the name of the schema to use for queries.
     ///
     /// The default schema is named `hotshot` and is created via the default migrations.
@@ -263,75 +283,29 @@ impl Config {
 
 #[cfg(all(any(test, feature = "testing"), not(target_os = "windows")))]
 pub(super) mod tmp_db {
-    use std::{
-        env,
-        process::{Child, Command, Stdio},
-        time::Duration,
+    use super::super::{
+        Config,
+        testing::{TmpPostgres, test_migrations},
     };
-
-    use test_utils::reserve_tcp_port;
-    use tokio::time::timeout;
-
-    use super::super::{Config, testing::test_migrations};
-    use crate::testing::sleep;
 
     #[derive(Debug)]
     pub struct TmpDb {
-        host: String,
-        port: u16,
-        data_dir: std::path::PathBuf,
-        postgres: Option<Child>,
-        persistent: bool,
+        postgres: TmpPostgres,
     }
 
     impl TmpDb {
         pub async fn init() -> Self {
-            Self::init_postgres(false).await
-        }
-
-        pub async fn persistent() -> Self {
-            Self::init_postgres(true).await
-        }
-
-        async fn init_postgres(persistent: bool) -> Self {
-            let port = reserve_tcp_port().unwrap();
-            let host = "127.0.0.1".to_string();
-
-            // initdb requires an empty target; clear any dir left by a crashed run
-            // that reused this (recycled) ephemeral port.
-            let data_dir = env::temp_dir().join(format!("espresso-tmpdb-{port}"));
-            let _ = std::fs::remove_dir_all(&data_dir);
-
-            let output = Command::new("initdb")
-                .arg("-D")
-                .arg(&data_dir)
-                .args(["-U", "postgres", "--auth=trust"])
-                .output()
-                .expect("initdb failed to run; is postgres installed and on PATH?");
-            assert!(
-                output.status.success(),
-                "initdb failed for {data_dir:?}: {}",
-                String::from_utf8_lossy(&output.stderr)
-            );
-
-            let mut db = Self {
-                host,
-                port,
-                data_dir,
-                postgres: None,
-                persistent,
-            };
-
-            db.start_postgres().await;
-            db
+            Self {
+                postgres: TmpPostgres::init().await,
+            }
         }
 
         pub fn host(&self) -> String {
-            self.host.clone()
+            self.postgres.host()
         }
 
         pub fn port(&self) -> u16 {
-            self.port
+            self.postgres.port()
         }
 
         pub fn config(&self) -> Config {
@@ -341,90 +315,6 @@ pub(super) mod tmp_db {
                 .host(self.host())
                 .port(self.port())
                 .migrations(test_migrations())
-        }
-
-        pub fn stop_postgres(&mut self) {
-            let Some(mut postgres) = self.postgres.take() else {
-                return;
-            };
-            tracing::info!(port = self.port, "stopping postgres");
-            // Fast shutdown (SIGINT to the postmaster) releases the datadir before
-            // Drop removes it; fall back to SIGKILL if pg_ctl is unavailable.
-            let stopped = Command::new("pg_ctl")
-                .arg("-D")
-                .arg(&self.data_dir)
-                .args(["stop", "-m", "fast", "-w"])
-                .stdout(Stdio::null())
-                .stderr(Stdio::null())
-                .status()
-                .map(|status| status.success())
-                .unwrap_or(false);
-            if !stopped {
-                let _ = postgres.kill();
-            }
-            let _ = postgres.wait();
-        }
-
-        pub async fn start_postgres(&mut self) {
-            self.stop_postgres();
-            tracing::info!(port = self.port, "starting postgres");
-            let postgres = Command::new("postgres")
-                .arg("-D")
-                .arg(&self.data_dir)
-                .args(["-p", &self.port.to_string()])
-                .args(["-h", &self.host])
-                // Keep the unix socket inside the data dir instead of a shared /tmp.
-                .arg("-k")
-                .arg(&self.data_dir)
-                .stdout(Stdio::null())
-                .stderr(Stdio::null())
-                .spawn()
-                .expect("failed to start postgres; is it installed and on PATH?");
-            self.postgres = Some(postgres);
-
-            self.wait_for_ready().await;
-        }
-
-        async fn wait_for_ready(&self) {
-            let timeout_duration = Duration::from_secs(
-                env::var("SQL_TMP_DB_CONNECT_TIMEOUT")
-                    .unwrap_or("60".to_string())
-                    .parse()
-                    .expect("SQL_TMP_DB_CONNECT_TIMEOUT must be an integer number of seconds"),
-            );
-
-            if let Err(err) = timeout(timeout_duration, async {
-                while !Command::new("pg_isready")
-                    .args(["-h", &self.host])
-                    .args(["-p", &self.port.to_string()])
-                    .args(["-U", "postgres"])
-                    .stdout(Stdio::null())
-                    .stderr(Stdio::null())
-                    .status()
-                    .map(|status| status.success())
-                    .unwrap_or(false)
-                {
-                    tracing::warn!("database is not ready");
-                    sleep(Duration::from_secs(1)).await;
-                }
-            })
-            .await
-            {
-                panic!(
-                    "failed to connect to TmpDb within configured timeout {timeout_duration:?}: \
-                     {err:#}\n{}",
-                    "Consider increasing the timeout by setting SQL_TMP_DB_CONNECT_TIMEOUT"
-                );
-            }
-        }
-    }
-
-    impl Drop for TmpDb {
-        fn drop(&mut self) {
-            self.stop_postgres();
-            if !self.persistent {
-                let _ = std::fs::remove_dir_all(&self.data_dir);
-            }
         }
     }
 }

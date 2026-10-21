@@ -13,7 +13,7 @@
 use std::{collections::HashMap, fmt::Debug, future::Future, str::FromStr};
 
 use futures::stream::TryStreamExt;
-use sqlx::{ConnectOptions, Database, Row as _};
+use sqlx::{ConnectOptions, Database, Row as _, pool::PoolOptions};
 
 use super::{
     Migration, QueryBuilder, Transaction, Write,
@@ -81,6 +81,9 @@ pub trait Backend: Database {
 
     /// Delete the database file, for a backend that keeps the database in one.
     fn delete_file(opts: &Self::ConnectOptions) -> std::io::Result<()>;
+
+    /// Hooks every pooled connection needs on this backend, for a database using `schema`.
+    fn session_hooks(pool: PoolOptions<Self>, schema: String) -> PoolOptions<Self>;
 }
 
 /// Merklized state queries with a portable form and a faster form that only Postgres can run.

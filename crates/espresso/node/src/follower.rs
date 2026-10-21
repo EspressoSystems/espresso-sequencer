@@ -14,7 +14,7 @@ use ::light_client::{
     LightClient,
     client::{FallbackClient, QueryServiceClient},
     state::{Genesis as LightClientGenesis, LightClientOptions},
-    storage::LightClientSqliteOptions,
+    storage::LightClientDbOptions,
 };
 use alloy::primitives::U256;
 use anyhow::{Context, anyhow, bail, ensure};
@@ -79,7 +79,7 @@ pub struct FollowerOptions {
     /// Older heights are left to the query service's backfill.
     pub max_blocks_per_poll: u64,
     pub light_client: LightClientOptions,
-    pub light_client_db: LightClientSqliteOptions,
+    pub light_client_db: LightClientDbOptions,
     /// Derived from the network config when unset.
     pub light_client_genesis: Option<LightClientGenesis>,
 }

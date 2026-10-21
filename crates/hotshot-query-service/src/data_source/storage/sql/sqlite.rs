@@ -14,7 +14,7 @@
 
 use std::{path::PathBuf, time::Duration};
 
-use sqlx::sqlite::SqliteConnectOptions;
+use sqlx::{pool::PoolOptions, sqlite::SqliteConnectOptions};
 
 use super::{Backend, Config, Db, Migration, StateQueries};
 use crate::{include_migrations, sqlite_options::sqlite_options};
@@ -36,6 +36,10 @@ impl Backend for Db {
 
     fn delete_file(opts: &SqliteConnectOptions) -> std::io::Result<()> {
         std::fs::remove_file(opts.get_filename())
+    }
+
+    fn session_hooks(pool: PoolOptions<Db>, _schema: String) -> PoolOptions<Db> {
+        pool
     }
 }
 
@@ -73,31 +77,17 @@ pub(super) mod tmp_db {
     #[derive(Debug)]
     pub struct TmpDb {
         db_path: PathBuf,
-        persistent: bool,
     }
 
     impl TmpDb {
-        fn init_sqlite_db(persistent: bool) -> Self {
+        pub async fn init() -> Self {
             let file = tempfile::Builder::new()
                 .prefix("sqlite-")
                 .suffix(".db")
                 .tempfile()
                 .unwrap();
-
             let (_, db_path) = file.keep().unwrap();
-
-            Self {
-                db_path,
-                persistent,
-            }
-        }
-
-        pub async fn init() -> Self {
-            Self::init_sqlite_db(false)
-        }
-
-        pub async fn persistent() -> Self {
-            Self::init_sqlite_db(true)
+            Self { db_path }
         }
 
         pub fn path(&self) -> PathBuf {
@@ -113,9 +103,7 @@ pub(super) mod tmp_db {
 
     impl Drop for TmpDb {
         fn drop(&mut self) {
-            if !self.persistent {
-                std::fs::remove_file(self.db_path.clone()).unwrap();
-            }
+            std::fs::remove_file(self.db_path.clone()).unwrap();
         }
     }
 }
