@@ -2642,6 +2642,32 @@ class GhReleaseCreate(unittest.TestCase):
         self.assertEqual(runner.calls[1][:4], ["gh", "release", "create", "0.7.0.1"])
         self.assertIn("--verify-tag", runner.calls[1])
 
+    def test_release_gh_release_recreate_restores_old_on_create_failure_fails(self):
+        creates = []
+
+        def run(argv):
+            if argv[:3] == ["gh", "release", "create"]:
+                creates.append(argv)
+                if len(creates) == 1:
+                    raise RuntimeError("create failed")
+            return runner(argv)
+
+        runner = FakeRunner(
+            {("gh", "release", "delete"): "", ("gh", "release", "create"): ""}
+        )
+        old = rel.ReleaseInfo("0.7.0.1", "0.7.0.1 [decaf]", "old body")
+        edit = rel.ReleaseEdit(
+            "0.7.0.1", "0.7.0.1 [decaf, mainnet]", "new", "recreate", old
+        )
+        with (
+            contextlib.redirect_stdout(io.StringIO()),
+            self.assertRaisesRegex(RuntimeError, "create failed"),
+        ):
+            rel.Gh(run).release_recreate(edit)
+        restore = creates[1]
+        self.assertEqual(restore[restore.index("--title") + 1], "0.7.0.1 [decaf]")
+        self.assertIn("--latest=false", restore)
+
     def test_release_gh_generate_notes_argv_ok(self):
         prefix = ("gh", "api", "repos/{owner}/{repo}/releases/generate-notes")
         runner = FakeRunner({prefix: json.dumps({"name": "n", "body": "md"})})

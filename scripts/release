@@ -1518,11 +1518,19 @@ class Gh:
             )
 
     def release_recreate(self, edit: ReleaseEdit) -> None:
-        """Keeps the tag; the old body goes to the log in case the create fails."""
+        """Keeps the tag; the old body goes to the log in case the create and its restore fail."""
         old = cast(ReleaseInfo, edit.old)
-        print(f"# old release {old.tag}: {old.title}\n{old.body}\n# end old release")
+        print(
+            f"# old release {old.tag}: {old.title}\n{old.body}\n# end old release",
+            flush=True,
+        )
         self._run(["gh", "release", "delete", edit.tag, "--yes"])
-        self.release_create(edit)
+        try:
+            self.release_create(edit)
+        except RuntimeError:
+            # best effort, so a rerun still sees the decaf state
+            self.release_create(ReleaseEdit(old.tag, old.title, old.body, "create"))
+            raise
 
     def release_edit(self, edit: ReleaseEdit) -> None:
         with _body_file(edit.body) as path:
