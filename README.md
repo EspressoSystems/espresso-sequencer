@@ -10,10 +10,16 @@
 [![Build without lockfile](https://github.com/EspressoSystems/espresso-network/actions/workflows/build-without-lockfile.yml/badge.svg)](https://github.com/EspressoSystems/espresso-network/actions/workflows/build-without-lockfile.yml)
 [![Coverage Status](https://coveralls.io/repos/github/EspressoSystems/espresso-network/badge.svg?branch=main)](https://coveralls.io/github/EspressoSystems/espresso-network?branch=main)
 
-The Espresso Network is the global confirmation layer for rollups in the Ethereum ecosystem. Espresso's
-[global confirmation layer(GCL)](https://docs.espressosys.com/network) provides agreement on inputs to a collection of
-composable blockchains, providing a high trust, fast, and verifiable way to process inputs on any chain, providing fast
-confirmations in return.
+Espresso is a high-performance blockchain that provides fast, final settlement for other chains and applications. Each integrated system keeps its own execution environment and sequencer. Espresso finalizes their transaction data
+through its own decentralized proof-of-stake BFT consensus (HotShot). Other applications or chains can verify that finality through zero-knowledge proofs, without trusted
+intermediaries.
+
+In [benchmarks](https://docs.espressosys.com/network/network/benchmarks) of this consensus code on 100 validators, median time to finality was 334 ms.
+At peak load, the network finalized 181 MB/s of transaction data (about 1 million simple token transfers per second) with median settlement under one second.
+
+This repository contains the Espresso node, HotShot consensus, the data
+availability layer, the light client and its Ethereum contracts, and staking
+tooling.
 
 - [Official Documentation](https://docs.espressosys.com/network/)
 - [Rust Documentation](https://espresso-network.docs.espressosys.com/espresso_node/)
@@ -21,8 +27,7 @@ confirmations in return.
 
 ### Architecture
 
-The diagram below shows how the Espresso Confirmation Layer fits into the rollup centric Ethereum ecosystem. See
-[Architecture](./doc/architecture.md) for details.
+The diagram below shows how Espresso fits alongside the chains and applications that settle through it. See [Architecture](doc/architecture.md) for details.
 
 ![Architecture](./doc/espresso-overview.svg)
 
