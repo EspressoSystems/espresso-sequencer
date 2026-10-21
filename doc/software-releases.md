@@ -13,6 +13,29 @@ Tags are immutable. A bad tag is superseded by the next one and never deployed.
 Docker images are tagged with the git tag: git tag `0.6.0.7` produces
 `ghcr.io/espressosystems/espresso-network/espresso-node:0.6.0.7`.
 
+## Operators
+
+Each network runs the release whose title carries its marker: `[decaf]`, `[mainnet]` or `[decaf, mainnet]`.
+
+- Mainnet: <https://github.com/EspressoSystems/espresso-network/releases/latest>
+- Both networks:
+
+  ```sh
+  curl -fsS 'https://api.github.com/repos/EspressoSystems/espresso-network/releases?per_page=100' | jq -r '.[] | select(.name | test("\\[")) | .name'
+  ```
+
+  ```
+  0.6.3.16 [decaf]
+  0.6.3.12 [mainnet]
+  ```
+
+- Image: `ghcr.io/espressosystems/espresso-network/espresso-node:<tag>`.
+- The release body has one section per network: deploy date, the release it supersedes, the `docker pull` line, the
+  operator actions since that release (or `No operator action required.`) and network notes such as an upgrade deadline.
+- When a network moves to a newer release, the old release loses the marker and its section is marked superseded.
+- Alerts: Watch > Custom > Releases. An alert arrives when a release is published for decaf, and again when mainnet
+  adopts it or rolls back to it. Edits to a release, including updated notes, send no alert.
+
 ## Branches
 
 - Release branches are named `release-MAJOR.MINOR.PHASE`, e.g. `release-0.6.0`, cut from `main` with `just release-cut`.
@@ -82,7 +105,9 @@ for that network only, such as an upgrade deadline. Tags that are never publishe
   exception is restoring a deleted release, see below.
 - Preview without writing: `just release-publish-preview X.Y.Z.N decaf`.
 
-Operators follow releases with Watch > Custom > Releases. The alert fires on release creation only.
+GitHub sends Watch > Releases alerts on release creation only. Editing a release, or flipping it to draft and back,
+sends none (tested 2026-10-21). Without a separate mainnet tag, delete and recreate is the only way to alert mainnet
+operators for a release decaf already created.
 
 | Case                                                                 | GitHub release        | Alert |
 | -------------------------------------------------------------------- | --------------------- | ----- |
@@ -98,8 +123,6 @@ Operators follow releases with Watch > Custom > Releases. The alert fires on rel
 - If the create fails after the delete, the workflow log holds the old title and body between `# old release` and
   `# end old release`. Restore the release with
   `gh release create <tag> --verify-tag --title "<logged title>" --notes-file <logged body>`, then rerun `/publish`.
-- Follow mainnet only: `gh api repos/EspressoSystems/espresso-network/releases/latest --jq .tag_name` or filter release
-  titles for `[mainnet]`.
 
 ## Process
 
