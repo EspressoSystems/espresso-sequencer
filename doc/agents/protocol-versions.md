@@ -12,11 +12,11 @@
   leader_counts
 - V0_6, `NEW_PROTOCOL_VERSION`: AvidmGf2 VID proofs, cliquenet, DA upgrade; reuses the V0_5 header; no fees, no L1
   deposit reads, fee tree untouched
-- V0_7, `TIMEOUT_EPOCH_VERSION` (also `LARGE_BLOCK_VERSION`, `NO_BUILDER_COMMITMENT_VERSION`):
-  timeout votes and certificates bind the epoch (`TimeoutData3`, `TimeoutVote3`, `TimeoutCertificate3`,
-  `CatchupEvidence::Tc3`; form chosen by `UpgradeLock::timeout_epoch_bound`); `Header::V7` is the V0_6 header without
-  `builder_commitment`; `LargeBlock` chain-config change raises `max_block_size`, run by the new protocol's upgrade
-  sub-protocol (`crates/hotshot/new-protocol/src/upgrade.rs`)
+- V0_7, `TIMEOUT_EPOCH_VERSION` (also `LARGE_BLOCK_VERSION`, `NO_BUILDER_COMMITMENT_VERSION`): timeout votes and
+  certificates bind the epoch (`TimeoutData3`, `TimeoutVote3`, `TimeoutCertificate3`, `CatchupEvidence::Tc3`; form
+  chosen by `UpgradeLock::timeout_epoch_bound`); `Header::V7` is the V0_6 header without `builder_commitment`;
+  `LargeBlock` chain-config change raises `max_block_size`, run by the new protocol's upgrade sub-protocol
+  (`crates/hotshot/new-protocol/src/upgrade.rs`)
 - V0_8, `ASYNC_VID_VERSION` (also `MAX_SUPPORTED_VERSION`): votes no longer wait for the block payload. Before it a node
   votes only on a block it holds in full: vote1 needs the parent block reconstructed from VID shares and vote2 the block
   itself, and a node stuck without one fetches the whole payload from a peer. From V0_8 a vote attests to the node's own
