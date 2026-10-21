@@ -27,9 +27,7 @@ tooling.
 
 ### Architecture
 
-The diagram below shows how Espresso fits alongside the chains and applications that settle through it. See [Architecture](doc/architecture.md) for details.
-
-![Architecture](./doc/espresso-overview.svg)
+See [How Espresso Fits](https://docs.espressosys.com/network/learn/espresso-in-the-modular-stack) for an overview, and [Architecture](doc/architecture.md) for implementation details.
 
 #### ZK rollups integration
 
