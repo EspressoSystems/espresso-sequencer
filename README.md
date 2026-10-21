@@ -147,8 +147,14 @@ us if you have thoughts on licensing.
 
 # Disclaimer
 
-**DISCLAIMER:** This software is provided "as is", use at your own risk. The code has been audited internally, and smart contract components have been [audited](https://github.com/EspressoSystems/espresso-audits) externally.
+**DISCLAIMER:** This software is provided "as is", without warranty of any kind.
 
 **DISCLAIMER:** The Rust library crates provided in this repository are intended primarily for use by the binary targets
 in this repository. We make no guarantees of public API stability. If you are building on these crates, reach out by
 opening an issue to discuss the APIs you need.
+
+# Security
+
+The smart contracts in [`contracts/`](contracts/) have been externally [audited](https://github.com/EspressoSystems/espresso-audits). The node software, including HotShot consensus, has not been externally audited.
+
+To report a vulnerability, see our [security policy](https://github.com/EspressoSystems/espresso-network/security/policy).
