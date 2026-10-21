@@ -2,7 +2,7 @@
 
 ## Operators
 
-- Run the release titled with your network: `[decaf]`, `[mainnet]` or `[decaf, mainnet]`.
+- The latest release for a network has the network in its title, e.g. `0.6.3.16 [decaf]`.
 - Mainnet: <https://github.com/EspressoSystems/espresso-network/releases/latest>
 - Both:
 
