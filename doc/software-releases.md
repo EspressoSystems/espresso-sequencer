@@ -69,21 +69,37 @@ again.
 ### Publishing to a network
 
 `/publish X.Y.Z.N decaf|mainnet` makes the tag the release operators deploy on that network. It creates the GitHub
-release when the tag has none, and edits it otherwise. Every publish regenerates the "What's Changed" section
-(`<!-- whats-changed -->` markers) from the previous holder on mainnet once the release has a mainnet block, else on
-decaf. A rollback leaves it as is. Lines 2..n are notes for that network only, such as an upgrade deadline. Tags that
-are never published have no release.
+release when the tag has none, deletes and recreates it on mainnet when its title lacks `[mainnet]`, and edits it
+otherwise. Every publish regenerates the "What's Changed" section (`<!-- whats-changed -->` markers) from the previous
+holder on mainnet once the release has a mainnet block, else on decaf. A rollback leaves it as is. Lines 2..n are notes
+for that network only, such as an upgrade deadline. Tags that are never published have no release.
 
 - The title gets `[decaf]`, `[mainnet]` or both. The previous release on that network loses its marker and is marked
   superseded. Latest always follows mainnet.
 - Refused, with a tracker comment, unless `ghcr.io/espressosystems/espresso-network/espresso-node:<tag>` exists.
 - Rerun to recover from a failed run. `/publish <older tag> <network>` rolls back.
-- Do not edit release titles or the bot's `<!-- ... -->` markers by hand: they record what each network runs.
+- Do not edit release titles or the bot's `<!-- ... -->` markers by hand: they record what each network runs. The one
+  exception is restoring a deleted release, see below.
 - Preview without writing: `just release-publish-preview X.Y.Z.N decaf`.
 
-Operators follow releases with Watch > Custom > Releases. The alert fires when a tag's first `/publish` creates the
-release. A second network's `/publish` of the same tag only edits it: the marker appears in the title and API, no alert.
-Look for the network marker in the title, or poll `GET /repos/EspressoSystems/espresso-network/releases`.
+Operators follow releases with Watch > Custom > Releases. The alert fires on release creation only.
+
+| Case                                                                 | GitHub release        | Alert |
+| -------------------------------------------------------------------- | --------------------- | ----- |
+| decaf, tag has no release                                            | created               | yes   |
+| mainnet, tag has no release                                          | created               | yes   |
+| mainnet, title lacks `[mainnet]` (promotion from decaf, or rollback) | deleted and recreated | yes   |
+| mainnet rerun for the current holder                                 | edited                | no    |
+| decaf, release exists                                                | edited                | no    |
+| superseded previous holder                                           | edited                | no    |
+
+- A recreate keeps the tag and the URL `/releases/tag/<tag>`. Reactions, uploaded assets and the release id are lost,
+  and `published_at` resets.
+- If the create fails after the delete, the workflow log holds the old title and body between `# old release` and
+  `# end old release`. Restore the release with
+  `gh release create <tag> --verify-tag --title "<logged title>" --notes-file <logged body>`, then rerun `/publish`.
+- Follow mainnet only: `gh api repos/EspressoSystems/espresso-network/releases/latest --jq .tag_name` or filter release
+  titles for `[mainnet]`.
 
 ## Process
 
