@@ -43,6 +43,10 @@ class FakeGitHub:
     threads: dict[str, Any] = field(default_factory=dict)
     posted: list[tuple[str, tuple]] = field(default_factory=list)
     resolved: list[str] = field(default_factory=list)
+    edits: list[tuple[cg.Posted, str]] = field(default_factory=list)
+
+    def _posted(self, review: bool, url: str) -> cg.Posted:
+        return cg.Posted(len(self.posted), url, review)
 
     def pr_diff(self, pr: int) -> str:
         return f"diff {pr}"
@@ -55,15 +59,18 @@ class FakeGitHub:
 
     def inline_comment(self, pr: int, path: str, line: int, body: str) -> str:
         self.posted.append(("inline", (pr, path, line, body)))
-        return f"url/inline/{pr}"
+        return self._posted(True, f"url/inline/{pr}")
 
     def reply(self, pr: int, comment_id: int, body: str) -> str:
         self.posted.append(("reply", (pr, comment_id, body)))
-        return f"url/reply/{comment_id}"
+        return self._posted(True, f"url/reply/{comment_id}")
 
     def comment(self, number: int, body: str) -> str:
         self.posted.append(("comment", (number, body)))
-        return f"url/comment/{number}"
+        return self._posted(False, f"url/comment/{number}")
+
+    def edit_comment(self, comment: cg.Posted, body: str) -> None:
+        self.edits.append((comment, body))
 
     def thread(self, thread_id: str) -> Any:
         return self.threads[thread_id]
@@ -419,8 +426,9 @@ def test_run_ok_logs_final_line(caplog):
     runner = FakeRunner(
         [("comment", {"body": "hi"})], make_result(permission_denials=[{"t": 1}])
     )
-    t = cg.make_tools(FakeGitHub(), PR, SECRETS)
-    assert asyncio.run(cg.run(job(t), runner)) == 0
+    gh = FakeGitHub()
+    t = cg.make_tools(gh, PR, SECRETS)
+    assert asyncio.run(cg.run(job(t), runner, gh)) == 0
     messages = [r.getMessage() for r in caplog.records]
     assert messages[0] == "tool comment body=<2 chars>"
     assert messages[1] == "done"
@@ -436,7 +444,7 @@ def test_run_is_error_fails():
 
 
 def test_run_missing_result_fails():
-    assert asyncio.run(cg.run(job(), FakeRunner([], None))) == 1
+    assert asyncio.run(cg.run(job(), FakeRunner([], None), FakeGitHub())) == 1
 
 
 def test_cost_none_prints():
@@ -448,7 +456,9 @@ def test_cost_none_prints():
 
 def test_run_appends_step_summary(tmp_path):
     out = tmp_path / "summary.md"
-    asyncio.run(cg.run(job(name="mention"), FakeRunner([], make_result()), out))
+    asyncio.run(
+        cg.run(job(name="mention"), FakeRunner([], make_result()), FakeGitHub(), out)
+    )
     assert out.read_text() == "- claude-gh mention: cost 0.5 USD, 3 turns, 2 s\n"
 
 
@@ -471,7 +481,7 @@ def test_dry_run_posts_nothing(caplog):
         ("resolve_thread", {"thread_id": "T_1"}),
     ]
     runner = FakeRunner(calls, make_result())
-    assert asyncio.run(cg.run(job(cg.make_tools(dry, PR, SECRETS)), runner)) == 0
+    assert asyncio.run(cg.run(job(cg.make_tools(dry, PR, SECRETS)), runner, dry)) == 0
     assert inner.posted == [] and inner.resolved == []
     assert [k for k, _ in dry.posted] == ["inline", "comment", "resolve"]
     assert runner.outputs[0]["content"][0]["text"] == "diff 7"
@@ -485,3 +495,65 @@ def test_parse_args_effort_choices():
     )
     with pytest.raises(SystemExit):
         cg.parse_args(["code-review", "--model", "m", "--effort", "extreme"])
+
+
+def test_footer_format():
+    j = job()
+    r = make_result(total_cost_usd=0.589, num_turns=27, duration_ms=133_000)
+    assert cg.footer(j, r) == "<sub>Cost $0.59 · 27 turns · 2m 13s · opus</sub>"
+    r = make_result(total_cost_usd=None, duration_ms=45_000)
+    assert cg.footer(j, r) == "<sub>Cost n/a · 3 turns · 45s · opus</sub>"
+
+
+def test_parse_posted():
+    p = cg.parse_posted('{"id": 5, "url": "http://u"}', review=True)
+    assert p == cg.Posted(5, "http://u", True)
+
+
+@pytest.mark.parametrize("is_error", [False, True])
+def test_last_comment_gets_footer(is_error):
+    gh = FakeGitHub()
+    posted: list = []
+    t = cg.make_tools(gh, PR, SECRETS, posted=posted)
+    calls = [
+        ("comment", {"body": "first"}),
+        ("inline_comment", {"path": "a", "line": 1, "body": "inline"}),
+        ("comment", {"body": "last"}),
+    ]
+    runner = FakeRunner(calls, make_result(is_error=is_error))
+    asyncio.run(cg.run(job(t, posted=posted), runner, gh))
+    [(comment, body)] = gh.edits
+    assert comment == cg.Posted(3, "url/comment/7", False)
+    assert body == f"last\n\n{cg.footer(job(), make_result(is_error=is_error))}"
+
+
+def test_thread_reply_edit_keeps_review_kind():
+    gh = FakeGitHub()
+    posted: list = []
+    t = cg.make_tools(gh, PR, SECRETS, reply_to=4, posted=posted)
+    runner = FakeRunner([("comment", {"body": "answer"})], make_result())
+    asyncio.run(cg.run(job(t, posted=posted), runner, gh))
+    assert gh.edits[0][0].review is True
+
+
+def test_no_footer_without_comment_or_result():
+    gh = FakeGitHub()
+    asyncio.run(cg.run(job(), FakeRunner([], make_result()), gh))
+    posted: list = []
+    t = cg.make_tools(gh, PR, SECRETS, posted=posted)
+    runner = FakeRunner([("comment", {"body": "x"})], None)
+    asyncio.run(cg.run(job(t, posted=posted), runner, gh))
+    assert gh.edits == []
+
+
+def test_dry_run_prints_edit_instead_of_writing(caplog):
+    caplog.set_level(logging.INFO, logger="claude-gh")
+    inner = FakeGitHub()
+    dry = cg.DryRun(inner)
+    posted: list = []
+    t = cg.make_tools(dry, PR, SECRETS, posted=posted)
+    runner = FakeRunner([("comment", {"body": "x"})], make_result())
+    asyncio.run(cg.run(job(t, posted=posted), runner, dry))
+    assert inner.edits == [] and len(dry.edits) == 1
+    assert dry.edits[0][1].startswith("x\n\n<sub>Cost $0.50")
+    assert any(m.startswith("would edit comment") for m in caplog.messages)

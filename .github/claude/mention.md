@@ -1,4 +1,4 @@
-The event above mentioned `@claude`. Answer the request.
+The event below mentioned `@claude`. Answer the request.
 
 - Reply only. Never edit files, commit, or push.
 - Your own login is `github-actions`.

@@ -85,6 +85,13 @@ class Mention:
 
 
 @dataclass(frozen=True)
+class Posted:
+    id: int
+    url: str
+    review: bool  # review-thread comment (pulls API) rather than issue comment
+
+
+@dataclass(frozen=True)
 class Job:
     name: str
     prompt: str
@@ -94,6 +101,8 @@ class Job:
     tools: list[SdkMcpTool]
     builtin: list[str]
     settings: list[SettingSource]
+    # Filled by the `comment` tool with (posted comment, body sent); read by `run`.
+    posted: list[tuple[Posted, str]] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -107,9 +116,10 @@ class GitHub(Protocol):
     def pr_diff(self, pr: int) -> str: ...
     def pr_view(self, pr: int) -> str: ...
     def issue_view(self, number: int) -> str: ...
-    def inline_comment(self, pr: int, path: str, line: int, body: str) -> str: ...
-    def reply(self, pr: int, comment_id: int, body: str) -> str: ...
-    def comment(self, number: int, body: str) -> str: ...
+    def inline_comment(self, pr: int, path: str, line: int, body: str) -> Posted: ...
+    def reply(self, pr: int, comment_id: int, body: str) -> Posted: ...
+    def comment(self, number: int, body: str) -> Posted: ...
+    def edit_comment(self, comment: Posted, body: str) -> None: ...
     def thread(self, thread_id: str) -> Thread: ...
     def resolve_thread(self, thread_id: str) -> None: ...
 
@@ -237,6 +247,20 @@ def summary(result: ResultMessage | None) -> tuple[list[str], int]:
     return lines, code
 
 
+def footer(job: Job, result: ResultMessage) -> str:
+    cost = "n/a" if result.total_cost_usd is None else f"${result.total_cost_usd:.2f}"
+    minutes, seconds = divmod(round(result.duration_ms / 1000), 60)
+    duration = f"{minutes}m {seconds}s" if minutes else f"{seconds}s"
+    return (
+        f"<sub>Cost {cost} · {result.num_turns} turns · {duration} · {job.model}</sub>"
+    )
+
+
+def parse_posted(out: str, review: bool) -> Posted:
+    info = json.loads(out)
+    return Posted(info["id"], info["url"], review)
+
+
 def step_summary_line(job: str, result: ResultMessage) -> str:
     return (
         f"- claude-gh {job}: cost {result.total_cost_usd} USD, "
@@ -248,7 +272,11 @@ def step_summary_line(job: str, result: ResultMessage) -> str:
 
 
 def make_tools(
-    gh: GitHub, target: Target, secrets: Mapping[str, str], reply_to: int | None = None
+    gh: GitHub,
+    target: Target,
+    secrets: Mapping[str, str],
+    reply_to: int | None = None,
+    posted: list[tuple[Posted, str]] | None = None,
 ) -> list[SdkMcpTool]:
     """Every call acts on `target`; the model never names a PR, issue or repo.
 
@@ -270,13 +298,17 @@ def make_tools(
 
     def post_comment(a: dict[str, Any]) -> str:
         if reply_to is not None:
-            return gh.reply(n, reply_to, a["body"])
-        return gh.comment(n, a["body"])
+            sent = gh.reply(n, reply_to, a["body"])
+        else:
+            sent = gh.comment(n, a["body"])
+        if posted is not None:
+            posted.append((sent, a["body"]))
+        return sent.url
 
     def inline(a: dict[str, Any]) -> str:
         if a["line"] <= 0:
             raise ValueError(f"line must be positive, got {a['line']}")
-        return gh.inline_comment(n, a["path"], a["line"], a["body"])
+        return gh.inline_comment(n, a["path"], a["line"], a["body"]).url
 
     def resolve(a: dict[str, Any]) -> str:
         thread_id = a["thread_id"]
@@ -325,7 +357,7 @@ def make_tools(
             "reply",
             "Reply in a review thread; comment_id is the thread root comment.",
             {"comment_id": int, "body": str},
-            lambda a: gh.reply(n, a["comment_id"], a["body"]),
+            lambda a: gh.reply(n, a["comment_id"], a["body"]).url,
         ),
         define("comment", "Top-level comment.", {"body": str}, post_comment),
         define(
@@ -359,7 +391,7 @@ class GhCli:
     def issue_view(self, number: int) -> str:
         return self._gh("issue", "view", str(number), "-R", self.repo, "--comments")
 
-    def inline_comment(self, pr: int, path: str, line: int, body: str) -> str:
+    def inline_comment(self, pr: int, path: str, line: int, body: str) -> Posted:
         sha = self._gh(
             "pr",
             "view",
@@ -371,31 +403,37 @@ class GhCli:
             "--jq",
             ".headRefOid",
         )
-        return self._gh(
+        out = self._gh(
             "api", f"repos/{self.repo}/pulls/{pr}/comments",
             "-f", f"commit_id={sha}", "-f", f"path={path}", "-f", "side=RIGHT",
-            "-F", f"line={line}", "-F", "body=@-", "--jq", ".html_url",
+            "-F", f"line={line}", "-F", "body=@-", "--jq", POSTED_JQ,
             body=body,
         )  # fmt: skip
+        return parse_posted(out, review=True)
 
-    def reply(self, pr: int, comment_id: int, body: str) -> str:
-        return self._gh(
+    def reply(self, pr: int, comment_id: int, body: str) -> Posted:
+        out = self._gh(
             "api", f"repos/{self.repo}/pulls/{pr}/comments/{comment_id}/replies",
-            "-F", "body=@-", "--jq", ".html_url",
+            "-F", "body=@-", "--jq", POSTED_JQ,
             body=body,
         )  # fmt: skip
+        return parse_posted(out, review=True)
 
-    def comment(self, number: int, body: str) -> str:
-        return self._gh(
-            "issue",
-            "comment",
-            str(number),
-            "-R",
-            self.repo,
-            "--body-file",
-            "-",
+    def comment(self, number: int, body: str) -> Posted:
+        out = self._gh(
+            "api", f"repos/{self.repo}/issues/{number}/comments",
+            "-F", "body=@-", "--jq", POSTED_JQ,
             body=body,
-        )
+        )  # fmt: skip
+        return parse_posted(out, review=False)
+
+    def edit_comment(self, comment: Posted, body: str) -> None:
+        kind = "pulls" if comment.review else "issues"
+        self._gh(
+            "api", "-X", "PATCH", f"repos/{self.repo}/{kind}/comments/{comment.id}",
+            "-F", "body=@-",
+            body=body,
+        )  # fmt: skip
 
     def thread(self, thread_id: str) -> Thread:
         out = self._gh(
@@ -410,6 +448,8 @@ class GhCli:
             "api", "graphql", "-F", f"id={thread_id}", "-f", "query=" + RESOLVE_MUTATION
         )
 
+
+POSTED_JQ = "{id: .id, url: .html_url}"
 
 THREAD_QUERY = """
 query($id: ID!) {
@@ -439,6 +479,7 @@ class DryRun:
 
     inner: GitHub
     posted: list[tuple[str, str]] = field(default_factory=list)
+    edits: list[tuple[int, str]] = field(default_factory=list)
 
     def pr_diff(self, pr: int) -> str:
         return self.inner.pr_diff(pr)
@@ -452,28 +493,34 @@ class DryRun:
     def thread(self, thread_id: str) -> Thread:
         return self.inner.thread(thread_id)
 
-    def inline_comment(self, pr: int, path: str, line: int, body: str) -> str:
+    def inline_comment(self, pr: int, path: str, line: int, body: str) -> Posted:
         return self._post("inline", f"{pr} {path}:{line}", body)
 
-    def reply(self, pr: int, comment_id: int, body: str) -> str:
+    def reply(self, pr: int, comment_id: int, body: str) -> Posted:
         return self._post("reply", f"{pr} {comment_id}", body)
 
-    def comment(self, number: int, body: str) -> str:
+    def comment(self, number: int, body: str) -> Posted:
         return self._post("comment", str(number), body)
+
+    def edit_comment(self, comment: Posted, body: str) -> None:
+        log.info("would edit comment %s: %r", comment.id, body)
+        self.edits.append((comment.id, body))
 
     def resolve_thread(self, thread_id: str) -> None:
         self._post("resolve", thread_id, "")
 
-    def _post(self, kind: str, where: str, body: str) -> str:
+    def _post(self, kind: str, where: str, body: str) -> Posted:
         log.info("would post %s %s: %r", kind, where, body)
         self.posted.append((kind, body))
-        return f"dry-run://{kind}/{where}"
+        return Posted(len(self.posted), f"dry-run://{kind}/{where}", kind != "comment")
 
 
 # Running
 
 
-async def run(job: Job, runner: Runner, step_summary: Path | None = None) -> int:
+async def run(
+    job: Job, runner: Runner, gh: GitHub, step_summary: Path | None = None
+) -> int:
     result = None
     async for message in runner(job):
         if isinstance(message, AssistantMessage):
@@ -482,6 +529,9 @@ async def run(job: Job, runner: Runner, step_summary: Path | None = None) -> int
                     log.info(tool_line(block.name, block.input))
         elif isinstance(message, ResultMessage):
             result = message
+    if result and job.posted:
+        last, body = job.posted[-1]
+        gh.edit_comment(last, f"{body}\n\n{footer(job, result)}")
     lines, code = summary(result)
     for line in lines:
         log.info(line)
@@ -533,8 +583,11 @@ def build_job(args: argparse.Namespace, gh: GitHub, secrets: Mapping[str, str]) 
         model, effort = args.model, args.effort
         append = (CLAUDE_DIR / "code-review.md").read_text()
         builtin = BUILTIN + ["Agent"]
-    tools = select_tools(make_tools(gh, tgt, secrets, reply_to), args.command)
-    return Job(args.command, prompt, model, effort, append, tools, builtin, settings)
+    posted: list[tuple[Posted, str]] = []
+    tools = select_tools(make_tools(gh, tgt, secrets, reply_to, posted), args.command)
+    return Job(
+        args.command, prompt, model, effort, append, tools, builtin, settings, posted
+    )
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
@@ -566,7 +619,7 @@ def main() -> int:
     job = build_job(args, gh, load_secrets())
     summary_file = os.environ.get("GITHUB_STEP_SUMMARY")
     return asyncio.run(
-        run(job, sdk_runner, Path(summary_file) if summary_file else None)
+        run(job, sdk_runner, gh, Path(summary_file) if summary_file else None)
     )
 
 

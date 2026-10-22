@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
-      contents: read
+      contents: write # resolveReviewThread is refused with contents: read
       pull-requests: write
     steps:
       - uses: actions/checkout@v7
