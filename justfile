@@ -313,8 +313,8 @@ release-body version:
     scripts/release refresh --dry-run --version {{version}}
 
 # generate rust bindings for contracts
-VERSIONED := "LightClient(Arbitrum)?(V\\d+)?(Mock)?|PlonkVerifier(V\\d+)?|StakeTable(V\\d+)?|EspToken(V\\d+)?|RewardClaim(V\\d+)?"
-EXACT := "FeeContract|ERC1967Proxy|OpsTimelock|SafeExitTimelock|OwnableUpgradeable|AccessControlUpgradeable|IRewardClaim|IPlonkVerifier"
+VERSIONED := "LightClient(V\\d+)?(Mock)?|PlonkVerifier(V\\d+)?|StakeTable(V\\d+)?|EspToken(V\\d+)?|RewardClaim(V\\d+)?"
+EXACT := "FeeContract|ERC1967Proxy|OpsTimelock|SafeExitTimelock|OwnableUpgradeable|AccessControlUpgradeable"
 REGEXP := "^(" + VERSIONED + "|" + EXACT + ")$"
 gen-bindings:
     # Update the git submodules
@@ -335,7 +335,6 @@ gen-bindings:
     # `forge bind` rewrites mod.rs, dropping the feature gates declared in
     # contracts/rust/adapter/Cargo.toml. Put them back.
     sed -i -E 's%^pub mod (light_client(_v[23])?_mock);%#[cfg(feature = "mocks")]\npub mod \1;%' contracts/rust/adapter/src/bindings/mod.rs
-    sed -i -E 's%^pub mod (i_plonk_verifier|i_reward_claim|light_client_arbitrum(_v[23])?);%#[cfg(feature = "unused-bindings")]\npub mod \1;%' contracts/rust/adapter/src/bindings/mod.rs
 
     just export-contract-abis
     just gen-go-bindings

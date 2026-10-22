@@ -29,8 +29,6 @@ jellyfish = [
     "dep:num-traits",
     "dep:ark-poly",
 ]
-# Generated bindings that no Rust code references. Kept compilable, off by default.
-unused-bindings = []
 
 [dependencies]
 # Direct declaration (not workspace) so SP1 zkVM builds can drop the default
