@@ -4732,6 +4732,7 @@ dependencies = [
  "hotshot-new-protocol",
  "hotshot-orchestrator",
  "hotshot-query-service",
+ "hotshot-query-service-types",
  "hotshot-state-prover",
  "hotshot-testing",
  "hotshot-types",

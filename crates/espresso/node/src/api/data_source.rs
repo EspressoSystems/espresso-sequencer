@@ -71,12 +71,8 @@ impl DataSourceOptions for persistence::fs::Options {
     }
 }
 
-/// A data source with sequencer-specific functionality.
-///
-/// This trait extends the generic [`AvailabilityDataSource`] with some additional data needed to
-/// provided sequencer-specific endpoints.
-#[async_trait]
-pub trait SequencerDataSource:
+/// What the query API needs of a data source.
+pub trait QueryDataSource:
     AvailabilityDataSource<SeqTypes>
     + NodeDataSource<SeqTypes>
     + StatusDataSource
@@ -84,6 +80,24 @@ pub trait SequencerDataSource:
     + VersionedDataSource
     + Sized
 {
+}
+
+impl<T> QueryDataSource for T where
+    T: AvailabilityDataSource<SeqTypes>
+        + NodeDataSource<SeqTypes>
+        + StatusDataSource
+        + UpdateDataSource<SeqTypes>
+        + VersionedDataSource
+        + Sized
+{
+}
+
+/// A data source with sequencer-specific functionality.
+///
+/// This trait extends the generic [`AvailabilityDataSource`] with some additional data needed to
+/// provided sequencer-specific endpoints.
+#[async_trait]
+pub trait SequencerDataSource: QueryDataSource {
     type Options: DataSourceOptions<DataSource = Self>;
 
     /// Instantiate a data source from command line options.

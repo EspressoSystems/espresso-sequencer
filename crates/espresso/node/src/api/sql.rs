@@ -30,12 +30,11 @@ use hotshot_query_service::{
         },
     },
     merklized_state::Snapshot,
-    status::HasMetrics as _,
 };
 use hotshot_types::{
     data::{EpochNumber, QuorumProposalWrapper, ViewNumber},
     message::Proposal,
-    traits::{ValidatedState as _, election::MembershipSnapshot, metrics::Metrics},
+    traits::{ValidatedState as _, election::MembershipSnapshot},
     utils::{epoch_from_block_number, is_last_block},
     vote::HasViewNumber,
 };
@@ -44,7 +43,6 @@ use jf_merkle_tree_compat::{
     MerkleTreeScheme, prelude::MerkleNode,
 };
 use light_client::storage::LightClientDbOptions;
-use process_metrics::ProcessMetrics;
 use sqlx::{Encode, Row, Type};
 use tokio::time::sleep;
 use vbs::version::Version;
@@ -66,15 +64,12 @@ use crate::{
         RewardMerkleTreeV2Data,
         context::ApiContext,
         data_source::{DataSourceOptions, NodeStateDataSource as _, Provider, SequencerDataSource},
-        options::{self, Query, get_public_env_vars, init_query_data_source},
-        state::NodeApiStateImpl,
-        update::{ApiEventConsumer, ApiSink},
+        options::{self, Query},
     },
     catchup::{CatchupStorage, NullStateCatchup},
     context::TaskList,
     persistence::{ChainConfigPersistence, sql::Options as SqlOptions},
-    request_response::data_source::Storage as RequestResponseStorage,
-    state::{compute_state_update, update_state_storage_loop},
+    state::compute_state_update,
     util::BoundedJoinSet,
 };
 
@@ -146,18 +141,14 @@ impl SequencerDataSource for DataSource {
     }
 }
 
-/// Start the query module of `api` over this backend, returning what consensus needs from it.
-pub(in crate::api) async fn init_query_module<C: ApiContext>(
-    api: &options::Options,
+/// Open this backend's data source with its fetching providers, and start the archive state
+/// garbage collector when the options ask for one.
+pub(in crate::api) async fn open<C: ApiContext>(
     query_opt: Query,
     mod_opt: SqlOptions,
-    state: ApiState<C>,
+    state: &ApiState<C>,
     tasks: &mut TaskList,
-) -> anyhow::Result<(
-    Box<dyn Metrics>,
-    Box<dyn ApiSink>,
-    Option<RequestResponseStorage>,
-)> {
+) -> anyhow::Result<(DataSource, Arc<LightClientProvider<C>>, Arc<SqlStorage>)> {
     let mut provider = Provider::default();
 
     // Use the database itself as a fetching provider: sometimes we can fetch data that is
@@ -177,73 +168,20 @@ pub(in crate::api) async fn init_query_module<C: ApiContext>(
     )?);
     provider = provider.with_provider(Arc::clone(&light_client));
 
-    let ranges_concurrency = mod_opt.ranges_concurrency;
     let ds = DataSource::create(mod_opt.clone(), provider, false).await?;
-    let inner_storage = ds.inner();
-    tasks.spawn("process_metrics", ProcessMetrics::new(ds.metrics()).run());
-    let (metrics, ds) = init_query_data_source(ds, state.clone());
-
-    let get_node_state = {
-        let state = state.clone();
-        async move { state.node_state().await }
-    };
-    tasks.spawn(
-        "merklized state storage update loop",
-        update_state_storage_loop(ds.clone(), get_node_state, light_client),
-    );
+    let storage = ds.inner();
 
     // Archive mode disables the pruner, so nothing else bounds the merklized state tables.
     if mod_opt.archive && !mod_opt.archive_full_state {
-        let get_node_state = {
-            let state = state.clone();
-            async move { state.node_state().await }
-        };
+        let state = state.clone();
+        let get_node_state = async move { state.node_state().await };
         tasks.spawn(
             "archive state garbage collector",
-            ArchiveStateGc::new(&mod_opt.0).run(inner_storage.clone(), get_node_state),
+            ArchiveStateGc::new(&mod_opt.0).run(storage.clone(), get_node_state),
         );
     }
 
-    let port = api.http.port;
-    let env_vars = get_public_env_vars().unwrap_or_default();
-    let node_cfg = api.public_node_config.as_deref().cloned();
-    let modules = espresso_api::OptionalModules {
-        submit: api.submit.is_some(),
-        config: api.config.is_some(),
-        explorer: api.explorer.is_some(),
-        light_client: api.light_client.is_some(),
-        ..Default::default()
-    };
-    let max_connections = api.http.max_connections;
-    // Both transports serve the same state; cloning shares the env vars and node config
-    // rather than copying the genesis they embed.
-    let mut api_state = NodeApiStateImpl::new(ds.clone())
-        .with_env_vars(env_vars)
-        .with_public_node_config(node_cfg);
-    if let Some(ranges_concurrency) = ranges_concurrency {
-        api_state = api_state.with_ranges_concurrency(ranges_concurrency);
-    }
-    let tonic_state = api_state.clone();
-    tasks.spawn("API server", async move {
-        if let Err(e) = espresso_api::serve_axum(port, api_state, modules, max_connections).await {
-            tracing::error!("Axum server error: {}", e);
-        }
-        anyhow::Ok(())
-    });
-
-    if let Some(tonic_port) = api.http.tonic_port {
-        tasks.spawn("Tonic gRPC server", async move {
-            if let Err(e) = espresso_api::serve_tonic(tonic_port, tonic_state, modules).await {
-                tracing::error!("Tonic gRPC server error: {}", e);
-            }
-        });
-    }
-
-    Ok((
-        metrics,
-        Box::new(ApiEventConsumer::from(ds)),
-        Some(RequestResponseStorage::from(inner_storage)),
-    ))
+    Ok((ds, light_client, storage))
 }
 
 /// Prune archive state older than the light client contract's retained history. Block merkle paths
