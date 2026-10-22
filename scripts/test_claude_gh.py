@@ -557,3 +557,90 @@ def test_dry_run_prints_edit_instead_of_writing(caplog):
     assert inner.edits == [] and len(dry.edits) == 1
     assert dry.edits[0][1].startswith("x\n\n<sub>Cost $0.50")
     assert any(m.startswith("would edit comment") for m in caplog.messages)
+
+
+RUN = "http://run"
+
+
+def review_job(gh: FakeGitHub, calls: list, result: ResultMessage | None, runner=None):
+    status = gh.comment(7, cg.reviewing_text("abcdef123456", RUN))
+    posted: list = []
+    t = cg.make_tools(gh, PR, SECRETS, posted=posted, status=status)
+    j = job(t, posted=posted, status=status, run_url=RUN)
+    return j, status, runner or FakeRunner(calls, result)
+
+
+def test_status_text_builders():
+    assert (
+        cg.reviewing_text("abcdef123456", RUN) == "Reviewing abcdef1… [run](http://run)"
+    )
+    j = job(run_url=RUN)
+    foot = cg.footer(j, make_result())
+    assert cg.status_body(j, "sum", make_result()) == f"sum\n\n{foot}"
+    assert cg.status_body(j, None, make_result()) == (
+        f"Review finished without a summary\n\n{foot}"
+    )
+    err = make_result(is_error=True, subtype="error_max_turns")
+    assert cg.status_body(j, "sum", err) == (
+        f"sum\n\nReview failed: error_max_turns. [run](http://run)\n\n"
+        f"{cg.footer(j, err)}"
+    )
+    assert (
+        cg.status_body(j, None, None) == "Review failed: no result. [run](http://run)"
+    )
+
+
+def test_review_summary_replaces_status_with_footer():
+    gh = FakeGitHub()
+    j, status, runner = review_job(
+        gh,
+        [("comment", {"body": "first"}), ("comment", {"body": "last"})],
+        make_result(),
+    )
+    asyncio.run(cg.run(j, runner, gh))
+    assert [k for k, _ in gh.posted] == ["comment"]
+    assert [(c, b) for c, b in gh.edits] == [
+        (status, "first"),
+        (status, "last"),
+        (status, f"last\n\n{cg.footer(j, make_result())}"),
+    ]
+
+
+def test_review_without_summary():
+    gh = FakeGitHub()
+    j, status, runner = review_job(gh, [], make_result())
+    asyncio.run(cg.run(j, runner, gh))
+    assert gh.edits == [
+        (status, f"Review finished without a summary\n\n{cg.footer(j, make_result())}")
+    ]
+
+
+@pytest.mark.parametrize("result", [make_result(is_error=True, subtype="boom"), None])
+def test_review_failure_keeps_summary(result):
+    gh = FakeGitHub()
+    j, status, runner = review_job(gh, [("comment", {"body": "sum"})], result)
+    asyncio.run(cg.run(j, runner, gh))
+    assert gh.edits[-1] == (status, cg.status_body(j, "sum", result))
+    assert "Review failed: " in gh.edits[-1][1]
+
+
+def test_review_raising_runner_updates_status_then_raises():
+    class Boom:
+        async def __call__(self, job: Any) -> AsyncIterator[Message]:
+            raise RuntimeError("boom")
+            yield
+
+    gh = FakeGitHub()
+    j, status, runner = review_job(gh, [], None, Boom())
+    with pytest.raises(RuntimeError, match="boom"):
+        asyncio.run(cg.run(j, runner, gh))
+    assert gh.edits == [(status, "Review failed: no result. [run](http://run)")]
+
+
+def test_review_dry_run_status_goes_through_dry_run():
+    inner = FakeGitHub()
+    dry = cg.DryRun(inner)
+    j, _, runner = review_job(dry, [("comment", {"body": "sum"})], make_result())
+    asyncio.run(cg.run(j, runner, dry))
+    assert inner.posted == [] and inner.edits == []
+    assert len(dry.posted) == 1 and len(dry.edits) == 2

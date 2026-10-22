@@ -103,6 +103,9 @@ class Job:
     settings: list[SettingSource]
     # Filled by the `comment` tool with (posted comment, body sent); read by `run`.
     posted: list[tuple[Posted, str]] = field(default_factory=list)
+    # Review only: this run's status comment, which the `comment` tool edits in place.
+    status: Posted | None = None
+    run_url: str = ""
 
 
 @dataclass(frozen=True)
@@ -256,6 +259,32 @@ def footer(job: Job, result: ResultMessage) -> str:
     )
 
 
+def reviewing_text(head_sha: str, run_url: str) -> str:
+    return f"Reviewing {head_sha[:7]}… [run]({run_url})"
+
+
+def status_body(job: Job, text: str | None, result: ResultMessage | None) -> str:
+    parts = [text] if text else []
+    if result is None or result.is_error:
+        reason = result.subtype if result else "no result"
+        parts.append(f"Review failed: {reason}. [run]({job.run_url})")
+    elif not text:
+        parts.append("Review finished without a summary")
+    if result:
+        parts.append(footer(job, result))
+    return "\n\n".join(parts)
+
+
+def final_edit(job: Job, result: ResultMessage | None) -> tuple[Posted, str] | None:
+    text = job.posted[-1][1] if job.posted else None
+    if job.status:
+        return job.status, status_body(job, text, result)
+    if result and job.posted:
+        last, body = job.posted[-1]
+        return last, f"{body}\n\n{footer(job, result)}"
+    return None
+
+
 def parse_posted(out: str, review: bool) -> Posted:
     info = json.loads(out)
     return Posted(info["id"], info["url"], review)
@@ -277,6 +306,7 @@ def make_tools(
     secrets: Mapping[str, str],
     reply_to: int | None = None,
     posted: list[tuple[Posted, str]] | None = None,
+    status: Posted | None = None,
 ) -> list[SdkMcpTool]:
     """Every call acts on `target`; the model never names a PR, issue or repo.
 
@@ -297,7 +327,10 @@ def make_tools(
         return tool(name, desc, schema)(handler)
 
     def post_comment(a: dict[str, Any]) -> str:
-        if reply_to is not None:
+        if status is not None:
+            gh.edit_comment(status, a["body"])
+            sent = status
+        elif reply_to is not None:
             sent = gh.reply(n, reply_to, a["body"])
         else:
             sent = gh.comment(n, a["body"])
@@ -522,16 +555,17 @@ async def run(
     job: Job, runner: Runner, gh: GitHub, step_summary: Path | None = None
 ) -> int:
     result = None
-    async for message in runner(job):
-        if isinstance(message, AssistantMessage):
-            for block in message.content:
-                if isinstance(block, ToolUseBlock):
-                    log.info(tool_line(block.name, block.input))
-        elif isinstance(message, ResultMessage):
-            result = message
-    if result and job.posted:
-        last, body = job.posted[-1]
-        gh.edit_comment(last, f"{body}\n\n{footer(job, result)}")
+    try:
+        async for message in runner(job):
+            if isinstance(message, AssistantMessage):
+                for block in message.content:
+                    if isinstance(block, ToolUseBlock):
+                        log.info(tool_line(block.name, block.input))
+            elif isinstance(message, ResultMessage):
+                result = message
+    finally:
+        if edit := final_edit(job, result):
+            gh.edit_comment(*edit)
     lines, code = summary(result)
     for line in lines:
         log.info(line)
@@ -560,6 +594,8 @@ def build_job(args: argparse.Namespace, gh: GitHub, secrets: Mapping[str, str]) 
     model = "opus"
     effort: EffortLevel = "high"
     builtin = BUILTIN
+    status = None
+    run_url = ""
     settings: list[SettingSource] = ["user", "project"]  # base-branch checkout
     if args.command == "review":
         tgt = target(event)
@@ -567,11 +603,11 @@ def build_job(args: argparse.Namespace, gh: GitHub, secrets: Mapping[str, str]) 
             f"{os.environ['GITHUB_SERVER_URL']}/{os.environ['GITHUB_REPOSITORY']}"
             f"/actions/runs/{os.environ['GITHUB_RUN_ID']}"
         )
+        head_sha = event["pull_request"]["head"]["sha"]
         focus = focus_path(BACKPORT_MARKER.exists()).read_text()
         common = (CLAUDE_DIR / "review-common.md").read_text()
-        prompt = review_prompt(
-            tgt, event["pull_request"]["head"]["sha"], run_url, focus, common
-        )
+        prompt = review_prompt(tgt, head_sha, run_url, focus, common)
+        status = gh.comment(tgt.number, reviewing_text(head_sha, run_url))
         settings = ["user"]  # PR head checkout: no project settings
     elif args.command == "mention":
         mention = mention_from_event(os.environ["GITHUB_EVENT_NAME"], event)
@@ -584,9 +620,19 @@ def build_job(args: argparse.Namespace, gh: GitHub, secrets: Mapping[str, str]) 
         append = (CLAUDE_DIR / "code-review.md").read_text()
         builtin = BUILTIN + ["Agent"]
     posted: list[tuple[Posted, str]] = []
-    tools = select_tools(make_tools(gh, tgt, secrets, reply_to, posted), args.command)
+    tools = make_tools(gh, tgt, secrets, reply_to, posted, status)
     return Job(
-        args.command, prompt, model, effort, append, tools, builtin, settings, posted
+        args.command,
+        prompt,
+        model,
+        effort,
+        append,
+        select_tools(tools, args.command),
+        builtin,
+        settings,
+        posted,
+        status,
+        run_url,
     )
 
 
