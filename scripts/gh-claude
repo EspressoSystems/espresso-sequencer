@@ -12,7 +12,8 @@ Usage: ${0##*/} SUBCOMMAND ARGS...   (body on stdin)
   comment NUMBER                    top-level PR or issue comment
   resolve THREAD_ID                 resolve a thread started by github-actions/claude
 
-Env: GITHUB_REPOSITORY, GH_TOKEN
+PR and NUMBER must equal CLAUDE_TARGET.
+Env: GITHUB_REPOSITORY, GH_TOKEN, CLAUDE_TARGET
 USAGE
 }
 
@@ -35,10 +36,16 @@ num() {
   [[ "${2-}" =~ ^[0-9]+$ ]] || die "$1 must be a number, got '${2-}'"
 }
 
+target() {
+  num "$1" "${2-}"
+  [[ "$2" == "${CLAUDE_TARGET}" ]] \
+    || die "$1 ${2} is not the target ${CLAUDE_TARGET}, refusing"
+}
+
 inline() {
   [[ $# -eq 3 ]] || die "inline needs PR PATH LINE"
   local pr="$1" path="$2" line="$3"
-  num PR "${pr}"
+  target PR "${pr}"
   num LINE "${line}"
   local sha body
   body=$(read_body)
@@ -50,7 +57,7 @@ inline() {
 
 reply() {
   [[ $# -eq 2 ]] || die "reply needs PR COMMENT_ID"
-  num PR "$1"
+  target PR "$1"
   num COMMENT_ID "$2"
   local body
   body=$(read_body)
@@ -61,7 +68,7 @@ reply() {
 
 comment() {
   [[ $# -eq 1 ]] || die "comment needs NUMBER"
-  num NUMBER "$1"
+  target NUMBER "$1"
   local body
   body=$(read_body)
   printf '%s' "${body}" | gh issue comment "$1" --body-file -
@@ -98,6 +105,7 @@ main() {
     inline | reply | comment | resolve)
       shift
       [[ -n "${GITHUB_REPOSITORY-}" ]] || die "GITHUB_REPOSITORY is not set"
+      [[ "${CLAUDE_TARGET-}" =~ ^[0-9]+$ ]] || die "CLAUDE_TARGET is not set to a number"
       "${cmd}" "$@"
       ;;
     *)
