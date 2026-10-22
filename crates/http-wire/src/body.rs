@@ -154,3 +154,44 @@ fn body_debug(body: &[u8]) -> String {
         Err(_) => format!("body: {}", hex::encode(body)),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use serde::Deserialize;
+
+    use super::*;
+
+    type Ver = StaticVersion<0, 1>;
+
+    #[test]
+    fn binary_rejects_deeply_nested_input() {
+        #[derive(Debug, Deserialize)]
+        #[expect(dead_code, reason = "only ever decoded")]
+        enum Nest {
+            End,
+            Inner(Box<Nest>),
+        }
+
+        let end = 0u32.to_le_bytes();
+        let inner = 1u32.to_le_bytes();
+        let mut bytes = Version::serialize(&Ver::version());
+        bytes.extend(inner.repeat(1_000));
+        bytes.extend(end);
+
+        match decode_binary::<Ver, Nest>(&bytes) {
+            Err(DecodeFailure::Binary(err)) => assert!(err.contains("nested more than"), "{err}"),
+            other => panic!("expected a binary decode failure, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn binary_version_mismatch_reads_like_vbs() {
+        let bytes = Serializer::<StaticVersion<0, 2>>::serialize(&0u8).unwrap();
+        let vbs_err = Serializer::<Ver>::deserialize::<u8>(&bytes).unwrap_err();
+
+        match decode_binary::<Ver, u8>(&bytes) {
+            Err(DecodeFailure::Binary(err)) => assert_eq!(err, vbs_err.to_string()),
+            other => panic!("expected a binary decode failure, got {other:?}"),
+        }
+    }
+}

@@ -6,8 +6,9 @@ use serde::de::{
 };
 
 // Bincode recurses once per nested value with no bound of its own, so a peer can exhaust the stack
-// with a few megabytes. The deepest legitimate payload is a reward v2 Merkle path: 160 levels at
-// two nested values each.
+// with a few megabytes. Scalars count as values. The deepest legitimate payload is a whole reward v2
+// tree in a catchup response: 160 levels at two values each, plus a few for the leaf and envelope.
+// The limit assumes decoding runs on a stack of at least 2 MiB, the size of a tokio worker's.
 const MAX_DEPTH: usize = 512;
 
 /// Deserialize a bincode value from bytes received from a peer.
@@ -441,6 +442,8 @@ mod tests {
 
     #[test]
     fn rejects_input_bincode_rejects() {
-        assert!(deserialize_limited::<Sample>(&[1, 2, 3]).is_err());
+        let limited = deserialize_limited::<Sample>(&[1, 2, 3]).unwrap_err();
+        let unlimited = bincode::deserialize::<Sample>(&[1, 2, 3]).unwrap_err();
+        assert_eq!(limited.to_string(), unlimited.to_string());
     }
 }
