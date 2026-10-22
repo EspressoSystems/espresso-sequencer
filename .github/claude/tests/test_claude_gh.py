@@ -212,6 +212,7 @@ def test_write_tools_record_actions_and_post_nothing():
         ],
         "footer": None,
         "error": None,
+        "candidates": [],
     }
 
 
@@ -235,18 +236,86 @@ def test_pr_tools_vs_issue_tools():
     assert "issue_view" in issue and "pr_diff" not in issue
 
 
+NOTES = {"candidate", "verdict"}
+
+
 @pytest.mark.parametrize(
-    "name,writes",
+    "name,writes,notes",
     [
-        ("mention", {"comment"}),
-        ("code-review", {"inline_comment", "reply", "comment"}),
-        ("review", {"inline_comment", "reply", "comment", "resolve_thread"}),
+        ("mention", {"comment"}, set()),
+        ("code-review", {"inline_comment", "reply", "comment"}, NOTES),
+        ("review", {"inline_comment", "reply", "comment", "resolve_thread"}, NOTES),
     ],
 )
-def test_job_writes_pinned(name, writes):
+def test_job_tools_pinned(name, writes, notes):
     assert cg.JOB_WRITES[name] == writes
     names = set(tools_by_name(cg.select_tools(make(FakeGitHub())[0], name)))
-    assert names == {"pr_diff", "pr_view"} | writes
+    assert names == {"pr_diff", "pr_view"} | writes | notes
+
+
+def test_candidate_ids_sequential_and_logged(caplog):
+    caplog.set_level(logging.INFO, logger="claude-gh")
+    t, rec = make(FakeGitHub())
+    ids = [
+        text(call(t, "candidate", {"path": "a.rs", "line": i, "summary": f"s{i}"}))
+        for i in (1, 2, 3)
+    ]
+    assert ids == ["c1", "c2", "c3"]
+    call(t, "candidate", {"path": "b.rs", "line": 9, "summary": "multi\nline " * 30})
+    assert [c.line for c in rec.candidates] == [1, 2, 3, 9]
+    assert rec.actions == [] and rec.summary is None
+    last = caplog.records[-1].getMessage()
+    assert last.startswith("candidate c4 b.rs:9 multi line multi")
+    assert "\n" not in last and len(last) < 160
+
+
+def test_verdict_sets_status_and_evidence(caplog):
+    caplog.set_level(logging.INFO, logger="claude-gh")
+    t, rec = make(FakeGitHub())
+    call(t, "candidate", {"path": "a.rs", "line": 1, "summary": "s"})
+    call(t, "candidate", {"path": "a.rs", "line": 2, "summary": "s"})
+    out = call(t, "verdict", {"id": "c2", "status": "dropped", "evidence": "`x?`"})
+    assert text(out) == "recorded"
+    call(t, "verdict", {"id": "c1", "status": "kept", "evidence": ""})
+    assert [(c.status, c.evidence) for c in rec.candidates] == [
+        ("kept", ""),
+        ("dropped", "`x?`"),
+    ]
+    assert caplog.records[-2].getMessage() == "verdict c2 dropped `x?`"
+
+
+@pytest.mark.parametrize(
+    "args,match",
+    [
+        ({"id": "c2", "status": "kept"}, "unknown candidate id"),
+        ({"id": "c0", "status": "kept"}, "unknown candidate id"),
+        ({"id": "1", "status": "kept"}, "unknown candidate id"),
+        ({"id": "c1", "status": "maybe"}, "kept or dropped"),
+        ({"id": "c1", "status": "dropped"}, "needs evidence"),
+        ({"id": "c1", "status": "dropped", "evidence": " \n"}, "needs evidence"),
+    ],
+)
+def test_verdict_errors(args, match):
+    t, rec = make(FakeGitHub())
+    call(t, "candidate", {"path": "a.rs", "line": 1, "summary": "s"})
+    with pytest.raises(ValueError, match=match):
+        call(t, "verdict", {"evidence": "", **args})
+    assert rec.candidates == [cg.Candidate("a.rs", 1, "s")]
+
+
+@pytest.mark.parametrize(
+    "name,args",
+    [
+        ("candidate", {"path": "a", "line": 1, "summary": "leak sk-secret"}),
+        ("verdict", {"id": "c1", "status": "dropped", "evidence": "leak sk-secret"}),
+    ],
+)
+def test_secret_in_notes_refused(name, args):
+    t, rec = make(FakeGitHub())
+    rec.candidates.append(cg.Candidate("a", 1, "s"))
+    with pytest.raises(ValueError, match="refusing"):
+        call(t, name, args)
+    assert rec.candidates == [cg.Candidate("a", 1, "s")]
 
 
 def test_reads_return_text():
@@ -461,6 +530,7 @@ def test_run_ok_logs_final_line_and_writes_record(caplog, tmp_path):
         "actions": [],
         "footer": cg.footer(make_result(), "opus", 1),
         "error": None,
+        "candidates": [],
     }
 
 
@@ -654,9 +724,18 @@ ALL = [
 ]
 
 
+CANDIDATES = [
+    cg.Candidate("a.rs", 3, "kept one", "kept", ""),
+    cg.Candidate("b.rs", 5, "dropped one", "dropped", "`if x > 0`\nguards it"),
+    cg.Candidate("c.rs", 7, "open one"),
+]
+
+
 def test_record_json_roundtrip():
     rec = record(ALL, error="error_max_turns")
     assert cg.parse_record(cg.to_json(rec), "review") == rec
+    rec.candidates = list(CANDIDATES)
+    assert cg.parse_record(json.loads(json.dumps(cg.to_json(rec))), "review") == rec
     rec = record(summary=None, footer=None)
     assert cg.parse_record(cg.to_json(rec), "review") == rec
 
@@ -688,6 +767,39 @@ def test_resolve_own_thread(author):
     gh = FakeGitHub(threads={"T_1": thread(author)})
     assert do_apply(gh, record([cg.Resolve("T_1")])) == 0
     assert gh.resolved == ["T_1"]
+
+
+def test_apply_appends_candidates_section():
+    gh = FakeGitHub()
+    rec = record()
+    rec.candidates = list(CANDIDATES)
+    assert do_apply(gh, rec) == 0
+    assert gh.posted == []
+    section = (
+        "<details><summary>Candidates: 1 kept, 1 dropped, 1 unjudged</summary>\n\n"
+        "- c2 b.rs:5 dropped one: dropped: `if x > 0` guards it\n"
+        "- c3 c.rs:7 open one: unjudged\n"
+        "</details>"
+    )
+    assert gh.edits == [(STATUS, f"sum\n\n{section}\n\n{FOOT}")]
+
+
+def test_apply_without_candidates_has_no_section():
+    gh = FakeGitHub()
+    do_apply(gh, record())
+    assert "<details>" not in gh.edits[-1][1]
+
+
+def test_run_logs_no_tool_line_for_notes(caplog, tmp_path):
+    caplog.set_level(logging.INFO, logger="claude-gh")
+    calls = [("candidate", {"path": "a.rs", "line": 1, "summary": "s"})]
+    j, path, runner = run_job(tmp_path, calls, make_result())
+    asyncio.run(cg.run(j, runner, path))
+    assert caplog.records[0].getMessage() == "candidate c1 a.rs:1 s"
+    assert not any(r.getMessage().startswith("tool ") for r in caplog.records)
+    assert json.loads(path.read_text())["candidates"] == [
+        {"path": "a.rs", "line": 1, "summary": "s", "status": None, "evidence": None}
+    ]
 
 
 def test_apply_without_summary_says_so():

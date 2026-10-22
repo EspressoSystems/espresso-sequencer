@@ -34,7 +34,7 @@ import sys
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any, Protocol, get_args
+from typing import Any, Literal, Protocol, get_args
 
 from claude_agent_sdk import (
     AssistantMessage,
@@ -81,6 +81,11 @@ RECORD = Path("tmp/actions.json")
 PREFETCH_DIR = Path("tmp")
 READS = {"pr_diff", "pr_view", "issue_view"}
 JOB_READS = {"review": READS, "mention": READS, "code-review": READS}
+# In-process bookkeeping: recorded on the Record, never posted as an action.
+NOTES = {"candidate", "verdict"}
+JOB_NOTES = {"review": NOTES, "mention": set(), "code-review": NOTES}
+TEXT_ARGS = {"body", "summary", "evidence"}
+Status = Literal["kept", "dropped"]
 
 
 @dataclass(frozen=True)
@@ -133,6 +138,15 @@ KINDS = {cls: kind for kind, cls in ACTIONS.items()}
 
 
 @dataclass
+class Candidate:
+    path: str
+    line: int
+    summary: str
+    status: Status | None = None
+    evidence: str | None = None
+
+
+@dataclass
 class Record:
     """What `run` writes and `apply` reads."""
 
@@ -142,6 +156,7 @@ class Record:
     summary: str | None = None  # body of the last `comment` call
     footer: str | None = None  # cost line; None without a result message
     error: str | None = None  # result subtype when the run ended in error
+    candidates: list[Candidate] = field(default_factory=list)  # id c<n> is index n-1
 
 
 @dataclass(frozen=True)
@@ -319,8 +334,14 @@ def options(job: Job, server: McpSdkServerConfig) -> ClaudeAgentOptions:
 
 
 def select_tools(tools: list[SdkMcpTool], job_name: str) -> list[SdkMcpTool]:
-    allowed = JOB_WRITES[job_name] | JOB_READS[job_name]
-    return [t for t in tools if t.name not in WRITES | READS or t.name in allowed]
+    allowed = JOB_WRITES[job_name] | JOB_READS[job_name] | JOB_NOTES[job_name]
+    gated = WRITES | READS | NOTES
+    return [t for t in tools if t.name not in gated or t.name in allowed]
+
+
+def is_note(name: str) -> bool:
+    """Note tools log their own line from the handler."""
+    return name.removeprefix(f"mcp__{SERVER}__") in NOTES
 
 
 def tool_line(name: str, args: Mapping[str, Any]) -> str:
@@ -355,6 +376,52 @@ def footer(result: ResultMessage, model: str, turns: int) -> str:
     return f"<sub>Cost {cost} · {turns} turns · {duration} · {model}</sub>"
 
 
+def one_line(text: str, limit: int = 120) -> str:
+    return " ".join(text.split())[:limit]
+
+
+def add_candidate(rec: Record, path: str, line: int, summary: str) -> str:
+    rec.candidates.append(Candidate(path, line, summary))
+    cid = f"c{len(rec.candidates)}"
+    log.info("candidate %s %s:%d %s", cid, path, line, one_line(summary))
+    return cid
+
+
+def set_verdict(rec: Record, cid: str, status: str, evidence: str) -> str:
+    index = int(cid[1:]) - 1 if re.fullmatch(r"c[1-9]\d*", cid) else -1
+    if not 0 <= index < len(rec.candidates):
+        raise ValueError(f"unknown candidate id {cid!r}")
+    match status:
+        case "dropped" if not evidence.strip():
+            raise ValueError("dropped needs evidence quoted from the code")
+        case "kept" | "dropped":
+            c = rec.candidates[index]
+            c.status, c.evidence = status, evidence
+        case _:
+            raise ValueError(f"status must be kept or dropped, got {status!r}")
+    log.info("verdict %s %s %s", cid, status, one_line(evidence))
+    return "recorded"
+
+
+def candidates_section(candidates: list[Candidate]) -> str | None:
+    if not candidates:
+        return None
+    counts = {s: sum(c.status == s for c in candidates) for s in ("kept", "dropped")}
+    unjudged = len(candidates) - sum(counts.values())
+    lines = []
+    for i, c in enumerate(candidates, 1):
+        head = f"- c{i} {c.path}:{c.line} {one_line(c.summary, 200)}"
+        if c.status == "dropped":
+            lines.append(f"{head}: dropped: {one_line(c.evidence or '', 300)}")
+        elif c.status is None:
+            lines.append(f"{head}: unjudged")
+    title = (
+        f"Candidates: {counts['kept']} kept, {counts['dropped']} dropped, "
+        f"{unjudged} unjudged"
+    )
+    return "\n".join([f"<details><summary>{title}</summary>", "", *lines, "</details>"])
+
+
 def noun(job: str) -> str:
     return "Answer" if job == "mention" else "Review"
 
@@ -371,6 +438,8 @@ def status_body(
         parts.append(f"{what} incomplete: {reason}. [run]({run_url})")
     elif not record.summary:
         parts.append(f"{what} finished without a summary")
+    if section := candidates_section(record.candidates):
+        parts.append(section)
     if record.footer:
         parts.append(record.footer)
     return "\n\n".join(parts)
@@ -393,7 +462,8 @@ def parse_action(data: Any) -> Action:
 def parse_record(data: Any, job: str) -> Record:
     fields = dict(data)
     actions = [parse_action(a) for a in fields.pop("actions")]
-    record = Record(**fields, actions=actions)
+    candidates = [Candidate(**c) for c in fields.pop("candidates")]
+    record = Record(**fields, actions=actions, candidates=candidates)
     if record.job != job:
         raise ValueError(f"record is for job {record.job!r}, expected {job!r}")
     return record
@@ -479,8 +549,8 @@ def make_tools(
         run: Callable[[Any], Awaitable[str]],
     ):
         async def handler(args: dict[str, Any]) -> dict[str, Any]:
-            if "body" in args:
-                check_body(args["body"], secrets)
+            for key in TEXT_ARGS & args.keys():
+                check_body(args[key], secrets)
             out = await run(args)
             return {"content": [{"type": "text", "text": out}]}
 
@@ -496,6 +566,12 @@ def make_tools(
     async def comment(a: dict[str, Any]) -> str:
         rec.summary = a["body"]
         return "recorded"
+
+    async def note_candidate(a: dict[str, Any]) -> str:
+        return add_candidate(rec, a["path"], a["line"], a["summary"])
+
+    async def note_verdict(a: dict[str, Any]) -> str:
+        return set_verdict(rec, a["id"], a["status"], a["evidence"])
 
     if target.is_pr:
         reads = [
@@ -540,6 +616,18 @@ def make_tools(
             "Resolve a review thread started by github-actions or claude.",
             {"thread_id": str},
             lambda a: add(Resolve(a["thread_id"])),
+        ),
+        define(
+            "candidate",
+            "Note a possible defect the moment it is noticed; returns its id.",
+            {"path": str, "line": int, "summary": str},
+            note_candidate,
+        ),
+        define(
+            "verdict",
+            "Judge a candidate: status kept or dropped; dropped needs evidence from the code.",
+            {"id": str, "status": str, "evidence": str},
+            note_verdict,
         ),
     ]
 
@@ -770,7 +858,7 @@ async def run(
                 if message.parent_tool_use_id is None:
                     turn_ids.add(message.message_id or id(message))
                 for block in message.content:
-                    if isinstance(block, ToolUseBlock):
+                    if isinstance(block, ToolUseBlock) and not is_note(block.name):
                         log.info(tool_line(block.name, block.input))
             elif isinstance(message, ResultMessage):
                 result = message
