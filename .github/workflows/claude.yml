@@ -70,7 +70,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: "1"
         run: |
-          scripts/claude-ci ./tmp/prompt.md --model opus --max-turns 120 \
+          scripts/claude-ci ./tmp/prompt.md --model opus --effort high --max-turns 120 \
             --allowedTools "Bash(scripts/gh-claude:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh issue view:*)"
 
   # `/code-review [low|medium|high|xhigh|max] [opus|sonnet|haiku|fable|claude-<id>]` on a PR runs
