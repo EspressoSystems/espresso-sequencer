@@ -14,7 +14,10 @@
 
 use std::{path::PathBuf, time::Duration};
 
-use sqlx::{pool::PoolOptions, sqlite::SqliteConnectOptions};
+use sqlx::{
+    pool::{Pool, PoolOptions},
+    sqlite::SqliteConnectOptions,
+};
 
 pub type Db = sqlx::Sqlite;
 
@@ -51,6 +54,8 @@ impl Backend for Db {
     fn session_hooks(pool: PoolOptions<Db>, _schema: String) -> PoolOptions<Db> {
         pool
     }
+
+    fn log_conflict_sessions(_pool: Pool<Db>, _op: &'static str) {}
 }
 
 impl StateQueries for Db {}

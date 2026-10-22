@@ -600,89 +600,15 @@ fn serialization_conflict_with_diag<E: std::fmt::Display>(
     let mut first = true;
     move |err| {
         if is_serialization_conflict_err(err) {
-            if first && !Db::EMBEDDED {
+            if first {
                 first = false;
-                spawn_pg_stat_activity_log(pool.clone(), op);
+                Db::log_conflict_sessions(pool.clone(), op);
             }
             true
         } else {
             false
         }
     }
-}
-
-/// Spawn a background task that queries `pg_stat_activity` and `pg_locks` to identify the
-/// connections and predicate locks involved in a serialization conflict, logging them at `warn`.
-fn spawn_pg_stat_activity_log(pool: Pool<Db>, op: &'static str) {
-    use sqlx::Row as _;
-    tokio::spawn(async move {
-        match sqlx::query(
-            "SELECT pid, COALESCE(state, 'unknown') AS state, left(COALESCE(query, ''), 200) AS \
-             query FROM pg_stat_activity WHERE pid != pg_backend_pid() AND state IS DISTINCT FROM \
-             'idle' AND usename = current_user",
-        )
-        .fetch_all(&pool)
-        .await
-        {
-            Ok(rows) if rows.is_empty() => {
-                tracing::warn!(op, "serialization conflict: no other non-idle DB sessions");
-            },
-            Ok(rows) => {
-                for row in &rows {
-                    let pid: i32 = row.try_get("pid").unwrap_or(-1);
-                    let state: String = row.try_get("state").unwrap_or_default();
-                    let query_text: String = row.try_get("query").unwrap_or_default();
-                    tracing::warn!(
-                        op,
-                        pid,
-                        state,
-                        "serialization conflict: concurrent session: {query_text}",
-                    );
-                }
-            },
-            Err(e) => {
-                tracing::error!(op, "failed to query pg_stat_activity: {e:#}");
-            },
-        }
-
-        // Log SSI predicate locks held by all non-idle sessions
-        match sqlx::query(
-            "SELECT l.pid, l.locktype, CASE WHEN l.relation IS NOT NULL THEN c.relname ELSE NULL \
-             END AS relation, l.page, l.tuple, left(COALESCE(a.query, ''), 100) AS query FROM \
-             pg_locks l JOIN pg_stat_activity a ON a.pid = l.pid LEFT JOIN pg_class c ON c.oid = \
-             l.relation WHERE l.mode = 'SIReadLock' AND a.state IS DISTINCT FROM 'idle' AND l.pid \
-             != pg_backend_pid() ORDER BY l.pid, c.relname",
-        )
-        .fetch_all(&pool)
-        .await
-        {
-            Ok(rows) if rows.is_empty() => {
-                tracing::warn!(op, "serialization conflict: no SIReadLocks held");
-            },
-            Ok(rows) => {
-                for row in &rows {
-                    let pid: i32 = row.try_get("pid").unwrap_or(-1);
-                    let locktype: String = row.try_get("locktype").unwrap_or_default();
-                    let relation: Option<String> = row.try_get("relation").unwrap_or(None);
-                    let page: Option<i32> = row.try_get("page").unwrap_or(None);
-                    let tuple: Option<i16> = row.try_get("tuple").unwrap_or(None);
-                    let query_text: String = row.try_get("query").unwrap_or_default();
-                    tracing::warn!(
-                        op,
-                        pid,
-                        locktype,
-                        relation,
-                        page,
-                        tuple,
-                        "serialization conflict: SIReadLock: {query_text}",
-                    );
-                }
-            },
-            Err(e) => {
-                tracing::warn!(op, "failed to query pg_locks: {e:#}");
-            },
-        }
-    });
 }
 
 #[async_trait]

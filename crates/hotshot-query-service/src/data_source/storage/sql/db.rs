@@ -13,7 +13,10 @@
 use std::{collections::HashMap, fmt::Debug, future::Future, str::FromStr};
 
 use futures::stream::TryStreamExt;
-use sqlx::{ConnectOptions, Database, Row as _, pool::PoolOptions};
+use sqlx::{
+    ConnectOptions, Database, Row as _,
+    pool::{Pool, PoolOptions},
+};
 
 use super::{
     Db, Migration, QueryBuilder, Transaction, Write,
@@ -75,6 +78,9 @@ pub trait Backend: Database {
 
     /// Hooks every pooled connection needs on this backend, for a database using `schema`.
     fn session_hooks(pool: PoolOptions<Self>, schema: String) -> PoolOptions<Self>;
+
+    /// Log the sessions and locks behind a serialization conflict in `op`, in the background.
+    fn log_conflict_sessions(pool: Pool<Self>, op: &'static str);
 }
 
 /// Merklized state queries with a portable form and a faster form that only Postgres can run.
