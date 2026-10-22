@@ -7,7 +7,7 @@ usage() {
   cat << USAGE
 Usage: ${0##*/} SUBCOMMAND ARGS...   (body on stdin)
 
-  inline PR PATH LINE [START_LINE]  review comment on the PR head, RIGHT side
+  inline PR PATH LINE               review comment on the PR head, RIGHT side
   reply PR COMMENT_ID               reply in a review thread
   comment NUMBER                    top-level PR or issue comment
   resolve THREAD_ID                 resolve a thread started by github-actions/claude
@@ -21,39 +21,50 @@ die() {
   exit 1
 }
 
+# Buffer first: a `< file` redirect could feed /proc/self/environ.
+read_body() {
+  local body var
+  body=$(cat)
+  for var in ANTHROPIC_API_KEY GH_TOKEN GITHUB_TOKEN; do
+    [[ -z "${!var-}" || "${body}" != *"${!var}"* ]] || die "body contains a secret, refusing"
+  done
+  printf '%s' "${body}"
+}
+
 num() {
   [[ "${2-}" =~ ^[0-9]+$ ]] || die "$1 must be a number, got '${2-}'"
 }
 
 inline() {
-  [[ $# -eq 3 || $# -eq 4 ]] || die "inline needs PR PATH LINE [START_LINE]"
-  local pr="$1" path="$2" line="$3" start="${4-}"
+  [[ $# -eq 3 ]] || die "inline needs PR PATH LINE"
+  local pr="$1" path="$2" line="$3"
   num PR "${pr}"
   num LINE "${line}"
-  local -a fields=(-F "line=${line}")
-  if [[ -n "${start}" ]]; then
-    num START_LINE "${start}"
-    fields+=(-F "start_line=${start}" -f start_side=RIGHT)
-  fi
-  local sha
+  local sha body
+  body=$(read_body)
   sha=$(gh pr view "${pr}" --json headRefOid --jq .headRefOid)
-  gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr}/comments" \
+  printf '%s' "${body}" | gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr}/comments" \
     -f "commit_id=${sha}" -f "path=${path}" -f side=RIGHT \
-    "${fields[@]}" -F body=@- > /dev/null
+    -F "line=${line}" -F body=@- --jq .html_url
 }
 
 reply() {
   [[ $# -eq 2 ]] || die "reply needs PR COMMENT_ID"
   num PR "$1"
   num COMMENT_ID "$2"
-  gh api "repos/${GITHUB_REPOSITORY}/pulls/$1/comments/$2/replies" \
-    -F body=@- > /dev/null
+  local body
+  body=$(read_body)
+  printf '%s' "${body}" | gh api \
+    "repos/${GITHUB_REPOSITORY}/pulls/$1/comments/$2/replies" \
+    -F body=@- --jq .html_url
 }
 
 comment() {
   [[ $# -eq 1 ]] || die "comment needs NUMBER"
   num NUMBER "$1"
-  gh issue comment "$1" --body-file -
+  local body
+  body=$(read_body)
+  printf '%s' "${body}" | gh issue comment "$1" --body-file -
 }
 
 # shellcheck disable=SC2016 # $id is a GraphQL variable

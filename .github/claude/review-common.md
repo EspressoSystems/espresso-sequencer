@@ -18,11 +18,11 @@ praise.
 Post each inline comment with one call; the body comes from stdin:
 
 ```bash
-scripts/gh-claude inline <PR NUMBER> <path> <line> [<start_line>] <<'EOF'
+scripts/gh-claude inline <PR NUMBER> <path> <line> <<'EOF'
 <text>
 EOF
 ```
 
-`start_line` makes a multi-line range. Reply to a thread with `scripts/gh-claude reply <PR NUMBER> <comment_id>`. The
-`comment_id` is the thread root comment's `databaseId` in `./tmp/pr-review-comments.json`. Post top-level comments with
-`scripts/gh-claude comment <PR NUMBER>`. Both take a quoted heredoc body.
+Reply to a thread with `scripts/gh-claude reply <PR NUMBER> <comment_id>`. The `comment_id` is the thread root comment's
+`databaseId` in `./tmp/pr-review-comments.json`. Post top-level comments with `scripts/gh-claude comment <PR NUMBER>`.
+Both take a quoted heredoc body.

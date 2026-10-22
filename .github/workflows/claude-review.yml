@@ -20,6 +20,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 1
+          persist-credentials: false
 
       - name: Remove project instructions
         run: rm -f CLAUDE.md AGENTS.md
