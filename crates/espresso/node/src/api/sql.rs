@@ -241,7 +241,7 @@ pub(in crate::api) async fn init_query_module(
     Ok((
         metrics,
         Box::new(ApiEventConsumer::from(ds)),
-        Some(RequestResponseStorage::from(inner_storage)),
+        Some(RequestResponseStorage::Sql(inner_storage)),
     ))
 }
 
@@ -1179,6 +1179,92 @@ impl RewardMerkleTreeDataSource for DataSource {
             self.as_ref()
                 .persist_reward_proofs(node_state, height, version)
                 .await
+        }
+    }
+}
+
+// A module of its own so `RequestStorage` is not in scope where `CatchupStorage` methods are
+// called by name on this type.
+mod request_storage {
+    use async_trait::async_trait;
+    use espresso_types::{
+        Certificate2, ChainConfig, FeeAccount, FeeMerkleTree, Leaf2, NodeState,
+        v0_3::{RewardAccountV1, RewardMerkleTreeV1},
+        v0_4::{RewardAccountV2, RewardMerkleTreeV2},
+    };
+    use hotshot_types::data::{VidShare, ViewNumber};
+
+    use super::SqlStorage;
+    use crate::{
+        SeqTypes,
+        api::{BlocksFrontier, RewardMerkleTreeDataSource},
+        catchup::CatchupStorage,
+        request_response::data_source::RequestStorage,
+    };
+
+    #[async_trait]
+    impl RequestStorage for SqlStorage {
+        async fn get_accounts(
+            &self,
+            instance: &NodeState,
+            height: u64,
+            view: ViewNumber,
+            accounts: &[FeeAccount],
+        ) -> anyhow::Result<(FeeMerkleTree, Leaf2)> {
+            CatchupStorage::get_accounts(self, instance, height, view, accounts).await
+        }
+
+        async fn get_reward_accounts_v1(
+            &self,
+            instance: &NodeState,
+            height: u64,
+            view: ViewNumber,
+            accounts: &[RewardAccountV1],
+        ) -> anyhow::Result<(RewardMerkleTreeV1, Leaf2)> {
+            CatchupStorage::get_reward_accounts_v1(self, instance, height, view, accounts).await
+        }
+
+        async fn get_reward_accounts_v2(
+            &self,
+            instance: &NodeState,
+            height: u64,
+            view: ViewNumber,
+            accounts: &[RewardAccountV2],
+        ) -> anyhow::Result<(RewardMerkleTreeV2, Leaf2)> {
+            CatchupStorage::get_reward_accounts_v2(self, instance, height, view, accounts).await
+        }
+
+        async fn get_frontier(
+            &self,
+            instance: &NodeState,
+            height: u64,
+            view: ViewNumber,
+        ) -> anyhow::Result<BlocksFrontier> {
+            CatchupStorage::get_frontier(self, instance, height, view).await
+        }
+
+        async fn get_chain_config(
+            &self,
+            commitment: committable::Commitment<ChainConfig>,
+        ) -> anyhow::Result<ChainConfig> {
+            CatchupStorage::get_chain_config(self, commitment).await
+        }
+
+        async fn get_leaf_chain(&self, height: u64) -> anyhow::Result<Vec<Leaf2>> {
+            CatchupStorage::get_leaf_chain(self, height).await
+        }
+
+        async fn load_cert2(&self, height: u64) -> anyhow::Result<Option<Certificate2<SeqTypes>>> {
+            CatchupStorage::load_cert2(self, height).await
+        }
+
+        async fn load_tree(&self, height: u64) -> anyhow::Result<Vec<u8>> {
+            RewardMerkleTreeDataSource::load_tree(self, height).await
+        }
+
+        async fn get_vid_share(&self, block_number: u64) -> anyhow::Result<VidShare> {
+            let id = hotshot_query_service::node::BlockId::Number(block_number as usize);
+            Ok(SqlStorage::get_vid_share::<SeqTypes>(self, id).await?)
         }
     }
 }
