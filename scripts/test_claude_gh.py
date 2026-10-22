@@ -1,18 +1,19 @@
 """Tests for `claude-gh`: tool policy, routing, prompts and exit codes, with fake GitHub and agent.
 
-No network, subprocess or SDK calls. Run with:
+No network or SDK calls. Run with:
 
     just py::test test_claude_gh.py
 """
 
 import asyncio
 import importlib.util
+import json
 import logging
-import subprocess
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from importlib.machinery import SourceFileLoader
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -48,34 +49,36 @@ class FakeGitHub:
     def _posted(self, review: bool, url: str) -> cg.Posted:
         return cg.Posted(len(self.posted), url, review)
 
-    def pr_diff(self, pr: int) -> str:
+    async def pr_diff(self, pr: int) -> str:
         return f"diff {pr}"
 
-    def pr_view(self, pr: int) -> str:
+    async def pr_view(self, pr: int) -> str:
         return f"pr {pr}"
 
-    def issue_view(self, number: int) -> str:
+    async def issue_view(self, number: int) -> str:
         return f"issue {number}"
 
-    def inline_comment(self, pr: int, path: str, line: int, body: str) -> str:
+    async def inline_comment(
+        self, pr: int, path: str, line: int, body: str
+    ) -> cg.Posted:
         self.posted.append(("inline", (pr, path, line, body)))
         return self._posted(True, f"url/inline/{pr}")
 
-    def reply(self, pr: int, comment_id: int, body: str) -> str:
+    async def reply(self, pr: int, comment_id: int, body: str) -> cg.Posted:
         self.posted.append(("reply", (pr, comment_id, body)))
         return self._posted(True, f"url/reply/{comment_id}")
 
-    def comment(self, number: int, body: str) -> str:
+    async def comment(self, number: int, body: str) -> cg.Posted:
         self.posted.append(("comment", (number, body)))
         return self._posted(False, f"url/comment/{number}")
 
-    def edit_comment(self, comment: cg.Posted, body: str) -> None:
+    async def edit_comment(self, comment: cg.Posted, body: str) -> None:
         self.edits.append((comment, body))
 
-    def thread(self, thread_id: str) -> Any:
+    async def thread(self, thread_id: str) -> Any:
         return self.threads[thread_id]
 
-    def resolve_thread(self, thread_id: str) -> None:
+    async def resolve_thread(self, thread_id: str) -> None:
         self.resolved.append(thread_id)
 
 
@@ -462,14 +465,6 @@ def test_run_appends_step_summary(tmp_path):
     assert out.read_text() == "- claude-gh mention: cost 0.5 USD, 3 turns, 2 s\n"
 
 
-def test_gh_output_returns_stdout_or_raises_stderr():
-    ok = subprocess.CompletedProcess(["gh", "pr", "view"], 0, " out\n", "")
-    assert cg.gh_output(ok) == "out"
-    bad = subprocess.CompletedProcess(["gh", "pr", "view"], 1, "", " not found\n")
-    with pytest.raises(RuntimeError, match="exited 1: not found$"):
-        cg.gh_output(bad)
-
-
 def test_dry_run_posts_nothing(caplog):
     caplog.set_level(logging.INFO, logger="claude-gh")
     inner = FakeGitHub(threads={"T_1": thread()})
@@ -505,9 +500,29 @@ def test_footer_format():
     assert cg.footer(j, r) == "<sub>Cost n/a · 3 turns · 45s · opus</sub>"
 
 
-def test_parse_posted():
-    p = cg.parse_posted('{"id": 5, "url": "http://u"}', review=True)
-    assert p == cg.Posted(5, "http://u", True)
+def test_parse_thread():
+    data = {
+        "node": {
+            "pullRequest": {"number": 7, "repository": {"nameWithOwner": "o/r"}},
+            "comments": {"nodes": [{"author": {"login": "claude"}}]},
+        }
+    }
+    assert cg.parse_thread(data) == cg.Thread("claude", "o/r", 7)
+
+
+def test_view_json_is_compact_and_complete():
+    user = SimpleNamespace(login="amy")
+    item = SimpleNamespace(title="T", body="B", user=user, state="open")
+    comment = SimpleNamespace(user=user, body="hi", created_at="2026-01-01")
+    out = cg.view_json(item, [comment])
+    assert "\n" not in out
+    assert json.loads(out) == {
+        "title": "T",
+        "body": "B",
+        "author": "amy",
+        "state": "open",
+        "comments": [{"author": "amy", "body": "hi", "created_at": "2026-01-01"}],
+    }
 
 
 @pytest.mark.parametrize("is_error", [False, True])
@@ -563,7 +578,7 @@ RUN = "http://run"
 
 
 def review_job(gh: FakeGitHub, calls: list, result: ResultMessage | None, runner=None):
-    status = gh.comment(7, cg.reviewing_text("abcdef123456", RUN))
+    status = asyncio.run(gh.comment(7, cg.reviewing_text("abcdef123456", RUN)))
     posted: list = []
     t = cg.make_tools(gh, PR, SECRETS, posted=posted, status=status)
     j = job(t, posted=posted, status=status, run_url=RUN)

@@ -1,7 +1,7 @@
 #!/usr/bin/env -S uv run --script
 # /// script
 # requires-python = ">=3.11"
-# dependencies = ["claude-agent-sdk"]
+# dependencies = ["claude-agent-sdk", "githubkit"]
 # ///
 r"""Run Claude on a GitHub PR or issue with a fixed set of tools.
 
@@ -24,9 +24,8 @@ import json
 import logging
 import os
 import re
-import subprocess
 import sys
-from collections.abc import AsyncIterator, Callable, Mapping
+from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol, get_args
@@ -48,6 +47,8 @@ from claude_agent_sdk.types import (
     SettingSource,
     SystemPromptPreset,
 )
+from githubkit import GitHub as GitHubClient
+from githubkit import TokenAuthStrategy
 
 log = logging.getLogger("claude-gh")
 
@@ -116,15 +117,17 @@ class Thread:
 
 
 class GitHub(Protocol):
-    def pr_diff(self, pr: int) -> str: ...
-    def pr_view(self, pr: int) -> str: ...
-    def issue_view(self, number: int) -> str: ...
-    def inline_comment(self, pr: int, path: str, line: int, body: str) -> Posted: ...
-    def reply(self, pr: int, comment_id: int, body: str) -> Posted: ...
-    def comment(self, number: int, body: str) -> Posted: ...
-    def edit_comment(self, comment: Posted, body: str) -> None: ...
-    def thread(self, thread_id: str) -> Thread: ...
-    def resolve_thread(self, thread_id: str) -> None: ...
+    async def pr_diff(self, pr: int) -> str: ...
+    async def pr_view(self, pr: int) -> str: ...
+    async def issue_view(self, number: int) -> str: ...
+    async def inline_comment(
+        self, pr: int, path: str, line: int, body: str
+    ) -> Posted: ...
+    async def reply(self, pr: int, comment_id: int, body: str) -> Posted: ...
+    async def comment(self, number: int, body: str) -> Posted: ...
+    async def edit_comment(self, comment: Posted, body: str) -> None: ...
+    async def thread(self, thread_id: str) -> Thread: ...
+    async def resolve_thread(self, thread_id: str) -> None: ...
 
 
 Runner = Callable[[Job], AsyncIterator[Message]]
@@ -218,14 +221,6 @@ def select_tools(tools: list[SdkMcpTool], job_name: str) -> list[SdkMcpTool]:
     return [t for t in tools if t.name not in WRITES or t.name in allowed]
 
 
-def gh_output(proc: subprocess.CompletedProcess[str]) -> str:
-    if proc.returncode != 0:
-        raise RuntimeError(
-            f"{' '.join(proc.args[:3])} exited {proc.returncode}: {proc.stderr.strip()}"
-        )
-    return proc.stdout.strip()
-
-
 def tool_line(name: str, args: Mapping[str, Any]) -> str:
     parts = []
     for key, value in args.items():
@@ -285,9 +280,33 @@ def final_edit(job: Job, result: ResultMessage | None) -> tuple[Posted, str] | N
     return None
 
 
-def parse_posted(out: str, review: bool) -> Posted:
-    info = json.loads(out)
-    return Posted(info["id"], info["url"], review)
+def parse_thread(data: dict[str, Any]) -> Thread:
+    node = data["node"]
+    pr = node["pullRequest"]
+    return Thread(
+        node["comments"]["nodes"][0]["author"]["login"],
+        pr["repository"]["nameWithOwner"],
+        pr["number"],
+    )
+
+
+def view_json(item: Any, comments: list[Any]) -> str:
+    return json.dumps(
+        {
+            "title": item.title,
+            "body": item.body,
+            "author": item.user.login,
+            "state": item.state,
+            "comments": [
+                {
+                    "author": c.user.login,
+                    "body": c.body,
+                    "created_at": str(c.created_at),
+                }
+                for c in comments
+            ],
+        }
+    )
 
 
 def step_summary_line(job: str, result: ResultMessage) -> str:
@@ -316,38 +335,41 @@ def make_tools(
     n = target.number
 
     def define(
-        name: str, desc: str, schema: dict[str, type], run: Callable[[Any], str]
+        name: str,
+        desc: str,
+        schema: dict[str, type],
+        run: Callable[[Any], Awaitable[str]],
     ):
         async def handler(args: dict[str, Any]) -> dict[str, Any]:
             if "body" in args:
                 check_body(args["body"], secrets)
-            out = await asyncio.to_thread(run, args)
+            out = await run(args)
             return {"content": [{"type": "text", "text": out}]}
 
         return tool(name, desc, schema)(handler)
 
-    def post_comment(a: dict[str, Any]) -> str:
+    async def post_comment(a: dict[str, Any]) -> str:
         if status is not None:
-            gh.edit_comment(status, a["body"])
+            await gh.edit_comment(status, a["body"])
             sent = status
         elif reply_to is not None:
-            sent = gh.reply(n, reply_to, a["body"])
+            sent = await gh.reply(n, reply_to, a["body"])
         else:
-            sent = gh.comment(n, a["body"])
+            sent = await gh.comment(n, a["body"])
         if posted is not None:
             posted.append((sent, a["body"]))
         return sent.url
 
-    def inline(a: dict[str, Any]) -> str:
+    async def inline(a: dict[str, Any]) -> str:
         if a["line"] <= 0:
             raise ValueError(f"line must be positive, got {a['line']}")
-        return gh.inline_comment(n, a["path"], a["line"], a["body"]).url
+        return (await gh.inline_comment(n, a["path"], a["line"], a["body"])).url
 
-    def resolve(a: dict[str, Any]) -> str:
+    async def resolve(a: dict[str, Any]) -> str:
         thread_id = a["thread_id"]
         if not THREAD_ID.fullmatch(thread_id):
             raise ValueError(f"invalid thread_id {thread_id!r}")
-        thread = gh.thread(thread_id)
+        thread = await gh.thread(thread_id)
         if (thread.repo, thread.number) != (target.repo, n):
             raise ValueError(
                 f"thread {thread_id} belongs to {thread.repo}#{thread.number}, "
@@ -357,8 +379,11 @@ def make_tools(
             raise ValueError(
                 f"thread {thread_id} was started by {thread.author!r}, not resolving"
             )
-        gh.resolve_thread(thread_id)
+        await gh.resolve_thread(thread_id)
         return "resolved"
+
+    async def post_reply(a: dict[str, Any]) -> str:
+        return (await gh.reply(n, a["comment_id"], a["body"])).url
 
     if target.is_pr:
         reads = [
@@ -390,7 +415,7 @@ def make_tools(
             "reply",
             "Reply in a review thread; comment_id is the thread root comment.",
             {"comment_id": int, "body": str},
-            lambda a: gh.reply(n, a["comment_id"], a["body"]).url,
+            post_reply,
         ),
         define("comment", "Top-level comment.", {"body": str}, post_comment),
         define(
@@ -405,84 +430,89 @@ def make_tools(
 # GitHub implementations
 
 
-class GhCli:
-    def __init__(self, repo: str):
-        self.repo = repo
+class GitHubKit:
+    def __init__(self, repo: str, token: str):
+        self.owner, self.name = repo.split("/")
+        self.gh = GitHubClient(TokenAuthStrategy(token))
 
-    def _gh(self, *args: str, body: str | None = None) -> str:
-        proc = subprocess.run(
-            ["gh", *args], input=body, capture_output=True, text=True, check=False
+    async def pr_diff(self, pr: int) -> str:
+        resp = await self.gh.arequest(
+            "GET",
+            f"/repos/{self.owner}/{self.name}/pulls/{pr}",
+            headers={"Accept": "application/vnd.github.diff"},
         )
-        return gh_output(proc)
+        return resp.text
 
-    def pr_diff(self, pr: int) -> str:
-        return self._gh("pr", "diff", str(pr), "-R", self.repo)
-
-    def pr_view(self, pr: int) -> str:
-        return self._gh("pr", "view", str(pr), "-R", self.repo, "--comments")
-
-    def issue_view(self, number: int) -> str:
-        return self._gh("issue", "view", str(number), "-R", self.repo, "--comments")
-
-    def inline_comment(self, pr: int, path: str, line: int, body: str) -> Posted:
-        sha = self._gh(
-            "pr",
-            "view",
-            str(pr),
-            "-R",
-            self.repo,
-            "--json",
-            "headRefOid",
-            "--jq",
-            ".headRefOid",
+    async def pr_view(self, pr: int) -> str:
+        resp = await self.gh.rest.pulls.async_get(
+            owner=self.owner, repo=self.name, pull_number=pr
         )
-        out = self._gh(
-            "api", f"repos/{self.repo}/pulls/{pr}/comments",
-            "-f", f"commit_id={sha}", "-f", f"path={path}", "-f", "side=RIGHT",
-            "-F", f"line={line}", "-F", "body=@-", "--jq", POSTED_JQ,
-            body=body,
-        )  # fmt: skip
-        return parse_posted(out, review=True)
+        return view_json(resp.parsed_data, await self._comments(pr))
 
-    def reply(self, pr: int, comment_id: int, body: str) -> Posted:
-        out = self._gh(
-            "api", f"repos/{self.repo}/pulls/{pr}/comments/{comment_id}/replies",
-            "-F", "body=@-", "--jq", POSTED_JQ,
-            body=body,
-        )  # fmt: skip
-        return parse_posted(out, review=True)
-
-    def comment(self, number: int, body: str) -> Posted:
-        out = self._gh(
-            "api", f"repos/{self.repo}/issues/{number}/comments",
-            "-F", "body=@-", "--jq", POSTED_JQ,
-            body=body,
-        )  # fmt: skip
-        return parse_posted(out, review=False)
-
-    def edit_comment(self, comment: Posted, body: str) -> None:
-        kind = "pulls" if comment.review else "issues"
-        self._gh(
-            "api", "-X", "PATCH", f"repos/{self.repo}/{kind}/comments/{comment.id}",
-            "-F", "body=@-",
-            body=body,
-        )  # fmt: skip
-
-    def thread(self, thread_id: str) -> Thread:
-        out = self._gh(
-            "api", "graphql", "-F", f"id={thread_id}", "-f", "query=" + THREAD_QUERY,
-            "--jq", THREAD_JQ,
-        )  # fmt: skip
-        info = json.loads(out)
-        return Thread(info["author"], info["repo"], info["number"])
-
-    def resolve_thread(self, thread_id: str) -> None:
-        self._gh(
-            "api", "graphql", "-F", f"id={thread_id}", "-f", "query=" + RESOLVE_MUTATION
+    async def issue_view(self, number: int) -> str:
+        resp = await self.gh.rest.issues.async_get(
+            owner=self.owner, repo=self.name, issue_number=number
         )
+        return view_json(resp.parsed_data, await self._comments(number))
 
+    async def _comments(self, number: int) -> list[Any]:
+        pages = self.gh.paginate(
+            self.gh.rest.issues.async_list_comments,
+            owner=self.owner,
+            repo=self.name,
+            issue_number=number,
+        )
+        return [c async for c in pages]
 
-POSTED_JQ = "{id: .id, url: .html_url}"
+    async def inline_comment(self, pr: int, path: str, line: int, body: str) -> Posted:
+        head = await self.gh.rest.pulls.async_get(
+            owner=self.owner, repo=self.name, pull_number=pr
+        )
+        resp = await self.gh.rest.pulls.async_create_review_comment(
+            owner=self.owner,
+            repo=self.name,
+            pull_number=pr,
+            body=body,
+            commit_id=head.parsed_data.head.sha,
+            path=path,
+            line=line,
+            side="RIGHT",
+        )
+        return Posted(resp.parsed_data.id, resp.parsed_data.html_url, review=True)
+
+    async def reply(self, pr: int, comment_id: int, body: str) -> Posted:
+        resp = await self.gh.rest.pulls.async_create_reply_for_review_comment(
+            owner=self.owner,
+            repo=self.name,
+            pull_number=pr,
+            comment_id=comment_id,
+            body=body,
+        )
+        return Posted(resp.parsed_data.id, resp.parsed_data.html_url, review=True)
+
+    async def comment(self, number: int, body: str) -> Posted:
+        resp = await self.gh.rest.issues.async_create_comment(
+            owner=self.owner, repo=self.name, issue_number=number, body=body
+        )
+        return Posted(resp.parsed_data.id, resp.parsed_data.html_url, review=False)
+
+    async def edit_comment(self, comment: Posted, body: str) -> None:
+        if comment.review:
+            await self.gh.rest.pulls.async_update_review_comment(
+                owner=self.owner, repo=self.name, comment_id=comment.id, body=body
+            )
+        else:
+            await self.gh.rest.issues.async_update_comment(
+                owner=self.owner, repo=self.name, comment_id=comment.id, body=body
+            )
+
+    async def thread(self, thread_id: str) -> Thread:
+        data = await self.gh.async_graphql(THREAD_QUERY, {"id": thread_id})
+        return parse_thread(data)
+
+    async def resolve_thread(self, thread_id: str) -> None:
+        await self.gh.async_graphql(RESOLVE_MUTATION, {"id": thread_id})
+
 
 THREAD_QUERY = """
 query($id: ID!) {
@@ -492,12 +522,6 @@ query($id: ID!) {
       comments(first: 1) { nodes { author { login } } }
     }
   }
-}"""
-
-THREAD_JQ = """.data.node | {
-  author: .comments.nodes[0].author.login,
-  repo: .pullRequest.repository.nameWithOwner,
-  number: .pullRequest.number
 }"""
 
 RESOLVE_MUTATION = """
@@ -514,32 +538,32 @@ class DryRun:
     posted: list[tuple[str, str]] = field(default_factory=list)
     edits: list[tuple[int, str]] = field(default_factory=list)
 
-    def pr_diff(self, pr: int) -> str:
-        return self.inner.pr_diff(pr)
+    async def pr_diff(self, pr: int) -> str:
+        return await self.inner.pr_diff(pr)
 
-    def pr_view(self, pr: int) -> str:
-        return self.inner.pr_view(pr)
+    async def pr_view(self, pr: int) -> str:
+        return await self.inner.pr_view(pr)
 
-    def issue_view(self, number: int) -> str:
-        return self.inner.issue_view(number)
+    async def issue_view(self, number: int) -> str:
+        return await self.inner.issue_view(number)
 
-    def thread(self, thread_id: str) -> Thread:
-        return self.inner.thread(thread_id)
+    async def thread(self, thread_id: str) -> Thread:
+        return await self.inner.thread(thread_id)
 
-    def inline_comment(self, pr: int, path: str, line: int, body: str) -> Posted:
+    async def inline_comment(self, pr: int, path: str, line: int, body: str) -> Posted:
         return self._post("inline", f"{pr} {path}:{line}", body)
 
-    def reply(self, pr: int, comment_id: int, body: str) -> Posted:
+    async def reply(self, pr: int, comment_id: int, body: str) -> Posted:
         return self._post("reply", f"{pr} {comment_id}", body)
 
-    def comment(self, number: int, body: str) -> Posted:
+    async def comment(self, number: int, body: str) -> Posted:
         return self._post("comment", str(number), body)
 
-    def edit_comment(self, comment: Posted, body: str) -> None:
+    async def edit_comment(self, comment: Posted, body: str) -> None:
         log.info("would edit comment %s: %r", comment.id, body)
         self.edits.append((comment.id, body))
 
-    def resolve_thread(self, thread_id: str) -> None:
+    async def resolve_thread(self, thread_id: str) -> None:
         self._post("resolve", thread_id, "")
 
     def _post(self, kind: str, where: str, body: str) -> Posted:
@@ -565,7 +589,7 @@ async def run(
                 result = message
     finally:
         if edit := final_edit(job, result):
-            gh.edit_comment(*edit)
+            await gh.edit_comment(*edit)
     lines, code = summary(result)
     for line in lines:
         log.info(line)
@@ -587,7 +611,9 @@ def load_secrets() -> dict[str, str]:
     }
 
 
-def build_job(args: argparse.Namespace, gh: GitHub, secrets: Mapping[str, str]) -> Job:
+async def build_job(
+    args: argparse.Namespace, gh: GitHub, secrets: Mapping[str, str]
+) -> Job:
     event = json.loads(Path(os.environ["GITHUB_EVENT_PATH"]).read_text())
     reply_to = None
     append = None
@@ -607,7 +633,7 @@ def build_job(args: argparse.Namespace, gh: GitHub, secrets: Mapping[str, str]) 
         focus = focus_path(BACKPORT_MARKER.exists()).read_text()
         common = (CLAUDE_DIR / "review-common.md").read_text()
         prompt = review_prompt(tgt, head_sha, run_url, focus, common)
-        status = gh.comment(tgt.number, reviewing_text(head_sha, run_url))
+        status = await gh.comment(tgt.number, reviewing_text(head_sha, run_url))
         settings = ["user"]  # PR head checkout: no project settings
     elif args.command == "mention":
         mention = mention_from_event(os.environ["GITHUB_EVENT_NAME"], event)
@@ -659,14 +685,17 @@ def main() -> int:
         stream=sys.stderr,
     )
     args = parse_args(sys.argv[1:])
-    gh: GitHub = GhCli(os.environ["GITHUB_REPOSITORY"])
+    return asyncio.run(amain(args))
+
+
+async def amain(args: argparse.Namespace) -> int:
+    secrets = load_secrets()
+    gh: GitHub = GitHubKit(os.environ["GITHUB_REPOSITORY"], secrets["GH_TOKEN"])
     if args.dry_run:
         gh = DryRun(gh)
-    job = build_job(args, gh, load_secrets())
+    job = await build_job(args, gh, secrets)
     summary_file = os.environ.get("GITHUB_STEP_SUMMARY")
-    return asyncio.run(
-        run(job, sdk_runner, gh, Path(summary_file) if summary_file else None)
-    )
+    return await run(job, sdk_runner, gh, Path(summary_file) if summary_file else None)
 
 
 if __name__ == "__main__":
