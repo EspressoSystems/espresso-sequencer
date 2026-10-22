@@ -19,12 +19,15 @@ use tracing::{error, info, warn};
 
 use super::ns_lens_match_metadata;
 
+const SKIP_DECODE_ENV: &str = "ESPRESSO_BENCH_SKIP_DECODE_MAX_CORES";
+
 /// Benchmark only: a node that sees at most `ESPRESSO_BENCH_SKIP_DECODE_MAX_CORES` cores drops
 /// every VID share, so it never rebuilds a block. With `--slow-nodes` only the slow nodes skip.
-/// Safe only from protocol 0.8, where no vote waits for a payload. Such a node never learns which
-/// of its transactions were included, so it resends them until they expire.
+/// Safe only from protocol 0.8, where no vote waits for a payload. Such a node learns which
+/// transactions were included from the leaders' dedup manifests instead (see
+/// [`bench_manifest_to_all`]).
 static SKIP_DECODE: LazyLock<bool> = LazyLock::new(|| {
-    let Some(max_cores) = std::env::var("ESPRESSO_BENCH_SKIP_DECODE_MAX_CORES")
+    let Some(max_cores) = std::env::var(SKIP_DECODE_ENV)
         .ok()
         .and_then(|value| value.parse::<usize>().ok())
     else {
@@ -35,6 +38,19 @@ static SKIP_DECODE: LazyLock<bool> = LazyLock::new(|| {
     info!(cores, max_cores, skip, "bench: skip VID decode");
     skip
 });
+
+/// Benchmark only: whether this node never rebuilds a block (see [`SKIP_DECODE`]).
+pub(crate) fn bench_skips_decode() -> bool {
+    *SKIP_DECODE
+}
+
+/// Benchmark only: whether a leader sends its dedup manifest to every node rather than to the
+/// next leaders only, so that nodes which skip decode stop resending included transactions and
+/// do not build them again. Set on every node of a run that sets the skip variable.
+pub(crate) fn bench_manifest_to_all() -> bool {
+    static SET: LazyLock<bool> = LazyLock::new(|| std::env::var_os(SKIP_DECODE_ENV).is_some());
+    *SET
+}
 
 pub(crate) type Metadata<T> = <<T as NodeType>::BlockPayload as BlockPayload<T>>::Metadata;
 

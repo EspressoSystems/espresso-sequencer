@@ -683,6 +683,10 @@ where
                         // A leader of several views builds a copy sent for a later one into this
                         // block, so a transaction here can be sent from `block.view - 1`, and its
                         // other copies can sit with the leaders of the next `fanout` views.
+                        if crate::vid::bench_manifest_to_all() {
+                            self.broadcast_block(BlockMessage::DedupManifest(manifest))?;
+                            return Ok(block.into())
+                        }
                         let holders = self.upcoming_leaders(
                             block.view + 1,
                             self.block_builder.fanout().get(),
@@ -1658,7 +1662,14 @@ where
                             && let Some(view_leader) = self.leader(manifest.view, manifest.epoch)
                             && view_leader == message.sender
                         {
-                            self.block_builder.on_dedup_manifest(manifest)
+                            if crate::vid::bench_skips_decode() {
+                                // Benchmark only: this node never rebuilds the block, so the
+                                // manifest is its only sign of inclusion.
+                                self.block_builder
+                                    .on_block_reconstructed(manifest.view, manifest.hashes);
+                            } else {
+                                self.block_builder.on_dedup_manifest(manifest)
+                            }
                         }
                     },
                 }
@@ -1801,6 +1812,17 @@ where
             .sender()
             .broadcast(self.consensus.current_view(), &message)
             .map_err(|e| CoordinatorError::from(e).context(ctx))
+    }
+
+    fn broadcast_block(&self, msg: BlockMessage<T>) -> Result<(), CoordinatorError> {
+        let message = Message {
+            sender: self.public_key.clone(),
+            message_type: MessageType::Block(msg),
+        };
+        self.network
+            .sender()
+            .broadcast(self.consensus.current_view(), &message)
+            .map_err(|e| CoordinatorError::from(e).context("block broadcast"))
     }
 
     fn unicast_block(

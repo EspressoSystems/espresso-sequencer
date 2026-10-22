@@ -41,10 +41,10 @@ use hotshot_types::{
     traits::node_implementation::NodeType,
     vid::avidm_gf2::{AvidmGf2Common, AvidmGf2Param, init_avidm_gf2_param},
 };
-pub(crate) use reconstruct::matches_commitment;
 pub use reconstruct::{
     ObtainedPayload, PinnedBy, VidReconstructError, VidReconstructErrorKind, VidReconstructor,
 };
+pub(crate) use reconstruct::{bench_manifest_to_all, bench_skips_decode, matches_commitment};
 
 /// The VID erasure parameters the committee for `epoch` fixes, matching what
 /// an honest disperser derives. Used to reject shares whose `common.param` is
