@@ -1,0 +1,574 @@
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.11"
+# dependencies = ["claude-agent-sdk"]
+# ///
+r"""Run Claude on a GitHub PR or issue with a fixed set of tools.
+
+The model gets Read/Grep/Glob and an in-process MCP server `gh`. There is no Bash. The
+server reads the PR or issue bound at startup and writes only to it, with bodies checked
+for secrets. Reads the workflow event from $GITHUB_EVENT_PATH.
+
+    scripts/claude-gh review                # PR opened: review, from .github/claude/review-*.md
+    scripts/claude-gh mention               # @claude mention: answer in the thread
+    scripts/claude-gh code-review --model opus --effort high
+    scripts/claude-gh review --dry-run      # print writes instead of posting them
+
+Env: ANTHROPIC_API_KEY, GH_TOKEN, GITHUB_EVENT_PATH, GITHUB_REPOSITORY, GITHUB_SERVER_URL,
+GITHUB_RUN_ID (review), GITHUB_EVENT_NAME (mention), GITHUB_STEP_SUMMARY (optional).
+"""
+
+import argparse
+import asyncio
+import json
+import logging
+import os
+import re
+import subprocess
+import sys
+from collections.abc import AsyncIterator, Callable, Mapping
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any, Protocol, get_args
+
+from claude_agent_sdk import (
+    AssistantMessage,
+    ClaudeAgentOptions,
+    Message,
+    ResultMessage,
+    SdkMcpTool,
+    ToolUseBlock,
+    create_sdk_mcp_server,
+    query,
+    tool,
+)
+from claude_agent_sdk.types import (
+    EffortLevel,
+    McpSdkServerConfig,
+    SettingSource,
+    SystemPromptPreset,
+)
+
+log = logging.getLogger("claude-gh")
+
+BUILTIN = ["Read", "Grep", "Glob"]
+DISALLOWED = ["Read(//proc/**)"]
+BOTS = {"github-actions", "claude"}
+WRITES = {"inline_comment", "reply", "comment", "resolve_thread"}
+JOB_WRITES = {
+    "review": WRITES,
+    "mention": {"comment"},
+    "code-review": WRITES - {"resolve_thread"},
+}
+# The CLI gets no GitHub token: all GitHub access goes through the `gh` MCP server.
+# Background subagents outlive the main result and leave the review unposted.
+CLI_ENV = {"GH_TOKEN": "", "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS": "1"}
+MAX_TURNS = 120
+SERVER = "gh"
+THREAD_ID = re.compile(r"[A-Za-z0-9_=-]+")
+CLAUDE_DIR = Path(".github/claude")
+BACKPORT_MARKER = Path("tmp/is-backport")
+
+
+@dataclass(frozen=True)
+class Target:
+    repo: str
+    number: int
+    is_pr: bool
+
+
+@dataclass(frozen=True)
+class Mention:
+    target: Target
+    reply_to: int | None  # review-thread root; None means a top-level comment
+    context: dict[str, Any]
+
+
+@dataclass(frozen=True)
+class Job:
+    name: str
+    prompt: str
+    model: str
+    effort: EffortLevel
+    append: str | None
+    tools: list[SdkMcpTool]
+    builtin: list[str]
+    settings: list[SettingSource]
+
+
+@dataclass(frozen=True)
+class Thread:
+    author: str
+    repo: str
+    number: int
+
+
+class GitHub(Protocol):
+    def pr_diff(self, pr: int) -> str: ...
+    def pr_view(self, pr: int) -> str: ...
+    def issue_view(self, number: int) -> str: ...
+    def inline_comment(self, pr: int, path: str, line: int, body: str) -> str: ...
+    def reply(self, pr: int, comment_id: int, body: str) -> str: ...
+    def comment(self, number: int, body: str) -> str: ...
+    def thread(self, thread_id: str) -> Thread: ...
+    def resolve_thread(self, thread_id: str) -> None: ...
+
+
+Runner = Callable[[Job], AsyncIterator[Message]]
+
+
+# Pure core
+
+
+def target(event: dict) -> Target:
+    item = event["issue"] if "issue" in event else event["pull_request"]
+    return Target(
+        event["repository"]["full_name"],
+        item["number"],
+        "pull_request" in event or "pull_request" in item,
+    )
+
+
+def mention_from_event(name: str, event: dict) -> Mention:
+    item = event["issue"] if "issue" in event else event["pull_request"]
+    comment = event.get("comment")
+    review = event.get("review")
+    reply_to = None
+    if name == "pull_request_review_comment":
+        root = event["comment"]
+        reply_to = root.get("in_reply_to_id") or root["id"]
+    context = {
+        "event_name": name,
+        "title": item["title"],
+        "body": item["body"],
+        "author": (comment or review or item)["user"]["login"],
+        "comment_body": comment and comment["body"],
+        "path": comment and comment.get("path"),
+        "line": comment and comment.get("line"),
+        "diff_hunk": comment and comment.get("diff_hunk"),
+        "review_body": review and review["body"],
+    }
+    context = {k: v for k, v in context.items() if v is not None}
+    return Mention(target(event), reply_to, context)
+
+
+def focus_path(backport: bool) -> Path:
+    return CLAUDE_DIR / ("review-backport.md" if backport else "review-standard.md")
+
+
+def review_prompt(
+    target: Target, head_sha: str, run_url: str, focus: str, common: str
+) -> str:
+    header = (
+        f"REPO: {target.repo}\nPR NUMBER: {target.number}\n"
+        f"HEAD SHA: {head_sha}\nRUN URL: {run_url}"
+    )
+    return f"{header}\n\n{focus}\n\n{common}"
+
+
+def mention_prompt(m: Mention, doc: str) -> str:
+    event = json.dumps(m.context, indent=2)
+    return f"REPO: {m.target.repo}\n\n{doc}\n\nEvent:\n\n{event}\n"
+
+
+def code_review_prompt(target: Target, effort: str) -> str:
+    return f"/code-review {effort} --comment {target.number}"
+
+
+def check_body(body: str, secrets: Mapping[str, str]) -> None:
+    for name, value in secrets.items():
+        if value and value in body:
+            raise ValueError(f"body contains {name}, refusing")
+
+
+def options(job: Job, server: McpSdkServerConfig) -> ClaudeAgentOptions:
+    prompt: SystemPromptPreset = {"type": "preset", "preset": "claude_code"}
+    if job.append:
+        prompt["append"] = job.append
+    return ClaudeAgentOptions(
+        model=job.model,
+        effort=job.effort,
+        max_turns=MAX_TURNS,
+        tools=job.builtin,
+        allowed_tools=job.builtin + [f"mcp__{SERVER}"],
+        disallowed_tools=DISALLOWED,
+        setting_sources=job.settings,
+        system_prompt=prompt,
+        mcp_servers={SERVER: server},
+        permission_mode="dontAsk",
+        env=CLI_ENV,
+    )
+
+
+def select_tools(tools: list[SdkMcpTool], job_name: str) -> list[SdkMcpTool]:
+    allowed = JOB_WRITES[job_name]
+    return [t for t in tools if t.name not in WRITES or t.name in allowed]
+
+
+def gh_output(proc: subprocess.CompletedProcess[str]) -> str:
+    if proc.returncode != 0:
+        raise RuntimeError(
+            f"{' '.join(proc.args[:3])} exited {proc.returncode}: {proc.stderr.strip()}"
+        )
+    return proc.stdout.strip()
+
+
+def tool_line(name: str, args: Mapping[str, Any]) -> str:
+    parts = []
+    for key, value in args.items():
+        text = f"<{len(value)} chars>" if key == "body" else str(value)
+        parts.append(f"{key}={text.replace(chr(10), ' ')[:80]}")
+    return f"tool {name.removeprefix(f'mcp__{SERVER}__')} {' '.join(parts)}".rstrip()
+
+
+def summary(result: ResultMessage | None) -> tuple[list[str], int]:
+    if result is None:
+        return ["no result message"], 1
+    lines = [result.result] if result.result else []
+    code = 0
+    if result.is_error:
+        lines.append(f"result is_error, subtype={result.subtype}")
+        code = 1
+    denials = json.dumps(result.permission_denials)
+    lines.append(
+        f"total_cost_usd={result.total_cost_usd} turns={result.num_turns} "
+        f"permission_denials={denials}"
+    )
+    return lines, code
+
+
+def step_summary_line(job: str, result: ResultMessage) -> str:
+    return (
+        f"- claude-gh {job}: cost {result.total_cost_usd} USD, "
+        f"{result.num_turns} turns, {result.duration_ms / 1000:.0f} s\n"
+    )
+
+
+# Tools
+
+
+def make_tools(
+    gh: GitHub, target: Target, secrets: Mapping[str, str], reply_to: int | None = None
+) -> list[SdkMcpTool]:
+    """Every call acts on `target`; the model never names a PR, issue or repo.
+
+    Builds every tool; `select_tools` drops the writes a job may not use. Handlers raise
+    ValueError on refused calls, which the SDK reports to the model as an error result.
+    """
+    n = target.number
+
+    def define(
+        name: str, desc: str, schema: dict[str, type], run: Callable[[Any], str]
+    ):
+        async def handler(args: dict[str, Any]) -> dict[str, Any]:
+            if "body" in args:
+                check_body(args["body"], secrets)
+            out = await asyncio.to_thread(run, args)
+            return {"content": [{"type": "text", "text": out}]}
+
+        return tool(name, desc, schema)(handler)
+
+    def post_comment(a: dict[str, Any]) -> str:
+        if reply_to is not None:
+            return gh.reply(n, reply_to, a["body"])
+        return gh.comment(n, a["body"])
+
+    def inline(a: dict[str, Any]) -> str:
+        if a["line"] <= 0:
+            raise ValueError(f"line must be positive, got {a['line']}")
+        return gh.inline_comment(n, a["path"], a["line"], a["body"])
+
+    def resolve(a: dict[str, Any]) -> str:
+        thread_id = a["thread_id"]
+        if not THREAD_ID.fullmatch(thread_id):
+            raise ValueError(f"invalid thread_id {thread_id!r}")
+        thread = gh.thread(thread_id)
+        if (thread.repo, thread.number) != (target.repo, n):
+            raise ValueError(
+                f"thread {thread_id} belongs to {thread.repo}#{thread.number}, "
+                f"not {target.repo}#{n}"
+            )
+        if thread.author not in BOTS:
+            raise ValueError(
+                f"thread {thread_id} was started by {thread.author!r}, not resolving"
+            )
+        gh.resolve_thread(thread_id)
+        return "resolved"
+
+    if target.is_pr:
+        reads = [
+            define("pr_diff", "Diff of the PR.", {}, lambda a: gh.pr_diff(n)),
+            define(
+                "pr_view",
+                "Title, body and comments of the PR.",
+                {},
+                lambda a: gh.pr_view(n),
+            ),
+        ]
+    else:
+        reads = [
+            define(
+                "issue_view",
+                "Title, body and comments of the issue.",
+                {},
+                lambda a: gh.issue_view(n),
+            )
+        ]
+    return reads + [
+        define(
+            "inline_comment",
+            "Review comment on a line of the PR head, RIGHT side.",
+            {"path": str, "line": int, "body": str},
+            inline,
+        ),
+        define(
+            "reply",
+            "Reply in a review thread; comment_id is the thread root comment.",
+            {"comment_id": int, "body": str},
+            lambda a: gh.reply(n, a["comment_id"], a["body"]),
+        ),
+        define("comment", "Top-level comment.", {"body": str}, post_comment),
+        define(
+            "resolve_thread",
+            "Resolve a review thread started by github-actions or claude.",
+            {"thread_id": str},
+            resolve,
+        ),
+    ]
+
+
+# GitHub implementations
+
+
+class GhCli:
+    def __init__(self, repo: str):
+        self.repo = repo
+
+    def _gh(self, *args: str, body: str | None = None) -> str:
+        proc = subprocess.run(
+            ["gh", *args], input=body, capture_output=True, text=True, check=False
+        )
+        return gh_output(proc)
+
+    def pr_diff(self, pr: int) -> str:
+        return self._gh("pr", "diff", str(pr), "-R", self.repo)
+
+    def pr_view(self, pr: int) -> str:
+        return self._gh("pr", "view", str(pr), "-R", self.repo, "--comments")
+
+    def issue_view(self, number: int) -> str:
+        return self._gh("issue", "view", str(number), "-R", self.repo, "--comments")
+
+    def inline_comment(self, pr: int, path: str, line: int, body: str) -> str:
+        sha = self._gh(
+            "pr",
+            "view",
+            str(pr),
+            "-R",
+            self.repo,
+            "--json",
+            "headRefOid",
+            "--jq",
+            ".headRefOid",
+        )
+        return self._gh(
+            "api", f"repos/{self.repo}/pulls/{pr}/comments",
+            "-f", f"commit_id={sha}", "-f", f"path={path}", "-f", "side=RIGHT",
+            "-F", f"line={line}", "-F", "body=@-", "--jq", ".html_url",
+            body=body,
+        )  # fmt: skip
+
+    def reply(self, pr: int, comment_id: int, body: str) -> str:
+        return self._gh(
+            "api", f"repos/{self.repo}/pulls/{pr}/comments/{comment_id}/replies",
+            "-F", "body=@-", "--jq", ".html_url",
+            body=body,
+        )  # fmt: skip
+
+    def comment(self, number: int, body: str) -> str:
+        return self._gh(
+            "issue",
+            "comment",
+            str(number),
+            "-R",
+            self.repo,
+            "--body-file",
+            "-",
+            body=body,
+        )
+
+    def thread(self, thread_id: str) -> Thread:
+        out = self._gh(
+            "api", "graphql", "-F", f"id={thread_id}", "-f", "query=" + THREAD_QUERY,
+            "--jq", THREAD_JQ,
+        )  # fmt: skip
+        info = json.loads(out)
+        return Thread(info["author"], info["repo"], info["number"])
+
+    def resolve_thread(self, thread_id: str) -> None:
+        self._gh(
+            "api", "graphql", "-F", f"id={thread_id}", "-f", "query=" + RESOLVE_MUTATION
+        )
+
+
+THREAD_QUERY = """
+query($id: ID!) {
+  node(id: $id) {
+    ... on PullRequestReviewThread {
+      pullRequest { number repository { nameWithOwner } }
+      comments(first: 1) { nodes { author { login } } }
+    }
+  }
+}"""
+
+THREAD_JQ = """.data.node | {
+  author: .comments.nodes[0].author.login,
+  repo: .pullRequest.repository.nameWithOwner,
+  number: .pullRequest.number
+}"""
+
+RESOLVE_MUTATION = """
+mutation($id: ID!) {
+  resolveReviewThread(input: {threadId: $id}) { thread { isResolved } }
+}"""
+
+
+@dataclass
+class DryRun:
+    """Reads delegate to `inner`; writes are printed and recorded."""
+
+    inner: GitHub
+    posted: list[tuple[str, str]] = field(default_factory=list)
+
+    def pr_diff(self, pr: int) -> str:
+        return self.inner.pr_diff(pr)
+
+    def pr_view(self, pr: int) -> str:
+        return self.inner.pr_view(pr)
+
+    def issue_view(self, number: int) -> str:
+        return self.inner.issue_view(number)
+
+    def thread(self, thread_id: str) -> Thread:
+        return self.inner.thread(thread_id)
+
+    def inline_comment(self, pr: int, path: str, line: int, body: str) -> str:
+        return self._post("inline", f"{pr} {path}:{line}", body)
+
+    def reply(self, pr: int, comment_id: int, body: str) -> str:
+        return self._post("reply", f"{pr} {comment_id}", body)
+
+    def comment(self, number: int, body: str) -> str:
+        return self._post("comment", str(number), body)
+
+    def resolve_thread(self, thread_id: str) -> None:
+        self._post("resolve", thread_id, "")
+
+    def _post(self, kind: str, where: str, body: str) -> str:
+        log.info("would post %s %s: %r", kind, where, body)
+        self.posted.append((kind, body))
+        return f"dry-run://{kind}/{where}"
+
+
+# Running
+
+
+async def run(job: Job, runner: Runner, step_summary: Path | None = None) -> int:
+    result = None
+    async for message in runner(job):
+        if isinstance(message, AssistantMessage):
+            for block in message.content:
+                if isinstance(block, ToolUseBlock):
+                    log.info(tool_line(block.name, block.input))
+        elif isinstance(message, ResultMessage):
+            result = message
+    lines, code = summary(result)
+    for line in lines:
+        log.info(line)
+    if step_summary and result:
+        with step_summary.open("a") as f:
+            f.write(step_summary_line(job.name, result))
+    return code
+
+
+def sdk_runner(job: Job) -> AsyncIterator[Message]:
+    server = create_sdk_mcp_server(SERVER, tools=job.tools)
+    return query(prompt=job.prompt, options=options(job, server))
+
+
+def load_secrets() -> dict[str, str]:
+    return {
+        "ANTHROPIC_API_KEY": os.environ["ANTHROPIC_API_KEY"],
+        "GH_TOKEN": os.environ["GH_TOKEN"],
+    }
+
+
+def build_job(args: argparse.Namespace, gh: GitHub, secrets: Mapping[str, str]) -> Job:
+    event = json.loads(Path(os.environ["GITHUB_EVENT_PATH"]).read_text())
+    reply_to = None
+    append = None
+    model = "opus"
+    effort: EffortLevel = "high"
+    builtin = BUILTIN
+    settings: list[SettingSource] = ["user", "project"]  # base-branch checkout
+    if args.command == "review":
+        tgt = target(event)
+        run_url = (
+            f"{os.environ['GITHUB_SERVER_URL']}/{os.environ['GITHUB_REPOSITORY']}"
+            f"/actions/runs/{os.environ['GITHUB_RUN_ID']}"
+        )
+        focus = focus_path(BACKPORT_MARKER.exists()).read_text()
+        common = (CLAUDE_DIR / "review-common.md").read_text()
+        prompt = review_prompt(
+            tgt, event["pull_request"]["head"]["sha"], run_url, focus, common
+        )
+        settings = ["user"]  # PR head checkout: no project settings
+    elif args.command == "mention":
+        mention = mention_from_event(os.environ["GITHUB_EVENT_NAME"], event)
+        tgt, reply_to = mention.target, mention.reply_to
+        prompt = mention_prompt(mention, (CLAUDE_DIR / "mention.md").read_text())
+    else:
+        tgt = target(event)
+        prompt = code_review_prompt(tgt, args.effort)
+        model, effort = args.model, args.effort
+        append = (CLAUDE_DIR / "code-review.md").read_text()
+        builtin = BUILTIN + ["Agent"]
+    tools = select_tools(make_tools(gh, tgt, secrets, reply_to), args.command)
+    return Job(args.command, prompt, model, effort, append, tools, builtin, settings)
+
+
+def parse_args(argv: list[str]) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    sub = parser.add_subparsers(dest="command", required=True)
+    for name in ("review", "mention", "code-review"):
+        p = sub.add_parser(name)
+        p.add_argument(
+            "--dry-run", action="store_true", help="print writes instead of posting"
+        )
+        if name == "code-review":
+            p.add_argument("--model", required=True)
+            p.add_argument("--effort", required=True, choices=get_args(EffortLevel))
+    return parser.parse_args(argv)
+
+
+def main() -> int:
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(levelname)s %(name)s: %(message)s",
+        stream=sys.stderr,
+    )
+    args = parse_args(sys.argv[1:])
+    gh: GitHub = GhCli(os.environ["GITHUB_REPOSITORY"])
+    if args.dry_run:
+        gh = DryRun(gh)
+    job = build_job(args, gh, load_secrets())
+    summary_file = os.environ.get("GITHUB_STEP_SUMMARY")
+    return asyncio.run(
+        run(job, sdk_runner, Path(summary_file) if summary_file else None)
+    )
+
+
+if __name__ == "__main__":
+    sys.exit(main())

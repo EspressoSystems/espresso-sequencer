@@ -3,7 +3,7 @@ Before reviewing, read existing comments from `./tmp/pr-review-comments.json`.
 - Do not duplicate feedback already given by any reviewer.
 - Your own threads are those authored by `github-actions` or `claude`.
 - For your own unresolved review threads: respond to any changes or replies, then resolve if the issue is fixed,
-  explained, or answered satisfactorily. `scripts/gh-claude resolve <thread_id>`
+  explained, or answered satisfactorily. Use the `resolve_thread` tool with the thread id.
 - Only resolve your own threads, never others'.
 
 Do NOT comment on:
@@ -51,14 +51,6 @@ Summary comment template (omit empty sections; link each location as
 <sub>[Run](<RUN URL>)</sub>
 ```
 
-Post each inline comment with one call; the body comes from stdin:
-
-```bash
-scripts/gh-claude inline <PR NUMBER> <path> <line> <<'EOF'
-<text>
-EOF
-```
-
-Reply to a thread with `scripts/gh-claude reply <PR NUMBER> <comment_id>`. The `comment_id` is the thread root comment's
-`databaseId` in `./tmp/pr-review-comments.json`. Post top-level comments with `scripts/gh-claude comment <PR NUMBER>`.
-Both take a quoted heredoc body.
+Post each inline comment with one `inline_comment` call (`path`, `line`, `body`). Reply to a thread with the `reply`
+tool. The `comment_id` is the thread root comment's `databaseId` in `./tmp/pr-review-comments.json`. Post top-level
+comments with the `comment` tool. The tools act on this PR only.

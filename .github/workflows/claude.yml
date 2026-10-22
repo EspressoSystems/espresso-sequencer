@@ -37,42 +37,15 @@ jobs:
           ref: ${{ github.event.repository.default_branch }}
           persist-credentials: false
 
-      - name: Build prompt
-        env:
-          REPO: ${{ github.repository }}
-          EVENT_NAME: ${{ github.event_name }}
-        run: |
-          set -euo pipefail
-          mkdir -p ./tmp
-          jq --arg event_name "$EVENT_NAME" '
-            (.issue // .pull_request) as $item
-            | {
-                event_name: $event_name,
-                number: $item.number,
-                is_pr: (.pull_request != null or .issue.pull_request != null),
-                title: $item.title,
-                body: $item.body,
-                author: (.comment // .review // $item).user.login,
-                comment_id: (if $event_name == "pull_request_review_comment" then .comment.id else null end),
-                comment_body: .comment.body,
-                path: .comment.path,
-                line: .comment.line,
-                diff_hunk: .comment.diff_hunk,
-                in_reply_to_id: .comment.in_reply_to_id,
-                reply_to: (if $event_name == "pull_request_review_comment" then (.comment.in_reply_to_id // .comment.id) else null end),
-                review_body: .review.body
-              }' "$GITHUB_EVENT_PATH" > ./tmp/claude-event.json
-          { echo "REPO: $REPO"; echo; cat .github/claude/mention.md; } > ./tmp/prompt.md
+      - uses: astral-sh/setup-uv@v10.0.1
+        with:
+          cache-dependency-glob: scripts/claude-gh
 
       - name: Claude
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GH_TOKEN: ${{ github.token }}
-          CLAUDE_TARGET: ${{ github.event.issue.number || github.event.pull_request.number }}
-          CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: "1"
-        run: |
-          scripts/claude-ci ./tmp/prompt.md --model opus --effort high --max-turns 120 \
-            --allowedTools "Bash(scripts/gh-claude:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh issue view:*)"
+        run: uv run scripts/claude-gh mention
 
   # `/code-review [low|medium|high|xhigh|max] [opus|sonnet|haiku|fable|claude-<id>]` on a PR runs
   # the built-in Claude Code review. Defaults: high, opus.
@@ -123,24 +96,14 @@ jobs:
           echo "effort=$effort" >> "$GITHUB_OUTPUT"
           echo "model=$model" >> "$GITHUB_OUTPUT"
 
+      - uses: astral-sh/setup-uv@v10.0.1
+        with:
+          cache-dependency-glob: scripts/claude-gh
+
       - name: Claude Code Review
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GH_TOKEN: ${{ github.token }}
-          CLAUDE_TARGET: ${{ github.event.issue.number }}
-          CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: "1"
           EFFORT: ${{ steps.args.outputs.effort }}
           MODEL: ${{ steps.args.outputs.model }}
-          PR_NUMBER: ${{ github.event.issue.number }}
-        run: |
-          mkdir -p ./tmp
-          echo "/code-review $EFFORT --comment $PR_NUMBER" > ./tmp/prompt.md
-          cat > ./tmp/review-system.md << 'EOF'
-          Post inline comments with
-          `scripts/gh-claude inline <pr> <path> <line> <<'EOF' ... EOF`.
-          Post replies and top-level comments with the other `scripts/gh-claude`
-          subcommands (`reply`, `comment`).
-          EOF
-          scripts/claude-ci ./tmp/prompt.md --model "$MODEL" --max-turns 120 \
-            --append-system-prompt-file ./tmp/review-system.md \
-            --allowedTools "Bash(scripts/gh-claude:*),Bash(gh pr diff:*),Bash(gh pr view:*)"
+        run: uv run scripts/claude-gh code-review --model "$MODEL" --effort "$EFFORT"
