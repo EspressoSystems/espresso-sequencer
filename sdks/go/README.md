@@ -1,6 +1,8 @@
 # Espresso Network Go SDK
 
-This package provides Go tools and interfaces for integrating chains and applications with the [Espresso Network](https://github.com/EspressoSystems/espresso-network), including submitting transactions and reading finalized blocks.
+This package provides Go tools and interfaces for integrating chains and applications with the
+[Espresso Network](https://github.com/EspressoSystems/espresso-network), including submitting transactions and reading
+finalized blocks.
 
 ## How to release
 

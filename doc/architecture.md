@@ -2,9 +2,12 @@
 
 ## Overview
 
-Espresso finalizes transaction data for the chains and applications built on it. Each chain keeps its own sequencer and execution; Espresso orders and finalizes the blocks those chains submit, makes their data available, and publishes a proof of its finalized state to a light client contract so other chains can verify it.
+Espresso finalizes transaction data for the chains and applications built on it. Each chain keeps its own sequencer and
+execution; Espresso orders and finalizes the blocks those chains submit, makes their data available, and publishes a
+proof of its finalized state to a light client contract so other chains can verify it.
 
-The walkthrough below uses the most common integration today as a concrete example: rollups that also settle their state to Ethereum. The same flow applies to any chain built on Espresso, with or without an L1.
+The walkthrough below uses the most common integration today as a concrete example: rollups that also settle their state
+to Ethereum. The same flow applies to any chain built on Espresso, with or without an L1.
 
 ![Overview](./espresso-overview.svg)
 
@@ -41,8 +44,8 @@ Below is sequence diagram to accompany the overview:
 
 This diagram below depicts a simplified view of the current architecture of the Espresso Confirmation Layer. The diagram
 includes views of an Espresso node, the Espresso Network (nodes, CDN, builders, prover, state relay service), two
-rollups (one ZK rollup "Z", one optimistic rollup "O") that use Espresso Network for finalization and some important
-L1 contracts.
+rollups (one ZK rollup "Z", one optimistic rollup "O") that use Espresso Network for finalization and some important L1
+contracts.
 
 - Glossary
   - Namespace: an identifier to distinguish rollups, akin to an Ethereum chain ID
