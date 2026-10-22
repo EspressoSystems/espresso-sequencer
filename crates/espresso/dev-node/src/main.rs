@@ -693,6 +693,7 @@ async fn async_main(migrated_envs: Vec<(&str, &str)>) -> anyhow::Result<()> {
 
     // Start the nodes
     let network = TestNetwork::new(config, Upgrade::trivial(version.protocol_version())).await;
+    tracing::info!("Espresso node API on http://0.0.0.0:{sequencer_api_port}");
 
     let relay_server_handle = spawn(async move {
         // using explicit relayer state will avoid it calling the dev-node on `/config/hotshot` for epoch info,
@@ -967,7 +968,7 @@ async fn run_dev_node_server<ApiVer: StaticVersionType + 'static>(
     let router = dev_node_router(state);
 
     let addr = format!("0.0.0.0:{port}");
-    tracing::info!("Starting dev-node API on http://{addr}");
+    tracing::info!("Starting dev-node debug API (/api/dev-info) on http://{addr}");
     let listener = tokio::net::TcpListener::bind(&addr).await.map_err(|err| {
         // If we get an "Address in use" during startup, make it a bit easier to find the cause.
         tracing::error!("Failed to start dev-node API on http://{addr} : {err}");
