@@ -7,7 +7,7 @@ use std::{collections::HashMap, sync::Arc, time::Duration};
 use ::light_client::{
     LightClient,
     client::{FallbackClient, QueryServiceClient},
-    storage::SqliteStorage,
+    storage::SqlStorage,
 };
 use async_lock::RwLock;
 use async_trait::async_trait;
@@ -17,7 +17,6 @@ use espresso_types::{
     v0::traits::SequencerPersistence,
 };
 use futures::future::BoxFuture;
-use hotshot::traits::NodeImplementation;
 use hotshot_new_protocol::storage::NewProtocolStorage;
 use hotshot_query_service::availability::VidCommonQueryData;
 use hotshot_types::{
@@ -26,16 +25,16 @@ use hotshot_types::{
     epoch_membership::EpochMembershipCoordinator,
     message::UpgradeLock,
     network::NetworkConfig,
-    traits::network::ConnectedNetwork,
+    traits::node_implementation::NodeImplementation,
     utils::StateAndDelta,
 };
 
 use crate::{
-    SequencerApiVersion, SequencerContext, consensus_handle::ConsensusHandle, context::TaskList,
-    state_signature::StateSigner,
+    SequencerContext, consensus_handle::ConsensusHandle, context::TaskList,
+    state_signature::StateSignatureMemStorage,
 };
 
-pub type NodeLightClient = LightClient<SqliteStorage, FallbackClient<QueryServiceClient>>;
+pub type NodeLightClient = LightClient<SqlStorage, FallbackClient<QueryServiceClient>>;
 
 pub type Delta = <ValidatedState as hotshot_types::traits::ValidatedState<SeqTypes>>::Delta;
 
@@ -72,7 +71,7 @@ pub trait ApiContext: Clone + Send + Sync + 'static {
     fn node_state(&self) -> NodeState;
     fn network_config(&self) -> NetworkConfig<SeqTypes>;
     fn validator_config(&self) -> Option<&ValidatorConfig<SeqTypes>>;
-    fn state_signer(&self) -> Option<Arc<RwLock<StateSigner<SequencerApiVersion>>>>;
+    fn state_signatures(&self) -> Option<Arc<RwLock<StateSignatureMemStorage>>>;
 
     /// A light client the node already runs, for the query service to fetch through.
     fn light_client(&self) -> Option<Arc<NodeLightClient>>;
@@ -160,9 +159,8 @@ where
     }
 }
 
-impl<N, P> ApiContext for SequencerContext<N, P>
+impl<P> ApiContext for SequencerContext<P>
 where
-    N: ConnectedNetwork<PubKey>,
     P: SequencerPersistence,
 {
     type Persistence = P;
@@ -187,8 +185,8 @@ where
         Some(SequencerContext::validator_config(self))
     }
 
-    fn state_signer(&self) -> Option<Arc<RwLock<StateSigner<SequencerApiVersion>>>> {
-        Some(SequencerContext::state_signer(self))
+    fn state_signatures(&self) -> Option<Arc<RwLock<StateSignatureMemStorage>>> {
+        Some(SequencerContext::state_signatures(self))
     }
 
     fn light_client(&self) -> Option<Arc<NodeLightClient>> {

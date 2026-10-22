@@ -1,4 +1,3 @@
-mod hotshot
 mod py "scripts/py.just"
 mod binary-upgrade-tests "binary-upgrade-tests/justfile"
 mod soak "crates/process-metrics/justfile"
@@ -148,13 +147,12 @@ docker-stop-rm:
 anvil *args:
     docker run -p 127.0.0.1:8545:8545 ghcr.io/foundry-rs/foundry:latest "anvil {{args}}"
 
-# hotshot-testing: tested in hotshot.yml
 # hotshot-new-protocol: tested in hotshot.yml
 # espresso-node-sqlite: no tests, enables embedded-db feature
 # slow-tests: slow and serial tests
 # espresso-dev-node: enables embedded-db
 # espresso-crypto-helper: vendored openssl leaks to workspace via feature unification
-nextest_excludes := "--exclude espresso-node-sqlite --exclude hotshot-testing --exclude hotshot-new-protocol --exclude slow-tests --exclude espresso-dev-node --exclude espresso-crypto-helper"
+nextest_excludes := "--exclude espresso-node-sqlite --exclude hotshot-new-protocol --exclude slow-tests --exclude espresso-dev-node --exclude espresso-crypto-helper"
 
 nextest *args:
     cargo nextest run --locked --workspace {{nextest_excludes}} --lib --bins --tests --verbose {{args}}
@@ -187,20 +185,18 @@ test-all:
     just nextest --features embedded-db --profile all
     just nextest --profile all
 
-# Record runs of the new-protocol tests and replay them against the Lean machine.
+# A pass means the recorded node obeyed `ProtocolHistory` and discharged what it
+# owed within `defaultDelta` (`Prompt`). See `lean/new-protocol-diff/CheckMain.lean`
+# and `crates/hotshot/new-protocol/src/trace.rs`.
 #
-# The machine is proved to satisfy `lean/new-protocol-spec`, so a divergence is
-# either the implementation departing from the specification or the trace running
-# past what the specification covers. The `replay` binary separates the two; see
-# `lean/new-protocol-diff/NewProtocolDiff/Corpus.lean` and
-# `crates/hotshot/new-protocol/src/trace.rs`.
-test-lean-diff dir="":
+# Record runs of the new-protocol tests and check each against `lean/new-protocol-spec`.
+test-lean-check dir="":
     #!/usr/bin/env bash
     set -uo pipefail
-    (cd lean/new-protocol-diff && lake build) || exit 1
-    # Given a directory, record nothing and replay what is already there.
+    (cd lean/new-protocol-diff && lake build check) || exit 1
+    # Given a directory, record nothing and check what is already there.
     if [ -n "{{dir}}" ]; then
-      lean/new-protocol-diff/.lake/build/bin/replay "{{dir}}"
+      lean/new-protocol-diff/.lake/build/bin/check "{{dir}}"
       exit $?
     fi
     # A fixed path, cleared first, so runs overwrite rather than accumulate.
@@ -208,21 +204,8 @@ test-lean-diff dir="":
     traces="$(pwd)/target/np-traces"
     rm -rf "$traces"
     echo "recording to $traces"
-    suite=0
-    NP_TRACE_DIR="$traces" cargo test -p hotshot-new-protocol --release --lib tests:: || suite=$?
-    if [ "$suite" -ne 0 ]; then
-      echo "note: the test suite failed; replaying the traces it did record" >&2
-    fi
-    replayed=0
-    lean/new-protocol-diff/.lake/build/bin/replay "$traces" || replayed=$?
-    # A corpus from a clean run is worth keeping: `just test-lean-diff $traces`
-    # replays it without paying for the suite again.
-    if [ "$suite" -ne 0 ]; then
-      rm -rf "$traces"
-    else
-      echo "traces kept in $traces"
-    fi
-    [ "$suite" -eq 0 ] && [ "$replayed" -eq 0 ]
+    NP_TRACE_DIR="$traces" cargo test -p hotshot-new-protocol --release --lib tests:: || exit $?
+    lean/new-protocol-diff/.lake/build/bin/check "$traces"
 
 test-integration: (build "test")
 	INTEGRATION_TEST_NODE_VERSION=2 cargo nextest run -p tests --nocapture --profile integration test_native_demo_basic
@@ -266,17 +249,11 @@ check-features-ci *args:
     cargo hack check --feature-powerset \
         --depth 2 \
         --exclude-all-features \
-        --exclude hotshot \
-        --exclude hotshot-builder-api \
         --exclude hotshot-contract-adapter \
         --exclude hotshot-example-types \
-        --exclude hotshot-libp2p-networking \
         --exclude hotshot-orchestrator \
         --exclude hotshot-query-service \
         --exclude hotshot-state-prover \
-        --exclude hotshot-task \
-        --exclude hotshot-task-impls \
-        --exclude hotshot-testing \
         --exclude hotshot-types \
         --exclude hotshot-utils \
         --exclude vid \
@@ -327,9 +304,9 @@ release-cut version="" source_ref="main":
 release-tag branch tag="":
     gh workflow run tag-release.yml --ref {{branch}} -f tag={{tag}}
 
-# Turn the pre-release for a tag into a release operators may deploy, and mark it latest.
-release-publish tag:
-    gh release edit {{tag}} --prerelease=false --latest
+# Preview the release edits and tracker comment of `/publish <tag> <network>` without writing to GitHub.
+release-publish-preview tag network:
+    scripts/release publish --dry-run --comment "/publish {{tag}} {{network}}"
 
 # Render the release tracker body for a version without writing to GitHub.
 release-body version:

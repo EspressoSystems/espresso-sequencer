@@ -99,6 +99,9 @@ catchup_base_timeout:
 local_catchup_timeout:
   secs: 5
   nanos: 0
+http_catchup_delay:
+  secs: 2
+  nanos: 0
 bootstrap_epoch_catchup_timeout:
   secs: 30
   nanos: 0
@@ -244,7 +247,8 @@ modules:
     max_connections: ~
     tonic_port: ~
   query:
-    peers: []
+    peers:
+      - "http://peer.example:24000/"
     light_client:
       num_stake_tables_in_memory: 100
     light_client_db:
