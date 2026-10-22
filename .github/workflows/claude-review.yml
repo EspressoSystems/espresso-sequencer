@@ -8,14 +8,45 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
 
+# run holds ANTHROPIC_API_KEY and a read token and only records actions; start and apply hold the
+# write token and never run Claude. All three use the PR checkout, so scripts/claude-gh is
+# PR-author controllable. Fine: fork PRs need approval and get read-only tokens.
 jobs:
-  review:
+  start:
     if: github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      pull-requests: write
+    outputs:
+      comment-id: ${{ steps.start.outputs.comment-id }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+          sparse-checkout: scripts/claude-gh
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@v10.0.1
+        with:
+          cache-dependency-glob: scripts/claude-gh
+
+      - name: Post status comment
+        id: start
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          id=$(uv run scripts/claude-gh start review)
+          echo "comment-id=$id" >> "$GITHUB_OUTPUT"
+
+  run:
+    needs: start
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
-      contents: write # resolveReviewThread is refused with contents: read
-      pull-requests: write
+      contents: read
+      pull-requests: read
+      issues: read
     steps:
       - uses: actions/checkout@v7
         with:
@@ -66,7 +97,48 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GH_TOKEN: ${{ github.token }}
-        # Read from PR head, so PR-author controllable (scripts/claude-gh and .github/claude/*).
-        # Fine: fork PRs need manual approval to run, and Claude only adds advisory review,
-        # never approves/merges.
-        run: uv run scripts/claude-gh review
+        run: uv run scripts/claude-gh run review
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          overwrite: true
+          name: claude-actions-review
+          path: tmp/actions.json
+          retention-days: 7
+          if-no-files-found: ignore
+
+  apply:
+    needs: [start, run]
+    if: always() && needs.start.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write # resolveReviewThread is refused with contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+          sparse-checkout: scripts/claude-gh
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@v10.0.1
+        with:
+          cache-dependency-glob: scripts/claude-gh
+
+      - uses: actions/download-artifact@v8
+        continue-on-error: true # missing when run failed before writing the record
+        with:
+          name: claude-actions-review
+          path: tmp/actions
+
+      - name: Apply actions
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STATUS_ID: ${{ needs.start.outputs.comment-id }}
+          RUN_RESULT: ${{ needs.run.result }}
+        run: |
+          uv run scripts/claude-gh apply review \
+            --status-id "$STATUS_ID" --run-result "$RUN_RESULT" \
+            --record tmp/actions/actions.json

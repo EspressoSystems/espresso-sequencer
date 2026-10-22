@@ -1,4 +1,4 @@
-"""Tests for `claude-gh`: tool policy, routing, prompts and exit codes, with fake GitHub and agent.
+"""Tests for `claude-gh`: tool recording, apply validation, status texts and exit codes, with fake GitHub and agent.
 
 No network or SDK calls. Run with:
 
@@ -37,17 +37,18 @@ _spec.loader.exec_module(cg)
 PR = cg.Target("o/r", 7, True)
 ISSUE = cg.Target("o/r", 9, False)
 SECRETS = {"ANTHROPIC_API_KEY": "sk-secret", "GH_TOKEN": "ghs_secret"}
+RUN = "http://run"
+STATUS = cg.Posted(99, False)
 
 
 @dataclass
 class FakeGitHub:
-    threads: dict[str, Any] = field(default_factory=dict)
+    threads: dict[str, dict] = field(default_factory=dict)
+    fail_on: set[str] = field(default_factory=set)
     posted: list[tuple[str, tuple]] = field(default_factory=list)
     resolved: list[str] = field(default_factory=list)
     edits: list[tuple[cg.Posted, str]] = field(default_factory=list)
-
-    def _posted(self, review: bool, url: str) -> cg.Posted:
-        return cg.Posted(len(self.posted), url, review)
+    head_fetches: int = 0
 
     async def pr_diff(self, pr: int) -> str:
         return f"diff {pr}"
@@ -58,25 +59,32 @@ class FakeGitHub:
     async def issue_view(self, number: int) -> str:
         return f"issue {number}"
 
+    async def head_sha(self, pr: int) -> str:
+        self.head_fetches += 1
+        return "fetched"
+
     async def inline_comment(
-        self, pr: int, path: str, line: int, body: str
-    ) -> cg.Posted:
-        self.posted.append(("inline", (pr, path, line, body)))
-        return self._posted(True, f"url/inline/{pr}")
+        self, pr: int, path: str, line: int, body: str, sha: str
+    ) -> None:
+        if body in self.fail_on:
+            raise RuntimeError("422 line outside the diff")
+        self.posted.append(("inline", (pr, path, line, body, sha)))
 
     async def reply(self, pr: int, comment_id: int, body: str) -> cg.Posted:
+        if body in self.fail_on:
+            raise RuntimeError("422 line outside the diff")
         self.posted.append(("reply", (pr, comment_id, body)))
-        return self._posted(True, f"url/reply/{comment_id}")
+        return cg.Posted(len(self.posted), True)
 
     async def comment(self, number: int, body: str) -> cg.Posted:
         self.posted.append(("comment", (number, body)))
-        return self._posted(False, f"url/comment/{number}")
+        return cg.Posted(len(self.posted), False)
 
     async def edit_comment(self, comment: cg.Posted, body: str) -> None:
         self.edits.append((comment, body))
 
-    async def thread(self, thread_id: str) -> Any:
-        return self.threads[thread_id]
+    async def thread(self, thread_id: str) -> cg.Thread:
+        return cg.parse_thread(self.threads[thread_id])
 
     async def resolve_thread(self, thread_id: str) -> None:
         self.resolved.append(thread_id)
@@ -119,6 +127,11 @@ def tools_by_name(tools: list[SdkMcpTool]) -> dict[str, SdkMcpTool]:
     return {t.name: t for t in tools}
 
 
+def make(gh: FakeGitHub, target: cg.Target = PR, name: str = "review"):
+    rec = cg.Record(name, "opus")
+    return cg.make_tools(gh, target, SECRETS, rec), rec
+
+
 def call(tools: list[SdkMcpTool], name: str, args: dict) -> dict:
     return asyncio.run(tools_by_name(tools)[name].handler(args))
 
@@ -127,8 +140,13 @@ def text(out: dict) -> str:
     return out["content"][0]["text"]
 
 
-def thread(author: str = "claude", repo: str = "o/r", number: int = 7) -> Any:
-    return cg.Thread(author, repo, number)
+def thread(author: str = "claude", repo: str = "o/r", number: int = 7) -> dict:
+    return {
+        "node": {
+            "pullRequest": {"number": number, "repository": {"nameWithOwner": repo}},
+            "comments": {"nodes": [{"author": {"login": author}}]},
+        }
+    }
 
 
 def job(tools: list[SdkMcpTool] | None = None, **kw: Any) -> Any:
@@ -141,12 +159,13 @@ def job(tools: list[SdkMcpTool] | None = None, **kw: Any) -> Any:
         "tools": tools or [],
         "builtin": ["Read", "Grep", "Glob"],
         "settings": ["user"],
+        "record": cg.Record("review", "opus"),
     }
     return cg.Job(**{**fields, **kw})
 
 
 def test_options_no_bash():
-    t = cg.make_tools(FakeGitHub(), PR, SECRETS)
+    t, _ = make(FakeGitHub())
     o = cg.options(job(t), {"type": "sdk", "name": "gh", "instance": None})
     assert o.tools == ["Read", "Grep", "Glob"]
     assert "Bash" not in o.allowed_tools
@@ -175,24 +194,48 @@ def test_options_model_effort_and_append():
     }
 
 
-def test_tools_have_no_target_arg_and_hit_bound_target():
+def test_write_tools_record_actions_and_post_nothing():
     gh = FakeGitHub()
-    t = cg.make_tools(gh, PR, SECRETS)
+    t, rec = make(gh)
+    calls = [
+        ("inline_comment", {"path": "a.rs", "line": 3, "body": "i"}),
+        ("reply", {"comment_id": 5, "body": "r"}),
+        ("resolve_thread", {"thread_id": "T_1"}),
+        ("comment", {"body": "s"}),
+    ]
+    for name, args in calls:
+        assert text(call(t, name, args)) == "recorded"
+    assert gh.posted == [] and gh.resolved == []
+    assert cg.to_json(rec) == {
+        "job": "review",
+        "model": "opus",
+        "summary": "s",
+        "actions": [
+            {"kind": "inline_comment", "path": "a.rs", "line": 3, "body": "i"},
+            {"kind": "reply", "comment_id": 5, "body": "r"},
+            {"kind": "resolve_thread", "thread_id": "T_1"},
+        ],
+        "footer": None,
+        "error": None,
+    }
+
+
+def test_summary_last_comment_wins():
+    t, rec = make(FakeGitHub())
+    call(t, "comment", {"body": "first"})
+    call(t, "comment", {"body": "last"})
+    assert rec.summary == "last" and rec.actions == []
+
+
+def test_tools_have_no_target_arg():
+    t, _ = make(FakeGitHub())
     for tl in t:
         assert not {"pr", "number", "repo"} & set(tl.input_schema)
-    call(t, "inline_comment", {"path": "a.rs", "line": 3, "body": "x"})
-    call(t, "reply", {"comment_id": 5, "body": "x"})
-    call(t, "comment", {"body": "x"})
-    assert [(k, v[0]) for k, v in gh.posted] == [
-        ("inline", 7),
-        ("reply", 7),
-        ("comment", 7),
-    ]
 
 
 def test_pr_tools_vs_issue_tools():
-    pr = tools_by_name(cg.make_tools(FakeGitHub(), PR, SECRETS))
-    issue = tools_by_name(cg.make_tools(FakeGitHub(), ISSUE, SECRETS))
+    pr = tools_by_name(make(FakeGitHub())[0])
+    issue = tools_by_name(make(FakeGitHub(), ISSUE)[0])
     assert {"pr_diff", "pr_view"} <= set(pr) and "issue_view" not in pr
     assert "issue_view" in issue and "pr_diff" not in issue
 
@@ -207,21 +250,14 @@ def test_pr_tools_vs_issue_tools():
 )
 def test_job_writes_pinned(name, writes):
     assert cg.JOB_WRITES[name] == writes
-    names = set(
-        tools_by_name(cg.select_tools(cg.make_tools(FakeGitHub(), PR, SECRETS), name))
-    )
+    names = set(tools_by_name(cg.select_tools(make(FakeGitHub())[0], name)))
     assert names == {"pr_diff", "pr_view"} | writes
 
 
 def test_reads_return_text():
-    t = cg.make_tools(FakeGitHub(), PR, SECRETS)
+    t, _ = make(FakeGitHub())
     assert text(call(t, "pr_diff", {})) == "diff 7"
     assert text(call(t, "pr_view", {})) == "pr 7"
-
-
-def test_write_returns_url():
-    t = cg.make_tools(FakeGitHub(), PR, SECRETS)
-    assert text(call(t, "comment", {"body": "hi"})) == "url/comment/7"
 
 
 @pytest.mark.parametrize("secret", ["sk-secret", "ghs_secret"])
@@ -234,59 +270,31 @@ def test_write_returns_url():
     ],
 )
 def test_secret_body_refused(name, args, secret):
-    gh = FakeGitHub()
-    t = cg.make_tools(gh, PR, SECRETS)
+    t, rec = make(FakeGitHub())
     with pytest.raises(ValueError, match="refusing"):
         call(t, name, {**args, "body": f"leak {secret} here"})
-    assert gh.posted == []
+    assert rec.actions == [] and rec.summary is None
 
 
 def test_empty_secret_never_blocks():
     cg.check_body("anything", {"EMPTY": ""})
-    gh = FakeGitHub()
-    t = cg.make_tools(gh, PR, SECRETS)
+    t, _ = make(FakeGitHub())
     assert "is_error" not in call(t, "comment", {"body": "anything"})
 
 
-@pytest.mark.parametrize("author", ["claude", "github-actions"])
-def test_resolve_own_thread(author):
-    gh = FakeGitHub(threads={"T_1": thread(author)})
-    t = cg.make_tools(gh, PR, SECRETS)
-    assert "is_error" not in call(t, "resolve_thread", {"thread_id": "T_1"})
-    assert gh.resolved == ["T_1"]
-
-
-def test_resolve_others_thread_refused():
-    gh = FakeGitHub(threads={"T_1": thread("alice")})
-    t = cg.make_tools(gh, PR, SECRETS)
-    with pytest.raises(ValueError, match="alice"):
-        call(t, "resolve_thread", {"thread_id": "T_1"})
-    assert gh.resolved == []
-
-
-@pytest.mark.parametrize("other", [thread(number=8), thread(repo="o/x")])
-def test_resolve_thread_of_other_pr_refused(other):
-    gh = FakeGitHub(threads={"T_1": other})
-    t = cg.make_tools(gh, PR, SECRETS)
-    with pytest.raises(ValueError, match="belongs to"):
-        call(t, "resolve_thread", {"thread_id": "T_1"})
-    assert gh.resolved == []
-
-
 def test_resolve_bad_thread_id_refused():
-    gh = FakeGitHub()
-    t = cg.make_tools(gh, PR, SECRETS)
+    t, rec = make(FakeGitHub())
     with pytest.raises(ValueError, match="invalid thread_id"):
         call(t, "resolve_thread", {"thread_id": 'x") { y } #'})
+    assert rec.actions == []
 
 
 @pytest.mark.parametrize("line", [0, -1])
 def test_inline_nonpositive_line_refused(line):
-    gh = FakeGitHub()
-    t = cg.make_tools(gh, PR, SECRETS)
+    t, rec = make(FakeGitHub())
     with pytest.raises(ValueError, match="positive"):
         call(t, "inline_comment", {"path": "a", "line": line, "body": "x"})
-    assert gh.posted == []
+    assert rec.actions == []
 
 
 def comment_event(**comment: Any) -> dict:
@@ -307,6 +315,19 @@ def comment_event(**comment: Any) -> dict:
     }
 
 
+ISSUE_COMMENT_EVENT = {
+    "repository": {"full_name": "o/r"},
+    "issue": {
+        "number": 9,
+        "title": "T",
+        "body": None,
+        "user": {"login": "bob"},
+        "pull_request": {},
+    },
+    "comment": {"id": 1, "body": "@claude", "user": {"login": "amy"}},
+}
+
+
 def test_mention_review_comment_replies_to_thread_root():
     m = cg.mention_from_event(
         "pull_request_review_comment", comment_event(in_reply_to_id=4)
@@ -316,36 +337,11 @@ def test_mention_review_comment_replies_to_thread_root():
     assert m.reply_to == 11
 
 
-def test_mention_review_comment_routes_through_reply():
-    gh = FakeGitHub()
-    m = cg.mention_from_event(
-        "pull_request_review_comment", comment_event(in_reply_to_id=4)
-    )
-    t = cg.make_tools(gh, m.target, SECRETS, m.reply_to)
-    call(t, "comment", {"body": "answer"})
-    assert gh.posted == [("reply", (7, 4, "answer"))]
-
-
 def test_mention_issue_comment_is_top_level():
-    event = {
-        "repository": {"full_name": "o/r"},
-        "issue": {
-            "number": 9,
-            "title": "T",
-            "body": None,
-            "user": {"login": "bob"},
-            "pull_request": {},
-        },
-        "comment": {"id": 1, "body": "@claude", "user": {"login": "amy"}},
-    }
-    m = cg.mention_from_event("issue_comment", event)
+    m = cg.mention_from_event("issue_comment", ISSUE_COMMENT_EVENT)
     assert m.reply_to is None and m.target == cg.Target("o/r", 9, True)
     assert m.context["author"] == "amy" and "body" not in m.context
     assert "number" not in m.context
-    gh = FakeGitHub()
-    t = cg.make_tools(gh, m.target, SECRETS, m.reply_to)
-    call(t, "comment", {"body": "answer"})
-    assert gh.posted == [("comment", (9, "answer"))]
 
 
 def test_mention_issue_event_is_not_pr():
@@ -424,90 +420,127 @@ def test_tool_line_has_no_bodies_or_newlines():
     assert "\n" not in cg.tool_line("Grep", {"pattern": "a\nb" * 100})
 
 
-def test_run_ok_logs_final_line(caplog):
+def run_job(tmp_path: Path, calls: list, result: ResultMessage | None, runner=None):
+    t, rec = make(FakeGitHub())
+    j = job(t, record=rec)
+    path = tmp_path / "tmp" / "actions.json"
+    runner = runner or FakeRunner(calls, result)
+    return j, path, runner
+
+
+def test_run_ok_logs_final_line_and_writes_record(caplog, tmp_path):
     caplog.set_level(logging.INFO, logger="claude-gh")
-    runner = FakeRunner(
-        [("comment", {"body": "hi"})], make_result(permission_denials=[{"t": 1}])
+    j, path, runner = run_job(
+        tmp_path,
+        [("comment", {"body": "hi"})],
+        make_result(permission_denials=[{"t": 1}]),
     )
-    gh = FakeGitHub()
-    t = cg.make_tools(gh, PR, SECRETS)
-    assert asyncio.run(cg.run(job(t), runner, gh)) == 0
+    assert asyncio.run(cg.run(j, runner, path)) == 0
     messages = [r.getMessage() for r in caplog.records]
     assert messages[0] == "tool comment body=<2 chars>"
     assert messages[1] == "done"
-    assert messages[-1] == 'total_cost_usd=0.5 turns=3 permission_denials=[{"t": 1}]'
+    assert messages[-1] == (
+        'total_cost_usd=0.5 turns=3 duration_s=2 permission_denials=[{"t": 1}]'
+    )
     assert caplog.records[-1].levelno == logging.INFO
+    assert json.loads(path.read_text()) == {
+        "job": "review",
+        "model": "opus",
+        "summary": "hi",
+        "actions": [],
+        "footer": cg.footer(make_result(), "opus"),
+        "error": None,
+    }
+
+
+def test_run_error_records_subtype_and_partial_actions(tmp_path):
+    j, path, runner = run_job(
+        tmp_path,
+        [("reply", {"comment_id": 1, "body": "r"})],
+        make_result(is_error=True, subtype="error_max_turns"),
+    )
+    assert asyncio.run(cg.run(j, runner, path)) == 1
+    record = cg.parse_record(json.loads(path.read_text()), "review")
+    assert record.actions == [cg.Reply(1, "r")]
+    assert record.error == "error_max_turns"
+
+
+def test_run_missing_result_fails_and_records(tmp_path):
+    j, path, runner = run_job(tmp_path, [("comment", {"body": "s"})], None)
+    assert asyncio.run(cg.run(j, runner, path)) == 1
+    record = cg.parse_record(json.loads(path.read_text()), "review")
+    assert record.footer is None and record.summary == "s"
+
+
+def test_run_raising_runner_still_writes_record(tmp_path):
+    class Boom:
+        async def __call__(self, job: Any) -> AsyncIterator[Message]:
+            raise RuntimeError("boom")
+            yield
+
+    j, path, _ = run_job(tmp_path, [], None)
+    j.record.summary = "partial"
+    with pytest.raises(RuntimeError, match="boom"):
+        asyncio.run(cg.run(j, Boom(), path))
+    assert cg.parse_record(json.loads(path.read_text()), "review").summary == "partial"
 
 
 def test_run_is_error_fails():
-    lines, code = cg.summary(make_result(is_error=True, subtype="error_max_turns"))
+    lines, code = cg.result_lines(make_result(is_error=True, subtype="error_max_turns"))
     assert code == 1
     assert "subtype=error_max_turns" in "\n".join(lines)
     assert lines[-1].startswith("total_cost_usd=")
 
 
-def test_run_missing_result_fails():
-    assert asyncio.run(cg.run(job(), FakeRunner([], None), FakeGitHub())) == 1
-
-
 def test_cost_none_prints():
-    lines, code = cg.summary(make_result(total_cost_usd=None))
+    lines, code = cg.result_lines(make_result(total_cost_usd=None))
     assert (
-        code == 0 and lines[-1] == "total_cost_usd=None turns=3 permission_denials=[]"
+        code == 0
+        and lines[-1]
+        == "total_cost_usd=None turns=3 duration_s=2 permission_denials=[]"
     )
 
 
 def test_run_appends_step_summary(tmp_path):
     out = tmp_path / "summary.md"
-    asyncio.run(
-        cg.run(job(name="mention"), FakeRunner([], make_result()), FakeGitHub(), out)
+    j, path, runner = run_job(tmp_path, [], make_result())
+    asyncio.run(cg.run(j, runner, path, out))
+    assert out.read_text() == (
+        "- claude-gh review: total_cost_usd=0.5 turns=3 duration_s=2 "
+        "permission_denials=[]\n"
     )
-    assert out.read_text() == "- claude-gh mention: cost 0.5 USD, 3 turns, 2 s\n"
 
 
-def test_dry_run_posts_nothing(caplog):
-    caplog.set_level(logging.INFO, logger="claude-gh")
-    inner = FakeGitHub(threads={"T_1": thread()})
-    dry = cg.DryRun(inner)
-    calls = [
-        ("pr_diff", {}),
-        ("inline_comment", {"path": "a", "line": 2, "body": "one"}),
-        ("comment", {"body": "two"}),
-        ("resolve_thread", {"thread_id": "T_1"}),
-    ]
-    runner = FakeRunner(calls, make_result())
-    assert asyncio.run(cg.run(job(cg.make_tools(dry, PR, SECRETS)), runner, dry)) == 0
-    assert inner.posted == [] and inner.resolved == []
-    assert [k for k, _ in dry.posted] == ["inline", "comment", "resolve"]
-    assert runner.outputs[0]["content"][0]["text"] == "diff 7"
-    assert "would post comment 7: 'two'" in caplog.messages
-
-
-def test_parse_args_effort_choices():
-    assert (
-        cg.parse_args(["code-review", "--model", "m", "--effort", "max"]).effort
-        == "max"
-    )
+def test_parse_args():
+    args = cg.parse_args(["run", "code-review", "--model", "m", "--effort", "max"])
+    assert (args.job, args.model, args.effort) == ("code-review", "m", "max")
+    args = cg.parse_args(["run", "review"])
+    assert (args.model, args.effort) == ("opus", "high")
     with pytest.raises(SystemExit):
-        cg.parse_args(["code-review", "--model", "m", "--effort", "extreme"])
-
-
-def test_footer_format():
-    j = job()
-    r = make_result(total_cost_usd=0.589, num_turns=27, duration_ms=133_000)
-    assert cg.footer(j, r) == "<sub>Cost $0.59 · 27 turns · 2m 13s · opus</sub>"
-    r = make_result(total_cost_usd=None, duration_ms=45_000)
-    assert cg.footer(j, r) == "<sub>Cost n/a · 3 turns · 45s · opus</sub>"
+        cg.parse_args(["run", "review", "--effort", "extreme"])
+    args = cg.parse_args(
+        [
+            "apply",
+            "mention",
+            "--status-id",
+            "5",
+            "--run-result",
+            "failure",
+            "--record",
+            "r",
+        ]
+    )
+    assert args.status_id == 5 and args.record == Path("r")
 
 
 def test_parse_thread():
-    data = {
-        "node": {
-            "pullRequest": {"number": 7, "repository": {"nameWithOwner": "o/r"}},
-            "comments": {"nodes": [{"author": {"login": "claude"}}]},
-        }
-    }
-    assert cg.parse_thread(data) == cg.Thread("claude", "o/r", 7)
+    assert cg.parse_thread(thread()) == cg.Thread("claude", "o/r", 7)
+
+
+@pytest.mark.parametrize("data", [{"node": {}}, {"node": None}, {"node": {"id": "x"}}])
+def test_parse_thread_rejects_wrong_node(data):
+    with pytest.raises(ValueError, match="not a review thread"):
+        cg.parse_thread(data)
 
 
 def test_view_json_is_compact_and_complete():
@@ -525,137 +558,277 @@ def test_view_json_is_compact_and_complete():
     }
 
 
-@pytest.mark.parametrize("is_error", [False, True])
-def test_last_comment_gets_footer(is_error):
-    gh = FakeGitHub()
-    posted: list = []
-    t = cg.make_tools(gh, PR, SECRETS, posted=posted)
-    calls = [
-        ("comment", {"body": "first"}),
-        ("inline_comment", {"path": "a", "line": 1, "body": "inline"}),
-        ("comment", {"body": "last"}),
+def test_view_json_deleted_user_is_ghost():
+    item = SimpleNamespace(title="T", body="B", user=None, state="open")
+    comment = SimpleNamespace(user=None, body="hi", created_at="2026-01-01")
+    out = json.loads(cg.view_json(item, [comment]))
+    assert out["author"] == "ghost" and out["comments"][0]["author"] == "ghost"
+
+
+# Records and apply
+
+FOOT = cg.footer(make_result(), "opus")
+
+
+def record(
+    actions: list | None = None,
+    summary: str | None = "sum",
+    job_name: str = "review",
+    footer: str | None = FOOT,
+    error: str | None = None,
+) -> cg.Record:
+    return cg.Record(job_name, "opus", actions or [], summary, footer, error)
+
+
+def do_apply(
+    gh: FakeGitHub,
+    rec: cg.Record | str | None,
+    job_name: str = "review",
+    run_result: str = "success",
+    tgt: cg.Target = PR,
+    status: cg.Posted = STATUS,
+    head_sha: str | None = "head",
+) -> int:
+    raw = json.dumps(cg.to_json(rec)) if isinstance(rec, cg.Record) else rec
+    return asyncio.run(
+        cg.apply(gh, job_name, tgt, raw, status, RUN, run_result, head_sha)
+    )
+
+
+ALL = [
+    cg.InlineComment("a.rs", 3, "i"),
+    cg.Reply(5, "r"),
+    cg.Resolve("T_1"),
+]
+
+
+def test_record_json_roundtrip():
+    rec = record(ALL, error="error_max_turns")
+    assert cg.parse_record(cg.to_json(rec), "review") == rec
+    rec = record(summary=None, footer=None)
+    assert cg.parse_record(cg.to_json(rec), "review") == rec
+
+
+def test_apply_posts_all_in_order_and_edits_status():
+    gh = FakeGitHub(threads={"T_1": thread()})
+    assert do_apply(gh, record(ALL)) == 0
+    assert gh.posted == [
+        ("inline", (7, "a.rs", 3, "i", "head")),
+        ("reply", (7, 5, "r")),
     ]
-    runner = FakeRunner(calls, make_result(is_error=is_error))
-    asyncio.run(cg.run(job(t, posted=posted), runner, gh))
-    [(comment, body)] = gh.edits
-    assert comment == cg.Posted(3, "url/comment/7", False)
-    assert body == f"last\n\n{cg.footer(job(), make_result(is_error=is_error))}"
+    assert gh.resolved == ["T_1"]
+    assert gh.edits == [(STATUS, f"sum\n\n{FOOT}")]
+    assert gh.head_fetches == 0
 
 
-def test_thread_reply_edit_keeps_review_kind():
+def test_apply_fetches_head_once_without_event_sha():
     gh = FakeGitHub()
-    posted: list = []
-    t = cg.make_tools(gh, PR, SECRETS, reply_to=4, posted=posted)
-    runner = FakeRunner([("comment", {"body": "answer"})], make_result())
-    asyncio.run(cg.run(job(t, posted=posted), runner, gh))
-    assert gh.edits[0][0].review is True
+    actions = [cg.InlineComment("a.rs", 1, "x"), cg.InlineComment("a.rs", 2, "y")]
+    assert do_apply(gh, record(actions), head_sha=None) == 0
+    assert gh.head_fetches == 1
+    assert [p[1][4] for p in gh.posted] == ["fetched", "fetched"]
+    do_apply(gh, record([cg.Reply(1, "r")]), head_sha=None)
+    assert gh.head_fetches == 1
 
 
-def test_no_footer_without_comment_or_result():
+@pytest.mark.parametrize("author", ["claude", "github-actions"])
+def test_resolve_own_thread(author):
+    gh = FakeGitHub(threads={"T_1": thread(author)})
+    assert do_apply(gh, record([cg.Resolve("T_1")])) == 0
+    assert gh.resolved == ["T_1"]
+
+
+def test_apply_without_summary_says_so():
     gh = FakeGitHub()
-    asyncio.run(cg.run(job(), FakeRunner([], make_result()), gh))
-    posted: list = []
-    t = cg.make_tools(gh, PR, SECRETS, posted=posted)
-    runner = FakeRunner([("comment", {"body": "x"})], None)
-    asyncio.run(cg.run(job(t, posted=posted), runner, gh))
-    assert gh.edits == []
+    do_apply(gh, record(summary=None))
+    assert gh.edits == [(STATUS, f"Review finished without a summary\n\n{FOOT}")]
 
 
-def test_dry_run_prints_edit_instead_of_writing(caplog):
-    caplog.set_level(logging.INFO, logger="claude-gh")
-    inner = FakeGitHub()
-    dry = cg.DryRun(inner)
-    posted: list = []
-    t = cg.make_tools(dry, PR, SECRETS, posted=posted)
-    runner = FakeRunner([("comment", {"body": "x"})], make_result())
-    asyncio.run(cg.run(job(t, posted=posted), runner, dry))
-    assert inner.edits == [] and len(dry.edits) == 1
-    assert dry.edits[0][1].startswith("x\n\n<sub>Cost $0.50")
-    assert any(m.startswith("would edit comment") for m in caplog.messages)
-
-
-RUN = "http://run"
-
-
-def review_job(gh: FakeGitHub, calls: list, result: ResultMessage | None, runner=None):
-    status = asyncio.run(gh.comment(7, cg.reviewing_text("abcdef123456", RUN)))
-    posted: list = []
-    t = cg.make_tools(gh, PR, SECRETS, posted=posted, status=status)
-    j = job(t, posted=posted, status=status, run_url=RUN)
-    return j, status, runner or FakeRunner(calls, result)
-
-
-def test_status_text_builders():
-    assert (
-        cg.reviewing_text("abcdef123456", RUN) == "Reviewing abcdef1… [run](http://run)"
-    )
-    j = job(run_url=RUN)
-    foot = cg.footer(j, make_result())
-    assert cg.status_body(j, "sum", make_result()) == f"sum\n\n{foot}"
-    assert cg.status_body(j, None, make_result()) == (
-        f"Review finished without a summary\n\n{foot}"
-    )
-    err = make_result(is_error=True, subtype="error_max_turns")
-    assert cg.status_body(j, "sum", err) == (
-        f"sum\n\nReview failed: error_max_turns. [run](http://run)\n\n"
-        f"{cg.footer(j, err)}"
-    )
-    assert (
-        cg.status_body(j, None, None) == "Review failed: no result. [run](http://run)"
-    )
-
-
-def test_review_summary_replaces_status_with_footer():
+@pytest.mark.parametrize(
+    "bad",
+    [
+        "{",
+        "[]",
+        json.dumps({"job": "review"}),
+        json.dumps({**cg.to_json(record()), "extra": 1}),
+        json.dumps({**cg.to_json(record()), "actions": [{"kind": "comment"}]}),
+        json.dumps({**cg.to_json(record()), "actions": [{"kind": "reply", "x": 1}]}),
+        json.dumps({**cg.to_json(record()), "actions": [{"comment_id": 1}]}),
+    ],
+)
+def test_unusable_record_refused_whole(bad):
     gh = FakeGitHub()
-    j, status, runner = review_job(
-        gh,
-        [("comment", {"body": "first"}), ("comment", {"body": "last"})],
-        make_result(),
-    )
-    asyncio.run(cg.run(j, runner, gh))
-    assert [k for k, _ in gh.posted] == ["comment"]
-    assert [(c, b) for c, b in gh.edits] == [
-        (status, "first"),
-        (status, "last"),
-        (status, f"last\n\n{cg.footer(j, make_result())}"),
+    with pytest.raises((ValueError, TypeError, KeyError)):
+        do_apply(gh, bad)
+    assert gh.posted == []
+    assert gh.edits == [(STATUS, "Review failed: invalid actions. [run](http://run)")]
+
+
+def test_job_mismatch_refused_whole():
+    gh = FakeGitHub()
+    with pytest.raises(ValueError, match="expected 'review'"):
+        do_apply(gh, record(job_name="code-review"), job_name="review")
+    assert gh.posted == [] and "failed" in gh.edits[-1][1]
+
+
+@pytest.mark.parametrize(
+    "name,action,line",
+    [
+        ("code-review", cg.Resolve("T_1"), "resolve_thread T_1: resolve_thread not"),
+        ("mention", cg.Reply(1, "x"), "reply 1: reply not allowed in mention"),
+    ],
+)
+def test_kind_not_allowed_is_skipped(name, action, line):
+    gh = FakeGitHub(threads={"T_1": thread()})
+    assert do_apply(gh, record([action], job_name=name), job_name=name) == 1
+    assert gh.posted == [] and gh.resolved == []
+    assert f"**Not applied**\n- {line}" in gh.edits[-1][1]
+
+
+@pytest.mark.parametrize(
+    "other,match",
+    [
+        (thread("alice"), "alice"),
+        (thread(number=8), "belongs to"),
+        (thread(repo="o/x"), "belongs to"),
+        ({"node": {}}, "not a review thread"),
+    ],
+)
+def test_bad_thread_is_skipped(other, match):
+    gh = FakeGitHub(threads={"T_1": other})
+    assert do_apply(gh, record([cg.Resolve("T_1")])) == 1
+    assert gh.resolved == []
+    assert match in gh.edits[-1][1] and "**Not applied**" in gh.edits[-1][1]
+
+
+@pytest.mark.parametrize(
+    "action",
+    [
+        cg.InlineComment("a.rs", 0, "x"),
+        cg.Reply(0, "x"),
+        cg.Resolve('x") { y } #'),
+    ],
+)
+def test_invalid_action_is_skipped(action):
+    gh = FakeGitHub()
+    assert do_apply(gh, record([action])) == 1
+    assert gh.posted == [] and gh.resolved == []
+
+
+def test_github_error_skips_only_that_action():
+    gh = FakeGitHub(fail_on={"bad"})
+    actions = [
+        cg.Reply(1, "first"),
+        cg.InlineComment("a.rs", 9, "bad"),
+        cg.Reply(2, "third"),
     ]
-
-
-def test_review_without_summary():
-    gh = FakeGitHub()
-    j, status, runner = review_job(gh, [], make_result())
-    asyncio.run(cg.run(j, runner, gh))
+    assert do_apply(gh, record(actions)) == 1
+    assert gh.posted == [("reply", (7, 1, "first")), ("reply", (7, 2, "third"))]
     assert gh.edits == [
-        (status, f"Review finished without a summary\n\n{cg.footer(j, make_result())}")
+        (
+            STATUS,
+            "sum\n\n**Not applied**\n"
+            + "- inline_comment a.rs:9: 422 line outside the diff"
+            + f"\n\n{FOOT}",
+        )
     ]
 
 
-@pytest.mark.parametrize("result", [make_result(is_error=True, subtype="boom"), None])
-def test_review_failure_keeps_summary(result):
+@pytest.mark.parametrize("outcome", ["failure", "cancelled"])
+def test_failed_run_posts_partial_record(outcome):
     gh = FakeGitHub()
-    j, status, runner = review_job(gh, [("comment", {"body": "sum"})], result)
-    asyncio.run(cg.run(j, runner, gh))
-    assert gh.edits[-1] == (status, cg.status_body(j, "sum", result))
-    assert "Review failed: " in gh.edits[-1][1]
+    rec = record([cg.Reply(5, "r")], footer=None)
+    assert do_apply(gh, rec, run_result=outcome) == 1
+    assert gh.posted == [("reply", (7, 5, "r"))]
+    assert gh.edits == [
+        (STATUS, f"sum\n\nReview incomplete: {outcome}. [run](http://run)")
+    ]
 
 
-def test_review_raising_runner_updates_status_then_raises():
-    class Boom:
-        async def __call__(self, job: Any) -> AsyncIterator[Message]:
-            raise RuntimeError("boom")
-            yield
-
+def test_error_subtype_is_the_incomplete_reason():
     gh = FakeGitHub()
-    j, status, runner = review_job(gh, [], None, Boom())
-    with pytest.raises(RuntimeError, match="boom"):
-        asyncio.run(cg.run(j, runner, gh))
-    assert gh.edits == [(status, "Review failed: no result. [run](http://run)")]
+    rec = record([cg.Reply(5, "r")], error="error_max_turns")
+    assert do_apply(gh, rec, run_result="failure") == 1
+    assert gh.posted == [("reply", (7, 5, "r"))]
+    assert gh.edits == [
+        (
+            STATUS,
+            f"sum\n\nReview incomplete: error_max_turns. [run](http://run)\n\n{FOOT}",
+        )
+    ]
 
 
-def test_review_dry_run_status_goes_through_dry_run():
-    inner = FakeGitHub()
-    dry = cg.DryRun(inner)
-    j, _, runner = review_job(dry, [("comment", {"body": "sum"})], make_result())
-    asyncio.run(cg.run(j, runner, dry))
-    assert inner.posted == [] and inner.edits == []
-    assert len(dry.posted) == 1 and len(dry.edits) == 2
+def test_missing_record_marks_status_failed():
+    gh = FakeGitHub()
+    assert do_apply(gh, None, run_result="cancelled") == 1
+    assert gh.edits == [(STATUS, "Review failed: cancelled. [run](http://run)")]
+    assert do_apply(gh, None) == 1
+    assert gh.edits[-1][1] == "Review failed: no actions file. [run](http://run)"
+    assert gh.posted == []
+
+
+def test_mention_status_uses_answer_wording():
+    gh = FakeGitHub()
+    status = cg.Posted(5, True)
+    rec = record(job_name="mention", summary="answer")
+    assert do_apply(gh, rec, "mention", tgt=ISSUE, status=status) == 0
+    assert gh.edits == [(status, f"answer\n\n{FOOT}")]
+    do_apply(gh, None, "mention")
+    assert gh.edits[-1][1].startswith("Answer failed: no actions file")
+    do_apply(gh, record(None, None, "mention"), "mention", run_result="failure")
+    assert "Answer incomplete: failure" in gh.edits[-1][1]
+    do_apply(gh, record(None, None, "mention"), "mention")
+    assert "Answer finished without a summary" in gh.edits[-1][1]
+
+
+def test_start_in_review_thread_replies_to_root():
+    gh = FakeGitHub()
+    posted = asyncio.run(
+        cg.start(
+            gh,
+            "mention",
+            "pull_request_review_comment",
+            comment_event(in_reply_to_id=4),
+            RUN,
+        )
+    )
+    assert gh.posted == [("reply", (7, 4, f"Working on it… [run]({RUN})"))]
+    assert posted.review is True
+
+
+@pytest.mark.parametrize(
+    "name,event", [("issue_comment", ISSUE_COMMENT_EVENT), ("issues", comment_event())]
+)
+def test_start_top_level_comments(name, event):
+    gh = FakeGitHub()
+    posted = asyncio.run(cg.start(gh, "mention", name, event, RUN))
+    assert [k for k, _ in gh.posted] == ["comment"]
+    assert posted.review is False
+
+
+def test_start_review_names_head_and_code_review_is_generic():
+    event = {
+        "repository": {"full_name": "o/r"},
+        "pull_request": {"number": 7, "head": {"sha": "abcdef123456"}},
+    }
+    gh = FakeGitHub()
+    asyncio.run(cg.start(gh, "review", "pull_request", event, RUN))
+    asyncio.run(cg.start(gh, "code-review", "pull_request", event, RUN))
+    assert gh.posted == [
+        ("comment", (7, "Reviewing abcdef1… [run](http://run)")),
+        ("comment", (7, "Working on it… [run](http://run)")),
+    ]
+
+
+def test_start_prints_only_the_comment_id(capsys):
+    event = ISSUE_COMMENT_EVENT
+    gh = FakeGitHub()
+    assert asyncio.run(cg.print_start(gh, "mention", "issue_comment", event, RUN)) == 0
+    assert capsys.readouterr().out == "1\n"
+
+
+def test_footer_formats_cost_and_duration():
+    r = make_result(total_cost_usd=0.589, num_turns=27, duration_ms=133_000)
+    assert cg.footer(r, "opus") == "<sub>Cost $0.59 · 27 turns · 2m 13s · opus</sub>"
+    r = make_result(total_cost_usd=None, duration_ms=45_000)
+    assert cg.footer(r, "opus") == "<sub>Cost n/a · 3 turns · 45s · opus</sub>"

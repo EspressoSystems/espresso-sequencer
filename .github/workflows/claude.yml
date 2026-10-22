@@ -11,7 +11,7 @@ on:
     types: [opened]
 
 jobs:
-  claude:
+  mention-start:
     if: |
       (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude') &&
         contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association)) ||
@@ -21,6 +21,35 @@ jobs:
         contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.review.author_association)) ||
       (github.event_name == 'issues' && (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude')) &&
         contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.issue.author_association))
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      pull-requests: write
+      issues: write
+    outputs:
+      comment-id: ${{ steps.start.outputs.comment-id }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+          ref: ${{ github.event.repository.default_branch }}
+          sparse-checkout: scripts/claude-gh
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@v10.0.1
+        with:
+          cache-dependency-glob: scripts/claude-gh
+
+      - name: Post status comment
+        id: start
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          id=$(uv run scripts/claude-gh start mention)
+          echo "comment-id=$id" >> "$GITHUB_OUTPUT"
+
+  mention:
+    needs: mention-start
     concurrency:
       group: claude-${{ github.event.issue.number || github.event.pull_request.number || github.run_id }}
       cancel-in-progress: false
@@ -28,8 +57,8 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: read
-      pull-requests: write
-      issues: write
+      pull-requests: read
+      issues: read
     steps:
       - uses: actions/checkout@v7
         with:
@@ -45,16 +74,89 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GH_TOKEN: ${{ github.token }}
-        run: uv run scripts/claude-gh mention
+        run: uv run scripts/claude-gh run mention
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          overwrite: true
+          name: claude-actions-mention
+          path: tmp/actions.json
+          retention-days: 7
+          if-no-files-found: ignore
+
+  mention-apply:
+    needs: [mention-start, mention]
+    if: always() && needs.mention-start.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pull-requests: write
+      issues: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+          ref: ${{ github.event.repository.default_branch }}
+          sparse-checkout: scripts/claude-gh
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@v10.0.1
+        with:
+          cache-dependency-glob: scripts/claude-gh
+
+      - uses: actions/download-artifact@v8
+        continue-on-error: true # missing when run failed before writing the record
+        with:
+          name: claude-actions-mention
+          path: tmp/actions
+
+      - name: Apply actions
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STATUS_ID: ${{ needs.mention-start.outputs.comment-id }}
+          RUN_RESULT: ${{ needs.mention.result }}
+        run: |
+          uv run scripts/claude-gh apply mention \
+            --status-id "$STATUS_ID" --run-result "$RUN_RESULT" \
+            --record tmp/actions/actions.json
 
   # `/code-review [low|medium|high|xhigh|max] [opus|sonnet|haiku|fable|claude-<id>]` on a PR runs
   # the built-in Claude Code review. Defaults: high, opus.
-  code-review:
+  code-review-start:
     if: |
       github.event_name == 'issue_comment' &&
       github.event.issue.pull_request &&
       startsWith(github.event.comment.body, '/code-review') &&
       contains(fromJSON('["OWNER", "MEMBER"]'), github.event.comment.author_association)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      pull-requests: write
+    outputs:
+      comment-id: ${{ steps.start.outputs.comment-id }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+          ref: ${{ github.event.repository.default_branch }}
+          sparse-checkout: scripts/claude-gh
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@v10.0.1
+        with:
+          cache-dependency-glob: scripts/claude-gh
+
+      - name: Post status comment
+        id: start
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          id=$(uv run scripts/claude-gh start code-review)
+          echo "comment-id=$id" >> "$GITHUB_OUTPUT"
+
+  code-review:
+    needs: code-review-start
     concurrency:
       group: code-review-${{ github.event.issue.number }}
       cancel-in-progress: false
@@ -62,7 +164,7 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: read
-      pull-requests: write
+      pull-requests: read
     steps:
       - uses: actions/checkout@v7
         with:
@@ -106,4 +208,48 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           EFFORT: ${{ steps.args.outputs.effort }}
           MODEL: ${{ steps.args.outputs.model }}
-        run: uv run scripts/claude-gh code-review --model "$MODEL" --effort "$EFFORT"
+        run: uv run scripts/claude-gh run code-review --model "$MODEL" --effort "$EFFORT"
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          overwrite: true
+          name: claude-actions-code-review
+          path: tmp/actions.json
+          retention-days: 7
+          if-no-files-found: ignore
+
+  code-review-apply:
+    needs: [code-review-start, code-review]
+    if: always() && needs.code-review-start.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+          ref: ${{ github.event.repository.default_branch }}
+          sparse-checkout: scripts/claude-gh
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@v10.0.1
+        with:
+          cache-dependency-glob: scripts/claude-gh
+
+      - uses: actions/download-artifact@v8
+        continue-on-error: true # missing when run failed before writing the record
+        with:
+          name: claude-actions-code-review
+          path: tmp/actions
+
+      - name: Apply actions
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STATUS_ID: ${{ needs.code-review-start.outputs.comment-id }}
+          RUN_RESULT: ${{ needs.code-review.result }}
+        run: |
+          uv run scripts/claude-gh apply code-review \
+            --status-id "$STATUS_ID" --run-result "$RUN_RESULT" \
+            --record tmp/actions/actions.json
