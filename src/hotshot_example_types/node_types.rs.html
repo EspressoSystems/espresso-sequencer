@@ -15,7 +15,7 @@
 <a href=#15 id=15 data-nosnippet>15</a>    upgrade_config::UpgradeConstants,
 <a href=#16 id=16 data-nosnippet>16</a>};
 <a href=#17 id=17 data-nosnippet>17</a><span class="kw">use </span>vbs::version::StaticVersion;
-<a href=#18 id=18 data-nosnippet>18</a><span class="kw">use </span>versions::{Upgrade, version};
+<a href=#18 id=18 data-nosnippet>18</a><span class="kw">use </span>versions::{NEW_PROTOCOL_VERSION, Upgrade, version};
 <a href=#19 id=19 data-nosnippet>19</a>
 <a href=#20 id=20 data-nosnippet>20</a><span class="kw">pub use </span><span class="kw">crate</span>::membership::helpers::{RandomOverlapQuorumFilterConfig, StableQuorumFilterConfig};
 <a href=#21 id=21 data-nosnippet>21</a><span class="kw">use crate</span>::{
@@ -273,8 +273,8 @@
 <a href=#273 id=273 data-nosnippet>273</a><span class="kw">pub const </span>TEST_VERSIONS: TestVersions = TestVersions {
 <a href=#274 id=274 data-nosnippet>274</a>    epoch: Upgrade::trivial(version(<span class="number">0</span>, <span class="number">3</span>)),
 <a href=#275 id=275 data-nosnippet>275</a>    da_committee: Upgrade::trivial(version(<span class="number">0</span>, <span class="number">4</span>)),
-<a href=#276 id=276 data-nosnippet>276</a>    vid2: Upgrade::trivial(version(<span class="number">0</span>, <span class="number">6</span>)),
-<a href=#277 id=277 data-nosnippet>277</a>    test: Upgrade::new(version(<span class="number">0</span>, <span class="number">1</span>), version(<span class="number">0</span>, <span class="number">2</span>)),
+<a href=#276 id=276 data-nosnippet>276</a>    vid2: Upgrade::trivial(NEW_PROTOCOL_VERSION),
+<a href=#277 id=277 data-nosnippet>277</a>    test: Upgrade::trivial(NEW_PROTOCOL_VERSION),
 <a href=#278 id=278 data-nosnippet>278</a>    epoch_upgrade: Upgrade::new(version(<span class="number">0</span>, <span class="number">3</span>), version(<span class="number">0</span>, <span class="number">4</span>)),
 <a href=#279 id=279 data-nosnippet>279</a>    vid2_upgrade: Upgrade::new(version(<span class="number">0</span>, <span class="number">5</span>), version(<span class="number">0</span>, <span class="number">6</span>)),
 <a href=#280 id=280 data-nosnippet>280</a>};
