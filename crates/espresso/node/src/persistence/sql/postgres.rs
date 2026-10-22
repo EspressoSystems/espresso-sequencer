@@ -12,10 +12,10 @@ use light_client::storage::{LightClientDbOptions, LightClientPostgresOptions};
 mod imp;
 
 pub use imp::*;
-use qs::Config;
+use qs::{Config, SqlStorage};
 
 use super::{Options as SqlOptions, PostgresOptions};
-use crate::api::options::Query;
+use crate::{api::options::Query, persistence::storage_probe::StorageProbe};
 
 impl BackendOptions for qs::Db {
     fn apply(mut cfg: Config, opt: &SqlOptions) -> anyhow::Result<Config> {
@@ -68,6 +68,13 @@ impl BackendOptions for qs::Db {
 
     async fn reset_light_client(cfg: &Config) -> anyhow::Result<()> {
         LightClientPostgresOptions::reset(cfg.connect_options()).await
+    }
+
+    async fn storage_probe(
+        _db: &SqlStorage,
+        _opt: &SqlOptions,
+    ) -> anyhow::Result<Option<StorageProbe>> {
+        Ok(None)
     }
 }
 

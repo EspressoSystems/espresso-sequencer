@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, future::Future, path::Path, sync::Arc, time::Instant};
+use std::{collections::BTreeMap, future::Future, sync::Arc, time::Instant};
 
 use alloy::primitives::Address;
 use anyhow::{Context, bail};
@@ -53,7 +53,7 @@ use hotshot_types::{
 use indexmap::IndexMap;
 use itertools::Itertools;
 use light_client::storage::LightClientDbOptions;
-use sqlx::{Decode, Executor, QueryBuilder, Row, Type, query};
+use sqlx::{Executor, QueryBuilder, Row, query};
 
 use super::{
     super::{ConsensusPruningOptions, Options as SqlOptions, within_gap_fill_horizon},
@@ -67,61 +67,10 @@ use crate::{
     api::options::Query,
     catchup::SqlStateCatchup,
     persistence::{
-        migrate_network_config,
-        persistence_metrics::PersistenceMetricsValue,
-        storage_probe::{self, SqlitePragmas, StorageProbe},
+        migrate_network_config, persistence_metrics::PersistenceMetricsValue,
+        storage_probe::StorageProbe,
     },
 };
-
-/// The directory `storage_probe::probe` should classify for a SQLite database at `path`. Falls
-/// back to `.` when `path` has no parent, e.g. a bare relative filename, or the empty `PathBuf`
-/// from `SqliteOptions::default()`.
-pub(super) fn sqlite_probe_dir(path: &Path) -> &Path {
-    match path.parent() {
-        Some(parent) if !parent.as_os_str().is_empty() => parent,
-        _ => Path::new("."),
-    }
-}
-
-async fn read_pragma<T>(pool: &sqlx::Pool<Db>, pragma: &str) -> Option<T>
-where
-    T: for<'a> Decode<'a, Db> + Type<Db>,
-{
-    match sqlx::query(pragma).fetch_one(pool).await {
-        Ok(row) => row.try_get(0).ok(),
-        Err(err) => {
-            tracing::debug!(pragma, ?err, "storage probe: pragma query failed");
-            None
-        },
-    }
-}
-
-/// The first failure short-circuits the rest: a pragma query only fails if the pool is unusable.
-pub(super) async fn read_pragmas(pool: &sqlx::Pool<Db>) -> Option<SqlitePragmas> {
-    let journal_mode = read_pragma(pool, "PRAGMA journal_mode").await?;
-    // SQLite reports these two back as their numeric settings, not the names used to set them.
-    let synchronous = match read_pragma::<i64>(pool, "PRAGMA synchronous").await? {
-        0 => "off",
-        1 => "normal",
-        2 => "full",
-        3 => "extra",
-        _ => "unknown",
-    };
-    let auto_vacuum = match read_pragma::<i64>(pool, "PRAGMA auto_vacuum").await? {
-        0 => "none",
-        1 => "full",
-        2 => "incremental",
-        _ => "unknown",
-    };
-    let page_size: i64 = read_pragma(pool, "PRAGMA page_size").await?;
-
-    Some(SqlitePragmas {
-        journal_mode,
-        synchronous,
-        auto_vacuum,
-        page_size: page_size as u64,
-    })
-}
 
 /// Node setup that differs between the SQL backends.
 pub(crate) trait BackendOptions {
@@ -130,6 +79,12 @@ pub(crate) trait BackendOptions {
     fn light_client_db(cfg: &Config, query: &Query) -> LightClientDbOptions;
 
     async fn reset_light_client(cfg: &Config) -> anyhow::Result<()>;
+
+    /// A probe of the database file and its settings, for a backend that keeps the database in one.
+    async fn storage_probe(
+        db: &SqlStorage,
+        opt: &SqlOptions,
+    ) -> anyhow::Result<Option<StorageProbe>>;
 }
 
 impl TryFrom<&SqlOptions> for Config {
@@ -199,13 +154,7 @@ impl PersistenceOptions for Options {
         let config = Config::try_from(&self.0)?;
         let db = SqlStorage::connect(config, StorageConnectionType::Sequencer).await?;
 
-        let probe = if Db::EMBEDDED {
-            let pragmas = read_pragmas(&db.pool()).await;
-            let path = self.0.sqlite_options.path.clone().unwrap_or_default();
-            Some(storage_probe::probe(sqlite_probe_dir(&path), pragmas).await?)
-        } else {
-            None
-        };
+        let probe = Db::storage_probe(&db, &self.0).await?;
 
         let persistence = Persistence {
             db,
