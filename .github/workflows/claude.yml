@@ -8,39 +8,69 @@ on:
   pull_request_review:
     types: [submitted]
   issues:
-    types: [opened, assigned]
+    types: [opened]
 
 jobs:
   claude:
     if: |
-      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
-      (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
-      (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude')) ||
-      (github.event_name == 'issues' && (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude')))
+      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude') &&
+        contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association)) ||
+      (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude') &&
+        contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association)) ||
+      (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude') &&
+        contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.review.author_association)) ||
+      (github.event_name == 'issues' && (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude')) &&
+        contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.issue.author_association))
     concurrency:
       group: claude-${{ github.event.issue.number || github.event.pull_request.number || github.run_id }}
       cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
-      contents: write
+      contents: read
       pull-requests: write
       issues: write
-      id-token: write
-      actions: read
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 1
+          persist-credentials: false
 
-      - uses: anthropics/claude-code-action@v1
+      - name: Build prompt
         env:
-          # The action stops at the first result, so background subagents leave the reply unposted.
-          # https://github.com/anthropics/claude-code-action/issues/1499
+          REPO: ${{ github.repository }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          mkdir -p ./tmp
+          jq --arg event_name "$EVENT_NAME" '
+            (.issue // .pull_request) as $item
+            | {
+                event_name: $event_name,
+                number: $item.number,
+                is_pr: (.pull_request != null or .issue.pull_request != null),
+                title: $item.title,
+                body: $item.body,
+                author: (.comment // .review // $item).user.login,
+                comment_id: (if $event_name == "pull_request_review_comment" then .comment.id else null end),
+                comment_body: .comment.body,
+                path: .comment.path,
+                line: .comment.line,
+                diff_hunk: .comment.diff_hunk,
+                in_reply_to_id: .comment.in_reply_to_id,
+                reply_to: (if $event_name == "pull_request_review_comment" then (.comment.in_reply_to_id // .comment.id) else null end),
+                review_body: .review.body
+              }' "$GITHUB_EVENT_PATH" > ./tmp/claude-event.json
+          { echo "REPO: $REPO"; echo; cat .github/claude/mention.md; } > ./tmp/prompt.md
+
+      - name: Claude
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GH_TOKEN: ${{ github.token }}
           CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: "1"
-        with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          claude_args: "--model opus --max-turns 120"
+        run: |
+          scripts/claude-ci ./tmp/prompt.md --model opus --max-turns 120 \
+            --allowedTools "Bash(scripts/gh-claude:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh issue view:*)"
 
   # `/code-review [low|medium|high|xhigh|max] [opus|sonnet|haiku|fable|claude-<id>]` on a PR runs
   # the built-in Claude Code review. Defaults: high, opus.
@@ -58,7 +88,6 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
-      id-token: write
     steps:
       - uses: actions/checkout@v7
         with:
@@ -91,12 +120,23 @@ jobs:
           echo "effort=$effort" >> "$GITHUB_OUTPUT"
           echo "model=$model" >> "$GITHUB_OUTPUT"
 
-      - uses: anthropics/claude-code-action@v1
+      - name: Claude Code Review
         env:
-          # https://github.com/anthropics/claude-code-action/issues/1499
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GH_TOKEN: ${{ github.token }}
           CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: "1"
-        with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          prompt: /code-review ${{ steps.args.outputs.effort }} --comment ${{ github.event.issue.number }}
-          claude_args: |
-            --model ${{ steps.args.outputs.model }} --max-turns 120 --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*)"
+          EFFORT: ${{ steps.args.outputs.effort }}
+          MODEL: ${{ steps.args.outputs.model }}
+          PR_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          mkdir -p ./tmp
+          echo "/code-review $EFFORT --comment $PR_NUMBER" > ./tmp/prompt.md
+          cat > ./tmp/review-system.md << 'EOF'
+          Post inline comments with
+          `scripts/gh-claude inline <pr> <path> <line> [<start_line>] <<'EOF' ... EOF`.
+          Post replies and top-level comments with the other `scripts/gh-claude`
+          subcommands (`reply`, `comment`).
+          EOF
+          scripts/claude-ci ./tmp/prompt.md --model "$MODEL" --max-turns 120 \
+            --append-system-prompt-file ./tmp/review-system.md \
+            --allowedTools "Bash(scripts/gh-claude:*),Bash(gh pr diff:*),Bash(gh pr view:*)"

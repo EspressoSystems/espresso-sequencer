@@ -1,0 +1,99 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+readonly BOT_LOGINS_RE='^(github-actions|claude)$'
+
+usage() {
+  cat << USAGE
+Usage: ${0##*/} SUBCOMMAND ARGS...   (body on stdin)
+
+  inline PR PATH LINE [START_LINE]  review comment on the PR head, RIGHT side
+  reply PR COMMENT_ID               reply in a review thread
+  comment NUMBER                    top-level PR or issue comment
+  resolve THREAD_ID                 resolve a thread started by github-actions/claude
+
+Env: GITHUB_REPOSITORY, GH_TOKEN
+USAGE
+}
+
+die() {
+  echo "${0##*/}: $*" >&2
+  exit 1
+}
+
+num() {
+  [[ "${2-}" =~ ^[0-9]+$ ]] || die "$1 must be a number, got '${2-}'"
+}
+
+inline() {
+  [[ $# -eq 3 || $# -eq 4 ]] || die "inline needs PR PATH LINE [START_LINE]"
+  local pr="$1" path="$2" line="$3" start="${4-}"
+  num PR "${pr}"
+  num LINE "${line}"
+  local -a fields=(-F "line=${line}")
+  if [[ -n "${start}" ]]; then
+    num START_LINE "${start}"
+    fields+=(-F "start_line=${start}" -f start_side=RIGHT)
+  fi
+  local sha
+  sha=$(gh pr view "${pr}" --json headRefOid --jq .headRefOid)
+  gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr}/comments" \
+    -f "commit_id=${sha}" -f "path=${path}" -f side=RIGHT \
+    "${fields[@]}" -F body=@- > /dev/null
+}
+
+reply() {
+  [[ $# -eq 2 ]] || die "reply needs PR COMMENT_ID"
+  num PR "$1"
+  num COMMENT_ID "$2"
+  gh api "repos/${GITHUB_REPOSITORY}/pulls/$1/comments/$2/replies" \
+    -F body=@- > /dev/null
+}
+
+comment() {
+  [[ $# -eq 1 ]] || die "comment needs NUMBER"
+  num NUMBER "$1"
+  gh issue comment "$1" --body-file -
+}
+
+# shellcheck disable=SC2016 # $id is a GraphQL variable
+resolve() {
+  [[ $# -eq 1 ]] || die "resolve needs THREAD_ID"
+  [[ "$1" =~ ^[A-Za-z0-9_=-]+$ ]] || die "invalid THREAD_ID '$1'"
+  local author
+  author=$(gh api graphql -F id="$1" -f query='
+    query($id: ID!) {
+      node(id: $id) {
+        ... on PullRequestReviewThread {
+          comments(first: 1) { nodes { author { login } } }
+        }
+      }
+    }' --jq '.data.node.comments.nodes[0].author.login')
+  [[ "${author}" =~ ${BOT_LOGINS_RE} ]] \
+    || die "thread $1 was started by '${author}', not resolving"
+  gh api graphql -F id="$1" -f query='
+    mutation($id: ID!) {
+      resolveReviewThread(input: {threadId: $id}) { thread { isResolved } }
+    }' > /dev/null
+}
+
+main() {
+  local cmd="${1:-}"
+  case "${cmd}" in
+    -h | --help)
+      usage
+      exit 0
+      ;;
+    inline | reply | comment | resolve)
+      shift
+      [[ -n "${GITHUB_REPOSITORY-}" ]] || die "GITHUB_REPOSITORY is not set"
+      "${cmd}" "$@"
+      ;;
+    *)
+      usage >&2
+      exit 1
+      ;;
+  esac
+}
+
+main "$@"

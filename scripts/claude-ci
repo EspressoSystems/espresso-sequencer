@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Permission-rule syntax changes between releases; bump here only.
+readonly CLAUDE_VERSION="2.1.304"
+readonly TRANSCRIPT=./tmp/claude.jsonl
+# Do not set CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: it strips GH_TOKEN from Bash
+# subprocesses and gh-claude needs it.
+
+usage() {
+  cat << USAGE
+Usage: ${0##*/} PROMPT_FILE [CLAUDE_ARGS...]
+
+Installs Claude Code ${CLAUDE_VERSION}, runs it headless with the prompt on stdin,
+prints the result and cost. Exits non-zero if the run reports an error.
+Transcript: ${TRANSCRIPT}
+Env: ANTHROPIC_API_KEY, GH_TOKEN
+USAGE
+}
+
+main() {
+  case "${1:-}" in
+    -h | --help)
+      usage
+      exit 0
+      ;;
+    "")
+      usage >&2
+      exit 1
+      ;;
+  esac
+  local prompt="$1"
+  shift
+
+  mkdir -p ./tmp
+  curl -fsSL https://claude.ai/install.sh | bash -s "${CLAUDE_VERSION}"
+  export PATH="${HOME}/.local/bin:${PATH}"
+
+  # Stops an allowed command's output redirection from replacing these scripts.
+  chmod a-w scripts/gh-claude scripts/claude-ci
+
+  local status=0
+  claude -p --output-format stream-json --verbose \
+    --setting-sources user --disallowedTools "Read(//proc/**)" \
+    "$@" < "${prompt}" | tee "${TRANSCRIPT}" || status=$?
+
+  jq -rs 'map(select(.type == "result")) | last // empty
+    | .result,
+      "cost_usd=\(.total_cost_usd) turns=\(.num_turns)",
+      "permission_denials=\(.permission_denials | tojson)"' "${TRANSCRIPT}"
+  local failure
+  failure=$(jq -rs 'map(select(.type == "result")) | last
+    | if . == null then "no result line"
+      elif .is_error != false then "result is_error, subtype=\(.subtype)"
+      else empty end' "${TRANSCRIPT}")
+  if [[ -n "${failure}" ]]; then
+    echo "${failure} in ${TRANSCRIPT}" >&2
+    exit 1
+  fi
+  if ((status != 0)); then
+    echo "claude exited with status ${status}" >&2
+    exit "${status}"
+  fi
+}
+
+main "$@"
