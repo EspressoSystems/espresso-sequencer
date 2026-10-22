@@ -22,7 +22,9 @@ use espresso_types::{
     NetworkConfig, Payload, PubKey, Ratio, RegisteredValidatorMap, StakeTableHash, parse_duration,
     parse_size,
     traits::{EventsPersistenceRead, MembershipPersistence, StakeTuple},
-    v0::traits::{EventConsumer, PersistenceOptions, SequencerPersistence, StateCatchup},
+    v0::traits::{
+        EventConsumer, PersistenceOptions, SequencerPersistence, StateCatchup, StateCertPersistence,
+    },
     v0_3::{
         AuthenticatedValidator, EventKey, IndexedStake, RegisteredValidator, RewardAmount,
         StakeTableEvent,
@@ -2473,6 +2475,60 @@ impl SequencerPersistence for Persistence {
         Ok(Some(cert))
     }
 
+    async fn load_start_epoch_info(&self) -> anyhow::Result<Vec<InitializerEpochInfo<SeqTypes>>> {
+        let rows = self
+            .db
+            .read()
+            .await?
+            .fetch_all(
+                query("SELECT * from epoch_drb_and_root ORDER BY epoch DESC LIMIT $1")
+                    .bind(RECENT_STAKE_TABLES_LIMIT as i64),
+            )
+            .await?;
+
+        // reverse the rows vector to return the most recent epochs, but in ascending order
+        rows.into_iter()
+            .rev()
+            .map(|row| {
+                let epoch: i64 = row.try_get("epoch")?;
+                let drb_result: Option<Vec<u8>> = row.try_get("drb_result")?;
+                let block_header: Option<Vec<u8>> = row.try_get("block_header")?;
+                if let Some(drb_result) = drb_result {
+                    let drb_result_array = drb_result
+                        .try_into()
+                        .or_else(|_| bail!("invalid drb result"))?;
+                    let block_header: Option<<SeqTypes as NodeType>::BlockHeader> = block_header
+                        .map(|data| bincode::deserialize(&data))
+                        .transpose()?;
+                    Ok(Some(InitializerEpochInfo::<SeqTypes> {
+                        epoch: EpochNumber::new(epoch as u64),
+                        drb_result: drb_result_array,
+                        block_header,
+                    }))
+                } else {
+                    // Right now we skip the epoch_drb_and_root row if there is no drb result.
+                    // This seems reasonable based on the expected order of events, but please double check!
+                    Ok(None)
+                }
+            })
+            .filter_map(|e| match e {
+                Err(v) => Some(Err(v)),
+                Ok(Some(v)) => Some(Ok(v)),
+                Ok(None) => None,
+            })
+            .collect()
+    }
+
+    fn enable_metrics(&mut self, metrics: &dyn Metrics) {
+        self.internal_metrics = PersistenceMetricsValue::new(metrics);
+
+        #[cfg(feature = "embedded-db")]
+        self.probe.register(&*metrics.subgroup("disk".into()));
+    }
+}
+
+#[async_trait]
+impl StateCertPersistence for Persistence {
     async fn get_state_cert_by_epoch(
         &self,
         epoch: u64,
@@ -2533,57 +2589,6 @@ impl SequencerPersistence for Persistence {
             tx.commit().await
         })
         .await
-    }
-
-    async fn load_start_epoch_info(&self) -> anyhow::Result<Vec<InitializerEpochInfo<SeqTypes>>> {
-        let rows = self
-            .db
-            .read()
-            .await?
-            .fetch_all(
-                query("SELECT * from epoch_drb_and_root ORDER BY epoch DESC LIMIT $1")
-                    .bind(RECENT_STAKE_TABLES_LIMIT as i64),
-            )
-            .await?;
-
-        // reverse the rows vector to return the most recent epochs, but in ascending order
-        rows.into_iter()
-            .rev()
-            .map(|row| {
-                let epoch: i64 = row.try_get("epoch")?;
-                let drb_result: Option<Vec<u8>> = row.try_get("drb_result")?;
-                let block_header: Option<Vec<u8>> = row.try_get("block_header")?;
-                if let Some(drb_result) = drb_result {
-                    let drb_result_array = drb_result
-                        .try_into()
-                        .or_else(|_| bail!("invalid drb result"))?;
-                    let block_header: Option<<SeqTypes as NodeType>::BlockHeader> = block_header
-                        .map(|data| bincode::deserialize(&data))
-                        .transpose()?;
-                    Ok(Some(InitializerEpochInfo::<SeqTypes> {
-                        epoch: EpochNumber::new(epoch as u64),
-                        drb_result: drb_result_array,
-                        block_header,
-                    }))
-                } else {
-                    // Right now we skip the epoch_drb_and_root row if there is no drb result.
-                    // This seems reasonable based on the expected order of events, but please double check!
-                    Ok(None)
-                }
-            })
-            .filter_map(|e| match e {
-                Err(v) => Some(Err(v)),
-                Ok(Some(v)) => Some(Ok(v)),
-                Ok(None) => None,
-            })
-            .collect()
-    }
-
-    fn enable_metrics(&mut self, metrics: &dyn Metrics) {
-        self.internal_metrics = PersistenceMetricsValue::new(metrics);
-
-        #[cfg(feature = "embedded-db")]
-        self.probe.register(&*metrics.subgroup("disk".into()));
     }
 }
 
