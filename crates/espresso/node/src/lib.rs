@@ -17,6 +17,7 @@ pub mod network;
 pub mod options;
 pub mod persistence;
 pub mod run;
+pub(crate) mod sql_dispatch;
 pub mod state;
 pub mod state_cert;
 pub mod state_signature;
