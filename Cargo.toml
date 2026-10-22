@@ -51,10 +51,6 @@ members = [
 # espresso-node-sqlite/espresso-dev-node: embedded-db feature conflict
 # crypto-helper: vendored openssl leaks to workspace via feature unification
 default-members = [
-    # slow-tests is deliberately NOT a default member: it depends on
-    # espresso-node with the "testing" feature, and target selection flags such as
-    # `cargo build --bin X` select *all* default members, so cargo would unify
-    # "testing" into release builds of the node library. Run it with `-p slow-tests`.
     "contracts/rust/adapter",
     "contracts/rust/deployer",
     "contracts/rust/deployment-info",
@@ -90,6 +86,7 @@ default-members = [
     "crates/test-utils",
     "crates/vid",
     "sdks/crypto-helper",
+    "slow-tests",
     "sp1/target-check",
     "tests",
 ]

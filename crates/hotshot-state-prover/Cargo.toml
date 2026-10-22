@@ -58,7 +58,6 @@ vbs = { workspace = true }
 
 [dev-dependencies]
 espresso-utils = { workspace = true, features = ["full", "testing"] }
-hotshot-contract-adapter = { workspace = true, features = ["jellyfish"] }
 rstest = { workspace = true }
 test-log = { workspace = true }
 tower = { workspace = true, features = ["util"] }
