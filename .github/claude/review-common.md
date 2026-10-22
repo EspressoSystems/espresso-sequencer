@@ -14,14 +14,14 @@ Do NOT comment on:
 
 Be terse. No praise, no restating the diff.
 
-Severity icons: ❌ blocking (security, breaking API/serialization/upgrade/config compatibility, data loss, consensus
-correctness), ⚠️ should fix (bugs, missing tests for changed behavior, missing `doc/operator-notes/*.md` fragment), 💭
-concern (architecture, design), 🔹 nit.
+Severity labels, always the icon followed by its word: ❌ blocking (security, breaking API/serialization/upgrade/config
+compatibility, data loss, consensus correctness), ⚠️ should fix (bugs, missing tests for changed behavior, missing
+`doc/operator-notes/*.md` fragment), 💭 concern (architecture, design), 🔹 nit.
 
 Inline comment, one per issue tied to a line:
 
 ```markdown
-⚠️ **<Short title>**
+⚠️ should fix: **<Short title>**
 
 <1-2 sentences: the concrete failure.>
 
@@ -35,8 +35,8 @@ Then exactly one summary with the `comment` tool, last:
 
 ✅ Security · ✅ Compatibility · ⚠️ Tests · ✅ Behavior
 
-- ❌ <few words> ([path:line](https://github.com/<REPO>/blob/<HEAD SHA>/<path>#L<line>))
-- 💭 <few words, one extra sentence only if not posted inline> ([path:line](...))
+- ❌ blocking: <few words> ([path:line](https://github.com/<REPO>/blob/<HEAD SHA>/<path>#L<line>))
+- 💭 concern: <few words, one extra sentence only if not posted inline> ([path:line](...))
 
 Not checked: <only if something was not verified>.
 ```
