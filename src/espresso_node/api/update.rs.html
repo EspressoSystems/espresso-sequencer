@@ -15,7 +15,7 @@
 <a href=#15 id=15 data-nosnippet>15</a>};
 <a href=#16 id=16 data-nosnippet>16</a><span class="kw">use </span>hotshot_types::new_protocol::CoordinatorEvent;
 <a href=#17 id=17 data-nosnippet>17</a>
-<a href=#18 id=18 data-nosnippet>18</a><span class="kw">use super</span>::{StorageState, context::ApiContext, data_source::SequencerDataSource};
+<a href=#18 id=18 data-nosnippet>18</a><span class="kw">use super</span>::{StorageState, data_source::SequencerDataSource};
 <a href=#19 id=19 data-nosnippet>19</a><span class="kw">use crate</span>::{EventConsumer, SeqTypes};
 <a href=#20 id=20 data-nosnippet>20</a>
 <a href=#21 id=21 data-nosnippet>21</a><span class="attr">#[async_trait]
@@ -62,39 +62,34 @@
 <a href=#62 id=62 data-nosnippet>62</a>
 <a href=#63 id=63 data-nosnippet>63</a><span class="attr">#[derive(Derivative, From)]
 <a href=#64 id=64 data-nosnippet>64</a>#[derivative(Clone(bound = <span class="string">""</span>), Debug(bound = <span class="string">"D: Debug"</span>))]
-<a href=#65 id=65 data-nosnippet>65</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">struct </span>ApiEventConsumer&lt;C, D&gt;
-<a href=#66 id=66 data-nosnippet>66</a><span class="kw">where
-<a href=#67 id=67 data-nosnippet>67</a>    </span>C: ApiContext,
-<a href=#68 id=68 data-nosnippet>68</a>{
-<a href=#69 id=69 data-nosnippet>69</a>    inner: Arc&lt;StorageState&lt;C, D&gt;&gt;,
-<a href=#70 id=70 data-nosnippet>70</a>}
-<a href=#71 id=71 data-nosnippet>71</a>
-<a href=#72 id=72 data-nosnippet>72</a><span class="attr">#[async_trait]
-<a href=#73 id=73 data-nosnippet>73</a></span><span class="kw">impl</span>&lt;C, D&gt; EventConsumer <span class="kw">for </span>ApiEventConsumer&lt;C, D&gt;
-<a href=#74 id=74 data-nosnippet>74</a><span class="kw">where
-<a href=#75 id=75 data-nosnippet>75</a>    </span>C: ApiContext,
-<a href=#76 id=76 data-nosnippet>76</a>    D: SequencerDataSource + Debug + Send + Sync + <span class="lifetime">'static</span>,
-<a href=#77 id=77 data-nosnippet>77</a>{
-<a href=#78 id=78 data-nosnippet>78</a>    <span class="kw">async fn </span>handle_event(<span class="kw-2">&amp;</span><span class="self">self</span>, event: <span class="kw-2">&amp;</span>CoordinatorEvent&lt;SeqTypes&gt;) -&gt; anyhow::Result&lt;()&gt; {
-<a href=#79 id=79 data-nosnippet>79</a>        <span class="kw">if let </span><span class="prelude-val">Err</span>(height) = <span class="self">self</span>.inner.update(event).<span class="kw">await </span>{
-<a href=#80 id=80 data-nosnippet>80</a>            <span class="macro">bail!</span>(<span class="string">"failed to update API state after {height}: {event:?}"</span>,);
-<a href=#81 id=81 data-nosnippet>81</a>        }
-<a href=#82 id=82 data-nosnippet>82</a>        <span class="prelude-val">Ok</span>(())
-<a href=#83 id=83 data-nosnippet>83</a>    }
-<a href=#84 id=84 data-nosnippet>84</a>}
-<a href=#85 id=85 data-nosnippet>85</a>
-<a href=#86 id=86 data-nosnippet>86</a><span class="attr">#[async_trait]
-<a href=#87 id=87 data-nosnippet>87</a></span><span class="kw">impl</span>&lt;C, D&gt; DecideSink <span class="kw">for </span>ApiEventConsumer&lt;C, D&gt;
-<a href=#88 id=88 data-nosnippet>88</a><span class="kw">where
-<a href=#89 id=89 data-nosnippet>89</a>    </span>C: ApiContext,
-<a href=#90 id=90 data-nosnippet>90</a>    D: SequencerDataSource + UpdateAvailabilityData&lt;SeqTypes&gt; + Debug + Send + Sync + <span class="lifetime">'static</span>,
-<a href=#91 id=91 data-nosnippet>91</a>{
-<a href=#92 id=92 data-nosnippet>92</a>    <span class="kw">async fn </span>append(<span class="kw-2">&amp;</span><span class="self">self</span>, info: BlockInfo&lt;SeqTypes&gt;) -&gt; anyhow::Result&lt;()&gt; {
-<a href=#93 id=93 data-nosnippet>93</a>        <span class="self">self</span>.inner.append(info).<span class="kw">await
-<a href=#94 id=94 data-nosnippet>94</a>    </span>}
-<a href=#95 id=95 data-nosnippet>95</a>
-<a href=#96 id=96 data-nosnippet>96</a>    <span class="kw">async fn </span>block_height(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; anyhow::Result&lt;u64&gt; {
-<a href=#97 id=97 data-nosnippet>97</a>        <span class="prelude-val">Ok</span>(NodeDataSource::block_height(<span class="kw-2">&amp;*</span><span class="self">self</span>.inner).<span class="kw">await</span><span class="question-mark">? </span><span class="kw">as </span>u64)
-<a href=#98 id=98 data-nosnippet>98</a>    }
-<a href=#99 id=99 data-nosnippet>99</a>}
+<a href=#65 id=65 data-nosnippet>65</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">struct </span>ApiEventConsumer&lt;D&gt; {
+<a href=#66 id=66 data-nosnippet>66</a>    inner: Arc&lt;StorageState&lt;D&gt;&gt;,
+<a href=#67 id=67 data-nosnippet>67</a>}
+<a href=#68 id=68 data-nosnippet>68</a>
+<a href=#69 id=69 data-nosnippet>69</a><span class="attr">#[async_trait]
+<a href=#70 id=70 data-nosnippet>70</a></span><span class="kw">impl</span>&lt;D&gt; EventConsumer <span class="kw">for </span>ApiEventConsumer&lt;D&gt;
+<a href=#71 id=71 data-nosnippet>71</a><span class="kw">where
+<a href=#72 id=72 data-nosnippet>72</a>    </span>D: SequencerDataSource + Debug + Send + Sync + <span class="lifetime">'static</span>,
+<a href=#73 id=73 data-nosnippet>73</a>{
+<a href=#74 id=74 data-nosnippet>74</a>    <span class="kw">async fn </span>handle_event(<span class="kw-2">&amp;</span><span class="self">self</span>, event: <span class="kw-2">&amp;</span>CoordinatorEvent&lt;SeqTypes&gt;) -&gt; anyhow::Result&lt;()&gt; {
+<a href=#75 id=75 data-nosnippet>75</a>        <span class="kw">if let </span><span class="prelude-val">Err</span>(height) = <span class="self">self</span>.inner.update(event).<span class="kw">await </span>{
+<a href=#76 id=76 data-nosnippet>76</a>            <span class="macro">bail!</span>(<span class="string">"failed to update API state after {height}: {event:?}"</span>,);
+<a href=#77 id=77 data-nosnippet>77</a>        }
+<a href=#78 id=78 data-nosnippet>78</a>        <span class="prelude-val">Ok</span>(())
+<a href=#79 id=79 data-nosnippet>79</a>    }
+<a href=#80 id=80 data-nosnippet>80</a>}
+<a href=#81 id=81 data-nosnippet>81</a>
+<a href=#82 id=82 data-nosnippet>82</a><span class="attr">#[async_trait]
+<a href=#83 id=83 data-nosnippet>83</a></span><span class="kw">impl</span>&lt;D&gt; DecideSink <span class="kw">for </span>ApiEventConsumer&lt;D&gt;
+<a href=#84 id=84 data-nosnippet>84</a><span class="kw">where
+<a href=#85 id=85 data-nosnippet>85</a>    </span>D: SequencerDataSource + UpdateAvailabilityData&lt;SeqTypes&gt; + Debug + Send + Sync + <span class="lifetime">'static</span>,
+<a href=#86 id=86 data-nosnippet>86</a>{
+<a href=#87 id=87 data-nosnippet>87</a>    <span class="kw">async fn </span>append(<span class="kw-2">&amp;</span><span class="self">self</span>, info: BlockInfo&lt;SeqTypes&gt;) -&gt; anyhow::Result&lt;()&gt; {
+<a href=#88 id=88 data-nosnippet>88</a>        <span class="self">self</span>.inner.append(info).<span class="kw">await
+<a href=#89 id=89 data-nosnippet>89</a>    </span>}
+<a href=#90 id=90 data-nosnippet>90</a>
+<a href=#91 id=91 data-nosnippet>91</a>    <span class="kw">async fn </span>block_height(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; anyhow::Result&lt;u64&gt; {
+<a href=#92 id=92 data-nosnippet>92</a>        <span class="prelude-val">Ok</span>(NodeDataSource::block_height(<span class="kw-2">&amp;*</span><span class="self">self</span>.inner).<span class="kw">await</span><span class="question-mark">? </span><span class="kw">as </span>u64)
+<a href=#93 id=93 data-nosnippet>93</a>    }
+<a href=#94 id=94 data-nosnippet>94</a>}
 </code></pre></div></section></main></body></html>
