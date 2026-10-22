@@ -13,6 +13,8 @@ path = "src/lib.rs"
 
 [features]
 testing = [
+    "staking-cli",
+    "test-utils",
     "espresso-types/testing",
     "light-client/testing",
     "espresso-utils/testing",
@@ -58,12 +60,10 @@ espresso-telemetry = { workspace = true }
 espresso-types = { workspace = true, features = ["node"] }
 espresso-utils = { workspace = true, features = ["full"] }
 futures = { workspace = true }
-generic-tests = { workspace = true }
 hotshot-contract-adapter = { workspace = true }
 hotshot-new-protocol = { workspace = true }
 hotshot-orchestrator = { workspace = true }
 hotshot-query-service = { workspace = true }
-hotshot-state-prover = { workspace = true }
 hotshot-types = { workspace = true }
 http-client = { workspace = true }
 http-wire = { workspace = true, features = ["server"] }
@@ -88,20 +88,18 @@ rand_chacha = { workspace = true }
 rand_distr = { workspace = true }
 request-response = { workspace = true }
 reqwest = { workspace = true }
-rstest = { workspace = true }
-rstest_reuse = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
 snafu = { workspace = true }
 sqlx = { workspace = true }
-staking-cli = { workspace = true }
+staking-cli = { workspace = true, optional = true }
 static_assertions = { workspace = true }
 strum = { workspace = true }
 tagged-base64 = { workspace = true }
 tempfile = { workspace = true }
-test-utils = { workspace = true }
+test-utils = { workspace = true, optional = true }
 thiserror = { workspace = true }
 time = { workspace = true }
 tokio = { workspace = true }
@@ -137,6 +135,8 @@ prost = { workspace = true }
 prost-types = { workspace = true }
 rand = { workspace = true }
 reqwest = { workspace = true }
+rstest = { workspace = true }
+rstest_reuse = { workspace = true }
 tempfile = { workspace = true }
 test-log = { workspace = true }
 tokio = { workspace = true, features = ["io-util", "net", "test-util"] }

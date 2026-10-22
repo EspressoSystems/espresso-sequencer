@@ -7,7 +7,7 @@ edition.workspace = true
 [features]
 embedded-db = ["espresso-node/embedded-db"]
 
-[dependencies]
+[dev-dependencies]
 alloy = { workspace = true }
 anyhow = { workspace = true }
 async-lock = { workspace = true }
