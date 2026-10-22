@@ -126,6 +126,7 @@ bitvec = { workspace = true }
 bs58 = { workspace = true }
 escargot = { workspace = true }
 espresso-macros = { workspace = true }
+# Keep in sync with `[features] testing`.
 espresso-types = { workspace = true, features = ["testing"] }
 espresso-utils = { workspace = true, features = ["testing"] }
 hotshot-example-types = { workspace = true }
