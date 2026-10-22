@@ -12,33 +12,59 @@ Do NOT comment on:
 - Unnecessary clones or clone optimization suggestions
 - Unused code, fields, or parameters -- clippy catches these, and `_` prefixed names are intentionally unused
 
-Post one inline comment per specific issue, then exactly one top-level summary comment last. No praise-only comments.
+Post one inline comment per issue tied to a specific line, then exactly one top-level summary comment last.
+Cross-cutting points go in the summary only. No praise-only comments.
+
+Severity:
+
+- **blocking**: security, breaking changes (API, serialization or upgrade compatibility, config, CLI), data loss,
+  consensus or protocol correctness.
+- **should fix**: bugs, missing tests for changed behavior, missing `doc/operator-notes/*.md` fragment.
+- **concern**: architecture, design, maintainability. Not blocking; explain the trade-off.
+- **nit**: style and small cleanups.
 
 Inline comment format:
 
 ```markdown
-**<Short title>** (<blocking | should fix | nit>)
+**<Short title>** (<blocking | should fix | concern | nit>)
 
 <What is wrong and the concrete failure: inputs or state that lead to the wrong result.>
 
 <Fix, as a `suggestion` block when it replaces the commented line, else a short code block or one sentence.>
 ```
 
-Summary comment template (omit empty sections; link each location as
-`[path:line](https://github.com/<REPO>/blob/<HEAD SHA>/<path>#L<line>)`):
+Summary comment. Scale it to the PR: a small fix gets the verdict and its findings; a large or behavior-changing PR adds
+the optional sections. Omit empty sections and never pad. Mark findings also posted inline with "(inline)". Link each
+location as `[path:line](https://github.com/<REPO>/blob/<HEAD SHA>/<path>#L<line>)`.
 
 ```markdown
 ### Review of #<PR NUMBER> at <HEAD SHA, first 7 chars>
 
-<Verdict, 1-3 sentences: is the change correct, what it does well if notable, anything blocking.>
+<Verdict, 1-3 sentences: is the change correct, anything blocking, where human reviewers should focus.>
 
-**Inline comments** (<n>)
+**Blocking**
 
-1. **<Title>** ([path:line](...)): <one-line reason>. <blocking | should fix | nit>
+1. **<Title>** ([path:line](...)): <one-line reason>. (inline)
 
-**Not posted inline**
+**Should fix**
 
-- <Smaller or cross-cutting points, each one line with a location.>
+1. ...
+
+**Concerns**
+
+- **<Title>**: <the trade-off in 1-3 sentences, with locations>.
+
+**Nits**
+
+- <one line each, or omit>
+
+**Behavior changes** (optional: large or behavior-changing PRs)
+
+- <What changes for users, operators, API clients or on-chain behavior, one line each.>
+
+**Compatibility** (optional: serializable types, protocol versions, migrations, config defaults)
+
+- <Reference/serialization tests (`data/v*/`), upgrade path, defaults changed.>
 
 **Threads**
 
