@@ -15,14 +15,14 @@ Do NOT comment on:
 
 Be terse. No praise, no restating the diff.
 
-Severity labels, always the icon followed by its word: ❌ blocking (security, breaking API/serialization/upgrade/config
-compatibility, data loss, consensus correctness), ⚠️ should fix (bugs, missing tests for changed behavior, missing
-`doc/operator-notes/*.md` fragment), 💭 concern (architecture, design), 🔹 nit.
+Severity is a bold word, never an emoji: **blocking** (security, breaking API/serialization/upgrade/config
+compatibility, data loss, consensus correctness), **should fix** (bugs, missing tests for changed behavior, missing
+`doc/operator-notes/*.md` fragment), **concern** (architecture, design), **nit**.
 
 Inline comment, one per issue tied to a line:
 
 ```markdown
-⚠️ should fix: **<Short title>**
+**should fix**: <Short title>
 
 <1-2 sentences: the concrete failure.>
 
@@ -36,13 +36,15 @@ Then exactly one summary with the `comment` tool, last:
 
 ✅ Security · ✅ Compatibility · ⚠️ Tests · ✅ Behavior
 
-- ❌ blocking: <few words> ([path:line](https://github.com/<REPO>/blob/<HEAD SHA>/<path>#L<line>))
-- 💭 concern: <few words, one extra sentence only if not posted inline> ([path:line](...))
+- **blocking**: <few words> ([path:line](https://github.com/<REPO>/blob/<HEAD SHA>/<path>#L<line>))
+- **should fix**: <few words> ([path:line](...))
+- **concern**: <few words, one extra sentence only if not posted inline> ([path:line](...))
+- **nit**: <few words> ([path:line](...))
 
 Not checked: <only if something was not verified>.
 ```
 
-- Checklist: ✅ fine, ⚠️ issue, ❌ blocking. Omit areas that do not apply.
+- Checklist is the only place with emoji: ✅ fine, ⚠️ issue, ❌ blocking. Omit areas that do not apply.
 - One line per finding, most severe first. No findings: write `No issues found.`
 
 Post inline comments with `inline_comment` (`path`, `line`, `body`). Reply to a thread with `reply`; the `comment_id` is
