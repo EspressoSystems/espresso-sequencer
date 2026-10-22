@@ -64,7 +64,24 @@ use test_utils::reserve_tcp_port;
 use tokio::spawn;
 use url::Url;
 use vbs::version::StaticVersionType;
-use versions::Upgrade;
+use versions::{Upgrade, Version};
+
+#[derive(Debug, Copy, Clone, ValueEnum)]
+enum DevNodeVersion {
+    #[value(name = "0.6")]
+    V0_6,
+    #[value(name = "0.7")]
+    V0_7,
+}
+
+impl DevNodeVersion {
+    fn protocol_version(self) -> Version {
+        match self {
+            DevNodeVersion::V0_6 => versions::NEW_PROTOCOL_VERSION,
+            DevNodeVersion::V0_7 => versions::TIMEOUT_EPOCH_VERSION,
+        }
+    }
+}
 
 #[derive(Default, Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
 enum L1Deployment {
@@ -224,6 +241,10 @@ struct Args {
     #[clap(flatten)]
     sql: persistence::sql::Options,
 
+    /// protocol version to run
+    #[clap(long, env = "ESPRESSO_DEV_NODE_VERSION", default_value = "0.6")]
+    version: DevNodeVersion,
+
     #[clap(flatten)]
     logging: logging::Config,
 }
@@ -278,6 +299,7 @@ async fn async_main(migrated_envs: Vec<(&str, &str)>) -> anyhow::Result<()> {
         initial_token_supply,
         token_name,
         token_symbol,
+        version,
     } = cli_params;
 
     logging.init();
@@ -670,7 +692,7 @@ async fn async_main(migrated_envs: Vec<(&str, &str)>) -> anyhow::Result<()> {
         .build();
 
     // Start the nodes
-    let network = TestNetwork::new(config, Upgrade::trivial(versions::NEW_PROTOCOL_VERSION)).await;
+    let network = TestNetwork::new(config, Upgrade::trivial(version.protocol_version())).await;
 
     let relay_server_handle = spawn(async move {
         // using explicit relayer state will avoid it calling the dev-node on `/config/hotshot` for epoch info,
