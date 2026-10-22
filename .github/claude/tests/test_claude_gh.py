@@ -272,6 +272,20 @@ def test_secret_body_refused(name, args, secret):
     assert rec.actions == [] and rec.summary is None
 
 
+def test_load_secrets_api_key_optional(monkeypatch):
+    monkeypatch.setenv("GH_TOKEN", "ghs_x")
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    assert cg.load_secrets() == {"GH_TOKEN": "ghs_x"}
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-x")
+    assert cg.load_secrets() == {"GH_TOKEN": "ghs_x", "ANTHROPIC_API_KEY": "sk-x"}
+
+
+def test_load_secrets_requires_gh_token(monkeypatch):
+    monkeypatch.delenv("GH_TOKEN", raising=False)
+    with pytest.raises(KeyError):
+        cg.load_secrets()
+
+
 def test_empty_secret_never_blocks():
     cg.check_body("anything", {"EMPTY": ""})
     t, _ = make(FakeGitHub())

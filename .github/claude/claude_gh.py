@@ -21,7 +21,7 @@ bot and belong to the same PR, and the target, mention routing and head sha come
 event, never from the record.
 
 Env: GH_TOKEN, GITHUB_EVENT_PATH, GITHUB_REPOSITORY, GITHUB_SERVER_URL, GITHUB_RUN_ID,
-GITHUB_EVENT_NAME, ANTHROPIC_API_KEY (run), GITHUB_STEP_SUMMARY (optional).
+GITHUB_EVENT_NAME, ANTHROPIC_API_KEY (optional, run), GITHUB_STEP_SUMMARY (optional).
 """
 
 import argparse
@@ -795,10 +795,10 @@ def sdk_runner(job: Job) -> AsyncIterator[Message]:
 
 
 def load_secrets() -> dict[str, str]:
-    return {
-        "ANTHROPIC_API_KEY": os.environ["ANTHROPIC_API_KEY"],
-        "GH_TOKEN": os.environ["GH_TOKEN"],
-    }
+    secrets = {"GH_TOKEN": os.environ["GH_TOKEN"]}
+    if key := os.environ.get("ANTHROPIC_API_KEY"):  # unset: CLI uses the local login
+        secrets["ANTHROPIC_API_KEY"] = key
+    return secrets
 
 
 def build_job(
