@@ -57,7 +57,7 @@ from claude_agent_sdk.types import (
     SystemPromptPreset,
 )
 from githubkit import GitHub as GitHubClient
-from githubkit import TokenAuthStrategy
+from githubkit import TokenAuthStrategy, UnauthAuthStrategy
 from githubkit.exception import RequestFailed
 
 log = logging.getLogger("claude-gh")
@@ -646,9 +646,11 @@ def make_tools(
 
 
 class GitHubKit:
-    def __init__(self, repo: str, token: str):
+    def __init__(self, repo: str, token: str | None):
+        """`token` None: unauthenticated, public reads only."""
         self.owner, self.name = repo.split("/")
-        self.gh = GitHubClient(TokenAuthStrategy(token))
+        auth = UnauthAuthStrategy() if token is None else TokenAuthStrategy(token)
+        self.gh = GitHubClient(auth)
 
     async def pr_diff(self, pr: int) -> str:
         resp = await self.gh.arequest(

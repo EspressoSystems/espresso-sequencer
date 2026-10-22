@@ -26,4 +26,5 @@ build-backend = "hatchling.build"
 include = ["claude_gh.py"]
 
 [tool.pytest.ini_options]
+testpaths = ["tests"]
 addopts = "-q --timeout 5 --durations 10"
