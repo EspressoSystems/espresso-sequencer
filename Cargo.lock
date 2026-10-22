@@ -4684,7 +4684,6 @@ dependencies = [
  "espresso-contract-deployer",
  "espresso-keyset",
  "espresso-macros",
- "espresso-node",
  "espresso-telemetry",
  "espresso-types",
  "espresso-utils",
