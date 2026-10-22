@@ -96,7 +96,7 @@ pub mod sql {
     pub mod postgres;
     pub mod sqlite;
 
-    pub use dispatch::Sql;
+    pub use crate::sql_dispatch::Sql;
 }
 pub mod state;
 pub mod unlock_schedule;

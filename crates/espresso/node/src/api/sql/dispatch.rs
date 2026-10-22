@@ -45,34 +45,30 @@ use hotshot_query_service::{
 use hotshot_query_service_types::explorer::TransactionDetailResponse;
 use hotshot_types::data::{VidShare, ViewNumber};
 use jf_merkle_tree_compat::prelude::MerkleProof;
+use light_client::storage::LightClientDbOptions;
 use tagged_base64::TaggedBase64;
 use vbs::version::Version;
 
+use super::{postgres, sqlite};
 use crate::{
     SeqTypes,
     api::{
         BlocksFrontier, RewardMerkleTreeDataSource,
-        data_source::{DatabaseMetadataSource, MigrationStatus, PruningDataSource, TableSize},
+        data_source::{
+            DataSourceOptions, DatabaseMetadataSource, MigrationStatus, Provider,
+            PruningDataSource, SequencerDataSource, TableSize,
+        },
+        options::{self, Query},
     },
     catchup::CatchupStorage,
-    persistence::ChainConfigPersistence,
+    persistence::{
+        ChainConfigPersistence,
+        sql::{
+            Options as SqlOptions, postgres as postgres_persistence, sqlite as sqlite_persistence,
+        },
+    },
+    sql_dispatch::{Sql, dispatch},
 };
-
-/// A value of either SQL backend: a data source, or a transaction of one.
-#[derive(Clone, Debug)]
-pub enum Sql<P, L> {
-    Postgres(P),
-    Sqlite(L),
-}
-
-macro_rules! dispatch {
-    ($self:expr, $x:ident => $e:expr) => {
-        match $self {
-            Sql::Postgres($x) => $e,
-            Sql::Sqlite($x) => $e,
-        }
-    };
-}
 
 impl<P, L> VersionedDataSource for Sql<P, L>
 where
@@ -1013,5 +1009,40 @@ where
 {
     async fn insert_chain_config(&mut self, chain_config: ChainConfig) -> anyhow::Result<()> {
         dispatch!(self, x => x.insert_chain_config(chain_config).await)
+    }
+}
+
+impl DataSourceOptions for SqlOptions {
+    type DataSource = Sql<postgres::DataSource, sqlite::DataSource>;
+
+    fn enable_query_module(&self, opt: options::Options, query: Query) -> options::Options {
+        opt.query_sql(query, self.clone())
+    }
+
+    fn light_client_db(&self, query: &Query) -> anyhow::Result<LightClientDbOptions> {
+        if self.embedded_db {
+            sqlite_persistence::Options(self.clone()).light_client_db(query)
+        } else {
+            postgres_persistence::Options(self.clone()).light_client_db(query)
+        }
+    }
+}
+
+#[async_trait]
+impl SequencerDataSource for Sql<postgres::DataSource, sqlite::DataSource> {
+    type Options = SqlOptions;
+
+    async fn create(opt: SqlOptions, provider: Provider, reset: bool) -> anyhow::Result<Self> {
+        Ok(if opt.embedded_db {
+            Sql::Sqlite(
+                sqlite::DataSource::create(sqlite_persistence::Options(opt), provider, reset)
+                    .await?,
+            )
+        } else {
+            Sql::Postgres(
+                postgres::DataSource::create(postgres_persistence::Options(opt), provider, reset)
+                    .await?,
+            )
+        })
     }
 }

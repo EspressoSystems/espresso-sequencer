@@ -26,8 +26,10 @@ mod persistence_metrics;
 /// [`postgres`](sql::postgres) and [`sqlite`](sql::sqlite) compile the same code against their own
 /// database. [`sql::Options::embedded_db`] picks one, and the options are shared by both.
 pub mod sql {
+    mod dispatch;
     mod options;
 
+    pub use dispatch::Persistence;
     pub use options::*;
 
     pub mod postgres;

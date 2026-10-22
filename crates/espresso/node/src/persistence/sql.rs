@@ -188,12 +188,11 @@ impl PersistenceOptions for Options {
     type Persistence = Persistence;
 
     fn set_view_retention(&mut self, view_retention: u64) {
-        self.0.consensus_pruning.target_retention = view_retention;
-        self.0.consensus_pruning.minimum_retention = view_retention;
+        self.0.set_view_retention(view_retention);
     }
 
     fn set_consensus_only(&mut self) {
-        self.0.consensus_only = true;
+        self.0.set_consensus_only();
     }
 
     async fn create(&mut self) -> anyhow::Result<Self::Persistence> {

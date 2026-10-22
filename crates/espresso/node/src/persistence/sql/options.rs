@@ -322,6 +322,17 @@ pub struct Options {
     pub(crate) consensus_only: bool,
 }
 
+impl Options {
+    pub(crate) fn set_view_retention(&mut self, view_retention: u64) {
+        self.consensus_pruning.target_retention = view_retention;
+        self.consensus_pruning.minimum_retention = view_retention;
+    }
+
+    pub(crate) fn set_consensus_only(&mut self) {
+        self.consensus_only = true;
+    }
+}
+
 impl Default for Options {
     fn default() -> Self {
         Self::parse_from(std::iter::empty::<String>())
