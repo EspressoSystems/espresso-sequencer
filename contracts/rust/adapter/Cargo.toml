@@ -15,8 +15,6 @@ path = "src/bin/eval_domain.rs"
 required-features = ["jellyfish"]
 
 [features]
-# Bindings for the `*Mock` test contracts. Only deployment and test tooling needs them.
-mocks = []
 # Type conversions between jellyfish and Solidity, used for differential testing.
 # Also required by the `eval-domain` helper binary, the only user of ark-poly.
 jellyfish = [

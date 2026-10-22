@@ -9,13 +9,10 @@ pub mod esp_token;
 pub mod esp_token_v2;
 pub mod fee_contract;
 pub mod light_client;
-#[cfg(feature = "mocks")]
 pub mod light_client_mock;
 pub mod light_client_v2;
-#[cfg(feature = "mocks")]
 pub mod light_client_v2_mock;
 pub mod light_client_v3;
-#[cfg(feature = "mocks")]
 pub mod light_client_v3_mock;
 pub mod ops_timelock;
 pub mod ownable_upgradeable;

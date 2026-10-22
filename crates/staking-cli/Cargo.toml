@@ -12,8 +12,6 @@ testing = [
     "warp",
     "test-server",
     "test-utils",
-    "espresso-contract-deployer/mocks",
-    "hotshot-contract-adapter/mocks",
 ]
 
 [dependencies]

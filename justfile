@@ -332,10 +332,6 @@ gen-bindings:
     forge bind --skip-build --module --bindings-path contracts/rust/adapter/src/bindings \
       --select "{{REGEXP}}" --overwrite
 
-    # `forge bind` rewrites mod.rs, dropping the feature gates declared in
-    # contracts/rust/adapter/Cargo.toml. Put them back.
-    sed -i -E 's%^pub mod (light_client(_v[23])?_mock);%#[cfg(feature = "mocks")]\npub mod \1;%' contracts/rust/adapter/src/bindings/mod.rs
-
     just export-contract-abis
     just gen-go-bindings
 

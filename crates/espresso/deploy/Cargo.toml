@@ -13,7 +13,7 @@ path = "src/main.rs"
 alloy = { workspace = true }
 anyhow = { workspace = true }
 clap = { workspace = true }
-espresso-contract-deployer = { workspace = true, features = ["mocks"] }
+espresso-contract-deployer = { workspace = true }
 espresso-types = { workspace = true }
 espresso-utils = { workspace = true, features = ["full"] }
 hotshot-types = { workspace = true }

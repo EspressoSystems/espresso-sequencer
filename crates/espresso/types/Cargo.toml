@@ -114,10 +114,9 @@ sha2 = { workspace = true, features = ["asm"] }
 [dev-dependencies]
 # Tests depend on our own testing feature.
 espresso-types = { path = ".", features = ["testing"] }
-hotshot-contract-adapter = { workspace = true, features = ["mocks"] }
 
 criterion = "0.5"
-espresso-contract-deployer = { workspace = true, features = ["mocks"] }
+espresso-contract-deployer = { workspace = true }
 fluent-asserter = { workspace = true }
 hotshot-example-types = { workspace = true }
 hotshot-query-service = { workspace = true, features = ["testing"] }

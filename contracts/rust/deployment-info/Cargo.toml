@@ -25,7 +25,7 @@ tracing-subscriber = { workspace = true, features = ["env-filter"] }
 url = { workspace = true }
 
 [dev-dependencies]
-espresso-contract-deployer = { path = "../deployer", features = ["mocks"] }
+espresso-contract-deployer = { path = "../deployer" }
 hotshot-state-prover = { workspace = true, features = ["testing"] }
 tempfile = { workspace = true }
 test-log = { workspace = true }
