@@ -586,13 +586,24 @@ where
         );
 
         let blocks: Vec<_> = blocks_stream
-            .then(|block| async move { block.resolve().await })
-            .collect()
-            .await;
+            .zip(futures::stream::iter(from..until))
+            .then(|(block, i)| async move {
+                block
+                    .with_timeout(FETCH_TIMEOUT)
+                    .await
+                    .ok_or_else(|| not_found(format!("block {i} not available")))
+            })
+            .try_collect()
+            .await?;
         let vids: Vec<_> = vids_stream
-            .then(|vid| async move { vid.resolve().await })
-            .collect()
-            .await;
+            .zip(futures::stream::iter(from..until))
+            .then(|(vid, i)| async move {
+                vid.with_timeout(FETCH_TIMEOUT)
+                    .await
+                    .ok_or_else(|| not_found(format!("VID common for block {i} not available")))
+            })
+            .try_collect()
+            .await?;
 
         if blocks.len() != vids.len() {
             return Err(anyhow::anyhow!(
@@ -1409,6 +1420,7 @@ fn payload_id_to_hs(id: v1::availability::PayloadId) -> anyhow::Result<HsBlockId
 fn classify_query_error(err: hotshot_query_service::QueryError) -> anyhow::Error {
     match err {
         QueryError::NotFound | QueryError::Missing => not_found(err.to_string()),
+        QueryError::Pruned { .. } => AvailabilityError::Pruned(err.to_string()).into(),
         QueryError::Error { .. } => anyhow::anyhow!(err.to_string()),
     }
 }
@@ -2200,6 +2212,7 @@ impl From<crate::options::PublicNodeConfig> for proto::RuntimeConfigResponse {
             identity,
             catchup_base_timeout: _,
             local_catchup_timeout: _,
+            http_catchup_delay: _,
             bootstrap_epoch_catchup_timeout: _,
             catchup_backoff: _,
             follower,
@@ -3201,7 +3214,8 @@ where
             SeqTypes,
             espresso_types::BlockMerkleTree,
             3,
-        > + NodeStateDataSource
+        > + hotshot_query_service::merklized_state::MerklizedStateHeightPersistence
+        + NodeStateDataSource
         + StakeTableDataSource<SeqTypes>
         + hotshot_query_service::data_source::VersionedDataSource
         + Sized
@@ -3391,6 +3405,7 @@ where
         let fetch_timeout = FETCH_TIMEOUT;
         let start = start as usize;
         let end = end as usize;
+        enforce_range(start, end, lc_large_object_range_limit())?;
 
         let payloads_stream = AvailabilityDataSource::get_payload_range(ds, start..end).await;
         let vid_stream = AvailabilityDataSource::get_vid_common_range(ds, start..end).await;
@@ -3541,7 +3556,8 @@ where
             SeqTypes,
             espresso_types::BlockMerkleTree,
             3,
-        > + NodeStateDataSource
+        > + hotshot_query_service::merklized_state::MerklizedStateHeightPersistence
+        + NodeStateDataSource
         + StakeTableDataSource<SeqTypes>
         + hotshot_query_service::data_source::VersionedDataSource
         + Sized
@@ -3962,6 +3978,7 @@ fn lc_large_object_range_limit() -> usize {
 pub(crate) fn lc_error(err: hotshot_query_service::Error) -> anyhow::Error {
     match err.status() {
         StatusCode::NOT_FOUND => not_found(err.to_string()),
+        StatusCode::GONE => AvailabilityError::Pruned(err.to_string()).into(),
         StatusCode::BAD_REQUEST => bad_request(err.to_string()),
         _ => anyhow::anyhow!("{err}"),
     }
@@ -5088,19 +5105,25 @@ mod tests {
     /// Covers the four shapes and all seven arms: every version's vector must select the arm named
     /// after it, and the proto message must carry exactly the fields v1 serializes, so neither a
     /// new protocol version nor a proto edit can add or drop a header field without failing here.
+    /// A version may drop a field its shape still declares, which the shape then renders empty;
+    /// the table names that field so the check stays exact for the rest.
     #[test]
     fn every_header_version_maps_to_its_arm_and_fields() {
-        for (version, shape) in [
-            ("v1", "HeaderV1"),
-            ("v2", "HeaderV1"),
-            ("v3", "HeaderV3"),
-            ("v4", "HeaderV4"),
-            ("v5", "HeaderV5"),
-            ("v6", "HeaderV5"),
-            ("v7", "HeaderV5"),
+        for (version, shape, dropped) in [
+            ("v1", "HeaderV1", None),
+            ("v2", "HeaderV1", None),
+            ("v3", "HeaderV3", None),
+            ("v4", "HeaderV4", None),
+            ("v5", "HeaderV5", None),
+            ("v6", "HeaderV5", None),
+            ("v7", "HeaderV5", Some("builder_commitment")),
         ] {
             let (header, fields) = reference_header(version);
-            assert_same_fields(shape, &fields);
+            let mut expected = fields.clone();
+            if let Some(field) = dropped {
+                expected[field] = String::new().into();
+            }
+            assert_same_fields(shape, &expected);
 
             use proto::header_response::Header;
             let converted = proto::HeaderResponse::from(&header).header.unwrap();
@@ -5116,10 +5139,6 @@ mod tests {
                     assert_eq!(
                         header.payload_commitment,
                         fields["payload_commitment"].as_str().unwrap()
-                    );
-                    assert_eq!(
-                        header.builder_commitment,
-                        fields["builder_commitment"].as_str().unwrap()
                     );
                     assert_eq!(
                         header.block_merkle_tree_root,
@@ -5155,16 +5174,28 @@ mod tests {
                     assert!(header.chain_config.is_some());
                 }};
             }
+            // Every shape before 0.7 carries the builder commitment; 0.7 dropped the field.
+            macro_rules! assert_builder_commitment {
+                ($header:expr) => {
+                    assert_eq!(
+                        $header.builder_commitment,
+                        fields["builder_commitment"].as_str().unwrap()
+                    );
+                };
+            }
             let arm = match converted {
                 Header::V1(header) => {
+                    assert_builder_commitment!(&header);
                     assert_shared_fields!(header);
                     "v1"
                 },
                 Header::V2(header) => {
+                    assert_builder_commitment!(&header);
                     assert_shared_fields!(header);
                     "v2"
                 },
                 Header::V3(header) => {
+                    assert_builder_commitment!(&header);
                     assert_shared_fields!(&header);
                     assert_eq!(
                         header.reward_merkle_tree_root,
@@ -5173,6 +5204,7 @@ mod tests {
                     "v3"
                 },
                 Header::V4(header) => {
+                    assert_builder_commitment!(&header);
                     assert_shared_fields!(&header);
                     assert_eq!(
                         header.timestamp_millis,
@@ -5189,14 +5221,20 @@ mod tests {
                     "v4"
                 },
                 Header::V5(header) => {
+                    assert_builder_commitment!(&header);
                     assert_shared_fields!(&header);
                     "v5"
                 },
                 Header::V6(header) => {
+                    assert_builder_commitment!(&header);
                     assert_shared_fields!(&header);
                     "v6"
                 },
                 Header::V7(header) => {
+                    assert_eq!(
+                        header.builder_commitment, "",
+                        "0.7 carries no builder commitment"
+                    );
                     assert_shared_fields!(&header);
                     "v7"
                 },
@@ -5331,8 +5369,9 @@ mod tests {
         );
     }
 
-    // A test network only disperses with ADVZ, so the AvidM arms run only here, against the
-    // namespaced wrappers the node stores rather than the inner per-namespace shares.
+    // A test network only disperses with AvidmGf2, so the ADVZ and AvidM arms, which mainnet
+    // still serves for blocks from before 0.6, run only here, against the namespaced wrappers
+    // the node stores rather than the inner per-namespace shares.
     #[test]
     fn every_vid_share_arm_maps_to_its_own_shape() {
         let payload = b"two namespaces worth of payload bytes, dispersed";
@@ -5349,7 +5388,20 @@ mod tests {
             panic!("the V0 arm");
         };
         assert!(advz.aggregate_proofs.starts_with("FIELD~"));
-        assert!(!advz.evals_proof.unwrap().proof.is_empty());
+        let v1 = &serde_json::to_value(&share).unwrap()["V0"];
+        assert_eq!(
+            advz.aggregate_proofs,
+            v1["aggregate_proofs"].as_str().unwrap()
+        );
+        assert_eq!(advz.evals, v1["evals"].as_str().unwrap());
+        let proof = advz.evals_proof.unwrap();
+        assert_eq!(proof.pos, v1["evals_proof"]["pos"].as_str().unwrap());
+        let v1_nodes = v1["evals_proof"]["proof"].as_array().unwrap();
+        assert!(v1_nodes.len() > 1, "{v1}");
+        assert_eq!(proof.proof.len(), v1_nodes.len());
+        for (v1_node, node) in v1_nodes.iter().zip(&proof.proof) {
+            assert_advz_node_matches_v1(v1_node, node);
+        }
 
         let param = init_avidm_param(3).unwrap();
         let (_, mut shares) =
@@ -5382,6 +5434,35 @@ mod tests {
         assert_eq!(gf2.namespaces.len(), 2);
         assert!(!gf2.namespaces[0].payload.is_empty());
         assert!(gf2.namespaces[0].mt_proofs[0].starts_with("MERKLE_PROOF~"));
+    }
+
+    fn assert_advz_node_matches_v1(v1: &serde_json::Value, v2: &proto::AdvzMerkleNode) {
+        use proto::advz_merkle_node::Node;
+        match (v2.node.as_ref().unwrap(), v1) {
+            (Node::Leaf(leaf), v1) if v1.get("Leaf").is_some() => {
+                let v1 = &v1["Leaf"];
+                assert_eq!(leaf.elem, v1["elem"].as_str().unwrap());
+                assert_eq!(leaf.pos, v1["pos"].as_str().unwrap());
+                assert_eq!(leaf.value, v1["value"].as_str().unwrap());
+            },
+            (Node::Branch(branch), v1) if v1.get("Branch").is_some() => {
+                let v1 = &v1["Branch"];
+                assert_eq!(branch.value, v1["value"].as_str().unwrap());
+                let v1_children = v1["children"].as_array().unwrap();
+                assert_eq!(branch.children.len(), v1_children.len());
+                for (v1_child, v2_child) in v1_children.iter().zip(&branch.children) {
+                    assert_advz_node_matches_v1(v1_child, v2_child);
+                }
+            },
+            (Node::ForgottenSubtree(subtree), v1) if v1.get("ForgettenSubtree").is_some() => {
+                assert_eq!(
+                    subtree.value,
+                    v1["ForgettenSubtree"]["value"].as_str().unwrap()
+                );
+            },
+            (Node::Empty(_), v1) if v1.as_str() == Some("Empty") => {},
+            (v2, v1) => panic!("{v2:?} against {v1}"),
+        }
     }
 
     // No test network registers a validator, so this mapping is only exercised here.
@@ -6222,6 +6303,15 @@ mod tests {
     }
 
     #[test]
+    fn lc_error_preserves_gone() {
+        let err = lc_error(custom(StatusCode::GONE));
+        assert!(matches!(
+            err.downcast_ref::<AvailabilityError>(),
+            Some(AvailabilityError::Pruned(_))
+        ));
+    }
+
+    #[test]
     fn lc_error_other_statuses_stay_internal() {
         let err = lc_error(custom(StatusCode::INTERNAL_SERVER_ERROR));
         assert!(err.downcast_ref::<AvailabilityError>().is_none());
@@ -6268,7 +6358,7 @@ mod tests {
             .map(|byte| espresso_types::Transaction::new(namespace, vec![byte; 8]))
             .collect();
         let (payload, _) = espresso_types::Payload::from_transactions(
-            transactions,
+            &transactions,
             &Default::default(),
             &Default::default(),
         )
@@ -6487,7 +6577,16 @@ mod tests {
                         light_client_db: Some(proto::LightClientDbOptions {
                             num_connections: 7,
                             num_leaves: 11,
-                            lc_path: None,
+                            // Not pinned to `None`: it defaults under ESPRESSO_NODE_STORAGE_PATH.
+                            lc_path: cfg
+                                .modules
+                                .query
+                                .as_ref()
+                                .unwrap()
+                                .light_client_db
+                                .lc_path
+                                .as_ref()
+                                .map(|path| path.display().to_string()),
                         }),
                     }),
                     submit: false,

@@ -59,7 +59,8 @@ descriptor set is exported as `espresso_api::FILE_DESCRIPTOR_SET`).
   bytes v1 serves, in a shape a client can walk node by node, though recomputing a leaf hash still needs ark-serialize.
   An account with no fee entry has a balance of zero. Two v1 shapes collapse: the height and commitment snapshot
   selectors become query parameters on one route per tree, exactly one required, and v1's two block-height routes both
-  read the same `get_last_state_height`, so v2 serves that number once.
+  read the same `get_last_state_height`, so v2 serves that number once. A pruned snapshot is a 410 on v1 and a 404 on
+  v2, which has no gone code. Reward balances, proofs and claim inputs stay a 404.
 - `RewardStateService` serves the reward tree (`RewardMerkleTreeV2`) under `/v2/merklized-state/reward/...`: an
   account's balance and its proof, the L1 claim input, paged reward amounts, and the serialized tree. A balance or proof
   takes an optional `height`, absent meaning the newest height the light client contract finalized, where v1 has a route
