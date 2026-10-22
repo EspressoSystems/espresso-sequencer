@@ -4,145 +4,23 @@ on:
   pull_request:
     types: [opened, ready_for_review, reopened]
 
-# run holds ANTHROPIC_API_KEY and a read token and only records actions; start and apply hold the
-# write token and never run Claude. All three check out the PR head, so .github/claude/claude_gh.py
-# is controlled by whoever pushed the head branch. Fine: fork PRs and Dependabot-authored PRs are
-# skipped, so the head branch lives in this repo and was pushed with write access.
+# The three jobs run .github/claude from this run's merge commit, the same commit this workflow
+# comes from; Claude's cwd is the PR head. The PR controls both. Fine: fork PRs and
+# Dependabot-authored PRs are skipped, so the head branch lives in this repo and was pushed with
+# write access.
 jobs:
-  start:
+  review:
     if: |
       github.event.pull_request.draft == false &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       github.event.pull_request.user.login != 'dependabot[bot]'
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
+    uses: ./.github/workflows/claude-job.yml
     permissions:
+      contents: write
       pull-requests: write
-    outputs:
-      comment-id: ${{ steps.start.outputs.comment-id }}
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 1
-          ref: ${{ github.event.pull_request.head.sha }}
-          sparse-checkout: .github/claude
-          persist-credentials: false
-
-      - uses: astral-sh/setup-uv@v10.3.2
-        with:
-          cache-dependency-glob: .github/claude/uv.lock
-
-      - name: Post status comment
-        id: start
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          id=$(uv run --locked --project .github/claude claude-gh start review)
-          echo "comment-id=$id" >> "$GITHUB_OUTPUT"
-
-  run:
-    needs: start
-    # Only run is cancelled: apply (if: always()) still marks a cancelled run's status comment.
-    concurrency:
-      group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
-      cancel-in-progress: true
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    permissions:
-      contents: read
-      pull-requests: read
-      issues: read
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 1
-          ref: ${{ github.event.pull_request.head.sha }}
-          persist-credentials: false
-
-      - name: Fetch team review comments
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          mkdir -p ./tmp
-          scripts/fetch-pr-team-comments \
-            "${{ github.repository_owner }}" \
-            "${{ github.event.repository.name }}" \
-            "${{ github.event.pull_request.number }}" \
-            > ./tmp/pr-review-comments.json
-
-      - name: Prepare backport context
-        env:
-          GH_TOKEN: ${{ github.token }}
-          HEAD_REF: ${{ github.head_ref }}
-          OWNER: ${{ github.repository_owner }}
-          REPO: ${{ github.event.repository.name }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: |
-          set -euo pipefail
-          # Backport PRs use the branch name backport-<original>-to-<target>,
-          # created by both scripts/backport-dispatch and korthout/backport-action.
-          if [[ ! "$HEAD_REF" =~ ^backport-([0-9]+)-to- ]]; then
-            echo "not a backport branch ($HEAD_REF); skipping"
-            exit 0
-          fi
-          orig="${BASH_REMATCH[1]}"
-          echo "$orig" > ./tmp/is-backport
-          scripts/fetch-pr-team-comments "$OWNER" "$REPO" "$orig" \
-            > ./tmp/original-pr-comments.json
-          gh pr diff "$orig" > ./tmp/original.diff
-          gh pr diff "$PR_NUMBER" > ./tmp/backport.diff
-
-      - uses: astral-sh/setup-uv@v10.3.2
-        with:
-          cache-dependency-glob: .github/claude/uv.lock
-
-      - name: Claude Code Review
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          GH_TOKEN: ${{ github.token }}
-        run: uv run --locked --project .github/claude claude-gh run review
-
-      - uses: actions/upload-artifact@v7
-        if: always()
-        with:
-          overwrite: true
-          name: claude-actions-review
-          path: tmp/actions.json
-          retention-days: 7
-          if-no-files-found: ignore
-
-  apply:
-    needs: [start, run]
-    if: always() && needs.start.result == 'success'
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      contents: write # resolveReviewThread is refused with contents: read
-      pull-requests: write
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 1
-          ref: ${{ github.event.pull_request.head.sha }}
-          sparse-checkout: .github/claude
-          persist-credentials: false
-
-      - uses: astral-sh/setup-uv@v10.3.2
-        with:
-          cache-dependency-glob: .github/claude/uv.lock
-
-      - uses: actions/download-artifact@v8
-        continue-on-error: true # missing when run failed before writing the record
-        with:
-          name: claude-actions-review
-          path: tmp/actions
-
-      - name: Apply actions
-        env:
-          GH_TOKEN: ${{ github.token }}
-          STATUS_ID: ${{ needs.start.outputs.comment-id }}
-          RUN_RESULT: ${{ needs.run.result }}
-        run: |
-          uv run --locked --project .github/claude claude-gh apply review \
-            --status-id "$STATUS_ID" --run-result "$RUN_RESULT" \
-            --record tmp/actions/actions.json
+      issues: write
+    secrets:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+    with:
+      job: review
+      ref: ${{ github.sha }}

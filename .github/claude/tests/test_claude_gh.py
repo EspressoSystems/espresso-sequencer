@@ -50,6 +50,7 @@ class FakeGitHub:
     diff: str | RequestFailed = "diff"
     live_diffs: int = 0
     compares: list[tuple[str, str]] = field(default_factory=list)
+    edit_max: int | None = None  # edits longer than this raise
 
     async def pr_diff(self, pr: int) -> str:
         self.live_diffs += 1
@@ -89,6 +90,8 @@ class FakeGitHub:
         return cg.Posted(len(self.posted), False)
 
     async def edit_comment(self, comment: cg.Posted, body: str) -> None:
+        if self.edit_max is not None and len(body) > self.edit_max:
+            raise failed(422, "body is too long")
         self.edits.append((comment, body))
 
     async def thread(self, thread_id: str) -> cg.Thread:
@@ -187,7 +190,11 @@ def test_options_no_bash():
     assert o.tools == ["Read", "Grep", "Glob"]
     assert "Bash" not in o.allowed_tools
     assert "mcp__gh" in o.allowed_tools
-    assert o.disallowed_tools == ["Read(//proc/**)"]
+    assert o.disallowed_tools == [
+        "Read(//proc/**)",
+        "Grep(//proc/**)",
+        "Glob(//proc/**)",
+    ]
     assert o.setting_sources == ["user"]
     assert o.permission_mode == "dontAsk"
     assert o.max_turns == 120
@@ -237,7 +244,7 @@ def test_write_tools_record_actions_and_post_nothing():
         "error": None,
         "candidates": [],
         "head_sha": None,
-        "diff_too_large": False,
+        "diff_unavailable": False,
     }
 
 
@@ -356,6 +363,21 @@ def test_secret_in_notes_refused(name, args):
     with pytest.raises(ValueError, match="refusing"):
         call(t, name, args)
     assert rec.candidates == [cg.Candidate("a", 1, "s")]
+
+
+@pytest.mark.parametrize(
+    "name,args",
+    [
+        ("candidate", {"path": "sk-secret", "line": 1, "summary": "s"}),
+        ("inline_comment", {"path": "sk-secret", "line": 1, "body": "b"}),
+        ("resolve_thread", {"thread_id": "sk-secret"}),
+    ],
+)
+def test_secret_in_any_string_arg_refused(name, args):
+    t, rec = make(FakeGitHub())
+    with pytest.raises(ValueError, match="refusing"):
+        call(t, name, args)
+    assert rec.actions == [] and rec.candidates == []
 
 
 def test_reads_return_text():
@@ -556,7 +578,7 @@ def test_run_ok_logs_final_line_and_writes_record(caplog, tmp_path):
         "error": None,
         "candidates": [],
         "head_sha": None,
-        "diff_too_large": False,
+        "diff_unavailable": False,
     }
 
 
@@ -723,11 +745,16 @@ def test_fetch_diff_compares_shas():
     assert gh.compares == [(BASE, SHA)] and gh.live_diffs == 0
 
 
-def test_fetch_diff_too_large_is_none_other_errors_raise():
-    gh = FakeGitHub(diff=failed(406, "too large"))
+@pytest.mark.parametrize("status", [404, 406, 422, 500])
+def test_fetch_diff_unavailable_is_none(status):
+    gh = FakeGitHub(diff=failed(status, "x"))
     assert asyncio.run(cg.fetch_diff(gh, BASE, SHA)) is None
+
+
+@pytest.mark.parametrize("status", [401, 403])
+def test_fetch_diff_auth_errors_raise(status):
     with pytest.raises(RequestFailed):
-        asyncio.run(cg.fetch_diff(FakeGitHub(diff=failed(500, "x")), BASE, SHA))
+        asyncio.run(cg.fetch_diff(FakeGitHub(diff=failed(status, "x")), BASE, SHA))
 
 
 def test_view_json_is_compact_and_has_no_comments():
@@ -799,7 +826,7 @@ def test_record_json_roundtrip():
     rec.candidates = list(CANDIDATES)
     assert cg.parse_record(json.loads(json.dumps(cg.to_json(rec))), "review") == rec
     rec = record(summary=None, footer=None, head_sha=None)
-    rec.diff_too_large = True
+    rec.diff_unavailable = True
     assert cg.parse_record(cg.to_json(rec), "review") == rec
 
 
@@ -826,12 +853,12 @@ def test_apply_fetches_head_once_without_record_sha():
     assert gh.head_fetches == 1
 
 
-def test_apply_notes_diff_too_large():
+def test_apply_notes_diff_unavailable():
     gh = FakeGitHub()
     rec = record()
-    rec.diff_too_large = True
+    rec.diff_unavailable = True
     do_apply(gh, rec)
-    body = f"{HEADER}\n\nsum\n\nDiff too large for line validation.\n\n{FOOT}"
+    body = f"{HEADER}\n\nsum\n\nDiff unavailable; inline lines unchecked.\n\n{FOOT}"
     assert gh.edits == [(STATUS, body)]
 
 
@@ -919,7 +946,7 @@ def test_job_mismatch_refused_whole():
 )
 def test_kind_not_allowed_is_skipped(name, action, line):
     gh = FakeGitHub(threads={"T_1": thread()})
-    assert do_apply(gh, record([action], job_name=name), job_name=name) == 1
+    assert do_apply(gh, record([action], job_name=name), job_name=name) == 0
     assert gh.posted == [] and gh.resolved == []
     assert f"**Not applied**\n- {line}" in gh.edits[-1][1]
 
@@ -935,7 +962,7 @@ def test_kind_not_allowed_is_skipped(name, action, line):
 )
 def test_bad_thread_is_skipped(other, match):
     gh = FakeGitHub(threads={"T_1": other})
-    assert do_apply(gh, record([cg.Resolve("T_1")])) == 1
+    assert do_apply(gh, record([cg.Resolve("T_1")])) == 0
     assert gh.resolved == []
     assert match in gh.edits[-1][1] and "**Not applied**" in gh.edits[-1][1]
 
@@ -950,7 +977,7 @@ def test_bad_thread_is_skipped(other, match):
 )
 def test_invalid_action_is_skipped(action):
     gh = FakeGitHub()
-    assert do_apply(gh, record([action])) == 1
+    assert do_apply(gh, record([action])) == 0
     assert gh.posted == [] and gh.resolved == []
 
 
@@ -961,7 +988,7 @@ def test_github_error_skips_only_that_action():
         cg.InlineComment("a.rs", 9, "bad"),
         cg.Reply(2, "third"),
     ]
-    assert do_apply(gh, record(actions)) == 1
+    assert do_apply(gh, record(actions)) == 0
     assert gh.posted == [("reply", (7, 1, "first")), ("reply", (7, 2, "third"))]
     assert gh.edits == [
         (
@@ -997,6 +1024,27 @@ def test_error_subtype_is_the_incomplete_reason():
                 f"Review incomplete: error_max_turns. [run](http://run)\n\n{FOOT}"
             ),
         )
+    ]
+
+
+def test_status_body_fits_comment_limit():
+    big = "x" * (cg.MAX_BODY + 100)
+    rec = record(summary="y" * 1000)
+    rec.candidates = [cg.Candidate("a.rs", 1, "z" * 200)] * 20
+    assert "Candidates" in cg.status_body(rec, 7, "success", RUN, [])
+    rec.candidates *= 20
+    body = cg.status_body(rec, 7, "success", RUN, [])
+    assert len(body) <= cg.MAX_BODY and "y" * 1000 in body and "Candidates" not in body
+    rec.summary = big
+    body = cg.status_body(rec, 7, "success", RUN, [])
+    assert len(body) <= cg.MAX_BODY and body.startswith(HEADER) and FOOT in body
+
+
+def test_apply_falls_back_when_edit_is_rejected():
+    gh = FakeGitHub(edit_max=200)
+    assert do_apply(gh, record(summary="s" * 500)) == 0
+    assert gh.edits == [
+        (STATUS, "Review summary could not be posted. [run](http://run)")
     ]
 
 
@@ -1122,6 +1170,16 @@ def test_diff_lines():
     }
 
 
+def test_diff_lines_path_with_space_has_no_trailing_tab():
+    diff = "--- a/foo bar\t\n+++ b/foo bar\t\n@@ -1 +1 @@\n-a\n+b\n"
+    assert cg.diff_lines(diff) == {"foo bar": {1}}
+
+
+def test_diff_lines_unquotes_c_style_names():
+    diff = '--- "a/\\303\\244.md"\n+++ "b/\\303\\244 \\"x\\".md"\n@@ -1 +1 @@\n-a\n+b\n'
+    assert cg.diff_lines(diff) == {'\u00e4 "x".md': {1}}
+
+
 def test_diff_lines_empty():
     assert cg.diff_lines("") == {}
 
@@ -1207,7 +1265,7 @@ def test_build_review_job(tmp_path):
     assert j.append is None and j.cwd is None
     assert (j.builtin, j.settings) == (["Read", "Grep", "Glob"], ["user"])
     assert set(tools_by_name(j.tools)) == {"pr_diff", "pr_view"} | WRITES_AND_NOTES
-    assert (j.record.head_sha, j.record.diff_too_large) == (SHA, False)
+    assert (j.record.head_sha, j.record.diff_unavailable) == (SHA, False)
     assert j.record_path == tmp_path / "actions.json"
 
 
@@ -1217,6 +1275,17 @@ def test_build_review_job_backport(tmp_path):
     body = doc("review.md") + "\n\n" + doc("review-backport.md")
     assert j.prompt == cg.review_prompt(PR, SHA, body)
     assert (j.append, j.builtin) == (None, ["Read", "Grep", "Glob"])
+
+
+def test_build_review_job_backport_reads_workdir_tmp(tmp_path):
+    work = tmp_path / "pr"
+    (work / "tmp").mkdir(parents=True)
+    (work / "tmp" / "is-backport").write_text("41")
+    argv = ["review", "--workdir", str(work)]
+    j = build(tmp_path, argv, REVIEW_EVENT, SHA, DIFF)
+    body = doc("review.md") + "\n\n" + doc("review-backport.md")
+    assert j.prompt == cg.review_prompt(PR, SHA, body)
+    assert j.record_path == tmp_path / "actions.json"
 
 
 def test_build_code_review_job(tmp_path):
@@ -1239,7 +1308,7 @@ def test_build_mention_job(tmp_path):
     assert j.prompt == cg.mention_prompt(m, doc("mention.md"))
     assert (j.append, j.settings) == (None, ["user", "project"])
     assert set(tools_by_name(j.tools)) == {"pr_diff", "pr_view", "comment"}
-    assert (j.record.head_sha, j.record.diff_too_large) == (None, False)
+    assert (j.record.head_sha, j.record.diff_unavailable) == (None, False)
 
 
 def test_build_job_validates_lines_and_saves(tmp_path):
@@ -1254,8 +1323,8 @@ def test_build_job_validates_lines_and_saves(tmp_path):
 def test_build_job_without_diff_skips_validation(tmp_path):
     j = build(tmp_path, CODE_REVIEW_ARGV, CODE_REVIEW_EVENT, SHA, None)
     call(j.tools, "inline_comment", {"path": "any.rs", "line": 5, "body": "x"})
-    assert j.record.diff_too_large is True
-    with pytest.raises(ValueError, match="too large"):
+    assert j.record.diff_unavailable is True
+    with pytest.raises(ValueError, match="did not serve"):
         call(j.tools, "pr_diff", {})
 
 
@@ -1345,13 +1414,23 @@ def test_amain_run(tmp_path, argv, name, event, compares, diff_file):
     assert rec.summary == "s" and rec.head_sha == expected == j.record.head_sha
 
 
-def test_amain_run_diff_too_large(tmp_path):
+def test_amain_run_workdir_splits_tmp(tmp_path):
+    work = tmp_path / "pr"
+    argv = ["run", "review", "--workdir", str(work)]
+    assert amain(tmp_path, argv, "pull_request", REVIEW_EVENT) == 0
+    assert (work / "tmp" / "pr.diff").read_text() == "diff"
+    assert not (tmp_path / "t" / "pr.diff").exists()
+    assert (tmp_path / "t" / "actions.json").exists()
+    assert not (work / "tmp" / "actions.json").exists()
+
+
+def test_amain_run_diff_unavailable(tmp_path):
     gh = FakeGitHub(diff=failed(406, "too large"))
     assert amain(tmp_path, ["run", "review"], "pull_request", REVIEW_EVENT, gh) == 0
     rec = cg.parse_record(
         json.loads((tmp_path / "t" / "actions.json").read_text()), "review"
     )
-    assert rec.diff_too_large is True
+    assert rec.diff_unavailable is True
     assert not (tmp_path / "t" / "pr.diff").exists()
 
 

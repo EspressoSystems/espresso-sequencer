@@ -113,6 +113,7 @@ jobs:
 
       - name: Lint, type-check and test claude-gh
         run: |
+          just claude::fmt --check
           just claude::lint
           just claude::check
           just claude::test

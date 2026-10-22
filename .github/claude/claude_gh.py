@@ -1,10 +1,10 @@
 r"""Run Claude on a GitHub PR or issue with a fixed set of tools, in three workflow jobs.
 
-    claude-gh start review          # write token: post the status comment, print its id
-    claude-gh run review            # read token, Claude: record actions in tmp/actions.json
-    claude-gh run code-review --model opus --effort high --workdir pr \
+    claude_gh.py start review          # write token: post the status comment, print its id
+    claude_gh.py run review            # read token, Claude: record actions in tmp/actions.json
+    claude_gh.py run code-review --model opus --effort high --workdir pr \
         --head-sha <sha> --base-sha <sha>
-    claude-gh apply review --status-id 1 --run-result success --record tmp/actions/actions.json
+    claude_gh.py apply review --status-id 1 --run-result success --record tmp/actions/actions.json
 
 Jobs: review (PR opened), mention (@claude mention, answers in the thread), code-review.
 
@@ -14,8 +14,9 @@ recorded, never sent; the record is rewritten after each one.
 
 `apply` is best effort: each action is validated and posted independently. An action that
 fails validation or that GitHub rejects is skipped and listed in the status comment under
-"Not applied", and apply exits non-zero after posting the rest. Only a structurally
-unusable record (bad JSON, unknown kind, job mismatch) is refused as a whole.
+"Not applied"; apply still exits zero. Apply exits non-zero when the run did not succeed.
+Only a structurally unusable record (bad JSON, unknown kind, job mismatch) is refused as a
+whole.
 
 The record is not a trust boundary on review: the PR author controls the apply workflow
 too. The checks catch model mistakes and prompt injection: a thread must be started by a
@@ -63,8 +64,8 @@ from githubkit.exception import RequestFailed
 log = logging.getLogger("claude-gh")
 
 BUILTIN = ["Read", "Grep", "Glob"]
-# Read rules also govern Grep and Glob, so this keeps /proc/*/environ (tokens) unreadable.
-DISALLOWED = ["Read(//proc/**)"]
+# Deny rules need one entry per tool; this keeps /proc/*/environ (tokens) unreadable.
+DISALLOWED = ["Read(//proc/**)", "Grep(//proc/**)", "Glob(//proc/**)"]
 BOTS = {"github-actions", "claude"}
 WRITES = {"inline_comment", "reply", "comment", "resolve_thread"}
 JOB_WRITES = {
@@ -78,6 +79,18 @@ CLI_ENV = {"GH_TOKEN": "", "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS": "1"}
 MAX_TURNS = 120
 SERVER = "gh"
 THREAD_ID = re.compile(r"[A-Za-z0-9_=-]+")
+ESCAPE = re.compile(rb"\\(?:([0-7]{3})|(.))")
+C_ESCAPES = {
+    b"a": b"\a",
+    b"b": b"\b",
+    b"f": b"\f",
+    b"n": b"\n",
+    b"r": b"\r",
+    b"t": b"\t",
+    b"v": b"\v",
+    b"\\": b"\\",
+    b'"': b'"',
+}
 HUNK = re.compile(r"@@ -\d+(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")
 CLAUDE_DIR = Path(__file__).parent
 TMP = Path("tmp")
@@ -85,7 +98,8 @@ READS = {"pr_diff", "pr_view", "issue_view"}
 # In-process bookkeeping: recorded on the Record, never posted as an action.
 NOTES = {"candidate", "verdict"}
 JOB_NOTES = {"review": NOTES, "mention": set(), "code-review": NOTES}
-TEXT_ARGS = {"body", "summary", "evidence"}
+MAX_BODY = 65536  # GitHub comment limit
+TRUNCATED = "\n[truncated]"
 Status = Literal["kept", "wrong", "duplicate"]
 STATUSES = ("kept", "wrong", "duplicate")
 CANDIDATE_ID = re.compile(r"c[1-9]\d*")
@@ -161,7 +175,9 @@ class Record:
     error: str | None = None  # result subtype when the run ended in error
     candidates: list[Candidate] = field(default_factory=list)  # id c<n> is index n-1
     head_sha: str | None = None  # PR head the run saw; None for mention
-    diff_too_large: bool = False  # GitHub refused the diff, inline lines unchecked
+    diff_unavailable: bool = (
+        False  # GitHub did not serve the diff, inline lines unchecked
+    )
 
 
 @dataclass(frozen=True)
@@ -273,7 +289,7 @@ def diff_lines(diff: str) -> dict[str, set[int]]:
                     result[path].add(line_no)
                 line_no += 1
         elif line.startswith("+++ "):
-            name = line[4:]
+            name = unquote(line[4:].removesuffix("\t"))
             path = name.removeprefix("b/") if name.startswith("b/") else None
             if path:
                 result.setdefault(path, set())
@@ -282,6 +298,17 @@ def diff_lines(diff: str) -> dict[str, set[int]]:
             line_no = int(m[2])
             new = int(m[3] or 1)
     return result
+
+
+def unquote(name: str) -> str:
+    """Decode a C-style quoted name as git writes non-ASCII or special paths."""
+    if len(name) < 2 or not (name[0] == name[-1] == '"'):
+        return name
+
+    def byte(m: re.Match[bytes]) -> bytes:
+        return bytes([int(m[1], 8)]) if m[1] else C_ESCAPES[m[2]]
+
+    return ESCAPE.sub(byte, name[1:-1].encode()).decode()
 
 
 def check_in_diff(lines: Mapping[str, set[int]], path: str, line: int) -> None:
@@ -452,26 +479,40 @@ def noun(job: str) -> str:
 def status_body(
     record: Record, pr: int, run_result: str, run_url: str, skipped: list[str]
 ) -> str:
+    """Fits MAX_BODY: drops the candidates section first, then truncates the summary."""
     what = noun(record.job)
     reason = record.error or (run_result if run_result != "success" else None)
-    parts = []
-    if record.head_sha:
-        parts.append(f"### Review of #{pr} at {record.head_sha[:7]}")
-    if record.summary:
-        parts.append(record.summary)
-    if record.diff_too_large:
-        parts.append("Diff too large for line validation.")
-    if skipped:
-        parts.append("**Not applied**\n" + "\n".join(skipped))
-    if reason:
-        parts.append(f"{what} incomplete: {reason}. [run]({run_url})")
-    elif not record.summary:
-        parts.append(f"{what} finished without a summary")
-    if section := candidates_section(record.candidates):
-        parts.append(section)
-    if record.footer:
-        parts.append(record.footer)
-    return "\n\n".join(parts)
+
+    def render(summary: str | None, section: str | None) -> str:
+        parts = []
+        if record.head_sha:
+            parts.append(f"### Review of #{pr} at {record.head_sha[:7]}")
+        if summary:
+            parts.append(summary)
+        if record.diff_unavailable:
+            parts.append("Diff unavailable; inline lines unchecked.")
+        if skipped:
+            parts.append("**Not applied**\n" + "\n".join(skipped))
+        if reason:
+            parts.append(f"{what} incomplete: {reason}. [run]({run_url})")
+        elif not summary:
+            parts.append(f"{what} finished without a summary")
+        if section:
+            parts.append(section)
+        if record.footer:
+            parts.append(record.footer)
+        return "\n\n".join(parts)
+
+    section = candidates_section(record.candidates)
+    body = render(record.summary, section)
+    if len(body) <= MAX_BODY:
+        return body
+    if section:
+        body = render(record.summary, None)
+    if len(body) > MAX_BODY and record.summary:
+        keep = max(len(record.summary) - (len(body) - MAX_BODY) - len(TRUNCATED), 0)
+        body = render(record.summary[:keep] + TRUNCATED, None)
+    return body
 
 
 def to_json(record: Record) -> dict[str, Any]:
@@ -575,8 +616,9 @@ def make_tools(
         run: Callable[[Any], Awaitable[str]],
     ):
         async def handler(args: dict[str, Any]) -> dict[str, Any]:
-            for key in TEXT_ARGS & args.keys():
-                check_body(args[key], secrets)
+            for value in args.values():
+                if isinstance(value, str):
+                    check_body(value, secrets)
             out = await run(args)
             if name not in READS:
                 save()
@@ -863,19 +905,25 @@ async def apply(
             log.error("skipped %s: %s", label(action), reason)
             skipped.append(f"- {label(action)}: {reason}")
     body = status_body(record, tgt.number, run_result, run_url, skipped)
-    await gh.edit_comment(status, body)
-    return 0 if run_result == "success" and not skipped else 1
+    try:
+        await gh.edit_comment(status, body)
+    except RequestFailed as e:
+        log.error("status edit rejected: %s", github_error(e))
+        await gh.edit_comment(
+            status, f"{what} summary could not be posted. [run]({run_url})"
+        )
+    return 0 if run_result == "success" else 1
 
 
 # Run (read token, Claude)
 
 
 async def fetch_diff(gh: GitHub, base: str, head: str) -> str | None:
-    """Diff of `base...head`; None when GitHub refuses it as too large."""
+    """Diff of `base...head`; None when GitHub cannot serve it, auth failures raise."""
     try:
         return await gh.compare_diff(base, head)
     except RequestFailed as e:
-        if e.response.status_code != 406:
+        if e.response.status_code in (401, 403):
             raise
         log.warning("diff refused, inline lines unchecked: %s", github_error(e))
         return None
@@ -886,7 +934,7 @@ def served(diff: str | None) -> Callable[[], Awaitable[str]]:
 
     async def read() -> str:
         if diff is None:
-            raise ValueError("GitHub refused the diff as too large")
+            raise ValueError("GitHub did not serve the diff")
         return diff
 
     return read
@@ -947,6 +995,11 @@ def load_secrets(env: Mapping[str, str]) -> dict[str, str]:
     return secrets
 
 
+def work_tmp(args: argparse.Namespace, tmp: Path) -> Path:
+    """Where Claude reads its files: `tmp` under its cwd. The record stays in `tmp`."""
+    return tmp if args.workdir is None else args.workdir / "tmp"
+
+
 def build_job(
     args: argparse.Namespace,
     gh: GitHub,
@@ -965,13 +1018,13 @@ def build_job(
         args.job,
         args.model,
         head_sha=head_sha,
-        diff_too_large=args.job != "mention" and diff is None,
+        diff_unavailable=args.job != "mention" and diff is None,
     )
     if args.job == "review":
         assert head_sha is not None
         tgt = target(event)
         doc = (CLAUDE_DIR / "review.md").read_text()
-        if (tmp / "is-backport").exists():
+        if (work_tmp(args, tmp) / "is-backport").exists():
             doc += "\n\n" + (CLAUDE_DIR / "review-backport.md").read_text()
         prompt = review_prompt(tgt, head_sha, doc)
     elif args.job == "mention":
@@ -1075,8 +1128,9 @@ async def amain(
         head_sha = pr["head"]["sha"]
         diff = await fetch_diff(gh, pr["base"]["sha"], head_sha)
         if diff is not None:
-            tmp.mkdir(parents=True, exist_ok=True)
-            (tmp / "pr.diff").write_text(diff)
+            claude_tmp = work_tmp(args, tmp)
+            claude_tmp.mkdir(parents=True, exist_ok=True)
+            (claude_tmp / "pr.diff").write_text(diff)
     elif args.job == "code-review":
         head_sha = args.head_sha
         diff = await fetch_diff(gh, args.base_sha, head_sha)

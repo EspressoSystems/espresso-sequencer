@@ -4,7 +4,7 @@
 
 | File                    | Purpose                                                                           |
 | ----------------------- | --------------------------------------------------------------------------------- |
-| `claude_gh.py`          | The `claude-gh` CLI the workflows call.                                           |
+| `claude_gh.py`          | The CLI the workflows call.                                                       |
 | `review.md`             | Runbook for the `review` job.                                                     |
 | `review-backport.md`    | Appended to `review.md` on backport PRs (branch `backport-<n>-to-*`).             |
 | `mention.md`            | Prompt for `@claude` mentions.                                                    |
@@ -18,12 +18,13 @@ Commands: `just claude::fmt`, `just claude::lint`, `just claude::check`, `just c
 
 ## PR review in CI
 
-`.github/workflows/claude-review.yml` runs on non-draft, non-fork PRs when opened, reopened or marked ready. `start`
-posts a status comment with the write token. `run` checks out the PR head, fetches team review comments into
-`tmp/pr-review-comments.json` (plus original-PR context for backports), and runs `claude-gh run review` with a read
-token and `ANTHROPIC_API_KEY`; Claude reads the diff and checkout and records inline comments, candidates with verdicts,
-and a summary. `apply` posts the record with the write token and edits the status comment with the summary and cost
-footer.
+`.github/workflows/claude-review.yml` runs on non-draft, non-fork PRs when opened, reopened or marked ready. It calls
+`claude-job.yml`, which also serves `claude.yml` (`@claude` mentions and `/code-review`): `start` posts a status comment
+with the write token. `run` fetches team review comments into `tmp/pr-review-comments.json` (plus original-PR context
+for backports) and runs `claude_gh.py run review` with a read token and `ANTHROPIC_API_KEY`; Claude reads the diff and
+checkout and records inline comments, candidates with verdicts, and a summary. `apply` posts the record with the write
+token and edits the status comment with the summary and cost footer. All three jobs run `.github/claude` from one
+commit: the merge commit for reviews, the default branch head for `claude.yml`.
 
 ## Evaluating review changes
 

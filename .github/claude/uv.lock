@@ -179,7 +179,7 @@ wheels = [
 [[package]]
 name = "claude-gh"
 version = "0.1.0"
-source = { editable = "." }
+source = { virtual = "." }
 dependencies = [
     { name = "claude-agent-sdk" },
     { name = "githubkit" },

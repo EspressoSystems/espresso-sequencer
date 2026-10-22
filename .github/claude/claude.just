@@ -14,4 +14,4 @@ test *args:
 
 # Replay the review on cases in eval/cases.toml; see README.md.
 eval *args:
-    cd ../.. && uv run --locked --project .github/claude python .github/claude/eval/eval.py {{args}}
+    cd ../.. && PYTHONPATH=.github/claude uv run --locked --project .github/claude python .github/claude/eval/eval.py {{args}}
