@@ -55,6 +55,7 @@ from claude_agent_sdk.types import (
 )
 from githubkit import GitHub as GitHubClient
 from githubkit import TokenAuthStrategy
+from githubkit.exception import RequestFailed
 
 log = logging.getLogger("claude-gh")
 
@@ -73,6 +74,7 @@ CLI_ENV = {"GH_TOKEN": "", "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS": "1"}
 MAX_TURNS = 120
 SERVER = "gh"
 THREAD_ID = re.compile(r"[A-Za-z0-9_=-]+")
+HUNK = re.compile(r"@@ -\d+(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")
 CLAUDE_DIR = Path(__file__).parent
 BACKPORT_MARKER = Path("tmp/is-backport")
 RECORD = Path("tmp/actions.json")
@@ -240,6 +242,62 @@ def code_review_prompt(target: Target, effort: str) -> str:
     return f"/code-review {effort} --comment {target.number}"
 
 
+def diff_lines(diff: str) -> dict[str, set[int]]:
+    """RIGHT-side line numbers inside a hunk (added or context), per file in a unified diff."""
+    result: dict[str, set[int]] = {}
+    path: str | None = None
+    old = new = line_no = 0  # lines left in the current hunk, next RIGHT line number
+    for line in diff.split("\n"):
+        if old > 0 or new > 0:
+            tag = line[:1]
+            if tag == "\\":
+                continue
+            if tag != "+":
+                old -= 1
+            if tag != "-":
+                new -= 1
+                if path:
+                    result[path].add(line_no)
+                line_no += 1
+        elif line.startswith("+++ "):
+            name = line[4:]
+            path = name.removeprefix("b/") if name.startswith("b/") else None
+            if path:
+                result.setdefault(path, set())
+        elif m := HUNK.match(line):
+            old = int(m[1] or 1)
+            line_no = int(m[2])
+            new = int(m[3] or 1)
+    return result
+
+
+def check_in_diff(lines: Mapping[str, set[int]], path: str, line: int) -> None:
+    if path not in lines:
+        raise ValueError(f"{path} is not a file changed in the PR diff")
+    if line not in lines[path]:
+        raise ValueError(
+            f"line {line} of {path} is not inside a diff hunk; "
+            "use a RIGHT-side line shown in the diff"
+        )
+
+
+def github_error(e: Exception) -> str:
+    """One line for a failed call: status, GitHub's message and its error details."""
+    if not isinstance(e, RequestFailed):
+        return " ".join(str(e).split())[:200]
+    resp = e.response
+    try:
+        body = json.loads(resp.text)
+    except ValueError:
+        return f"{resp.status_code} {' '.join(resp.text.split())[:200]}"
+    details = [
+        err if isinstance(err, str) else err.get("message") or err.get("code", "")
+        for err in body.get("errors", [])
+    ]
+    parts = [str(resp.status_code), body.get("message", ""), *details]
+    return " ".join(p for p in parts if p)[:300]
+
+
 def check_body(body: str, secrets: Mapping[str, str]) -> None:
     for name, value in secrets.items():
         if value and value in body:
@@ -404,12 +462,17 @@ def meta_json(pr: Any) -> str:
 
 
 def make_tools(
-    gh: GitHub, target: Target, secrets: Mapping[str, str], rec: Record
+    gh: GitHub,
+    target: Target,
+    secrets: Mapping[str, str],
+    rec: Record,
+    lines: Mapping[str, set[int]] | None = None,
 ) -> list[SdkMcpTool]:
     """Reads act on `target`; the model never names a PR, issue or repo.
 
     Builds every tool; `select_tools` drops the writes a job may not use. Writes append to
-    `rec` and post nothing. Handlers raise ValueError on refused calls, which the SDK
+    `rec` and post nothing. With `lines` (see `diff_lines`), inline comments outside the
+    diff are refused. Handlers raise ValueError on refused calls, which the SDK
     reports to the model as an error result.
     """
     n = target.number
@@ -430,6 +493,8 @@ def make_tools(
 
     async def add(action: Action) -> str:
         check_action(action)
+        if lines is not None and isinstance(action, InlineComment):
+            check_in_diff(lines, action.path, action.line)
         rec.actions.append(action)
         return "recorded"
 
@@ -678,7 +743,7 @@ async def apply(
         try:
             await post(gh, job, tgt, head_sha, action)
         except Exception as e:  # noqa: BLE001 best effort: any failure skips this action only
-            reason = " ".join(str(e).split())[:200]
+            reason = github_error(e)
             log.error("skipped %s: %s", label(action), reason)
             skipped.append(f"- {label(action)}: {reason}")
     await gh.edit_comment(status, status_body(record, run_result, run_url, skipped))
@@ -688,10 +753,13 @@ async def apply(
 # Run (read token, Claude)
 
 
-async def prefetch(gh: GitHub, pr: int, out: Path) -> None:
+async def prefetch(gh: GitHub, pr: int, out: Path) -> str:
+    """Writes the PR files for the model and returns the diff."""
     out.mkdir(parents=True, exist_ok=True)
+    diff = await gh.pr_diff(pr)
     (out / "pr.json").write_text(await gh.pr_meta(pr))
-    (out / "pr.diff").write_text(await gh.pr_diff(pr))
+    (out / "pr.diff").write_text(diff)
+    return diff
 
 
 async def run(
@@ -739,6 +807,7 @@ def build_job(
     secrets: Mapping[str, str],
     event: dict,
     run_url: str,
+    diff: str | None,
 ) -> Job:
     append = None
     builtin = BUILTIN
@@ -760,7 +829,8 @@ def build_job(
         append = (CLAUDE_DIR / "code-review.md").read_text()
         builtin = BUILTIN + ["Agent"]
     record = Record(args.job, args.model)
-    tools = make_tools(gh, tgt, secrets, record)
+    lines = None if diff is None else diff_lines(diff)
+    tools = make_tools(gh, tgt, secrets, record, lines)
     return Job(
         args.job,
         prompt,
@@ -823,9 +893,12 @@ async def amain(args: argparse.Namespace) -> int:
         return await apply(
             gh, args.job, target(event), raw, status, run_url, args.run_result, head_sha
         )
+    diff = None
     if args.job == "review":
-        await prefetch(gh, target(event).number, PREFETCH_DIR)
-    job = build_job(args, gh, load_secrets(), event, run_url)
+        diff = await prefetch(gh, target(event).number, PREFETCH_DIR)
+    elif args.job == "code-review":
+        diff = await gh.pr_diff(target(event).number)
+    job = build_job(args, gh, load_secrets(), event, run_url, diff)
     summary_file = os.environ.get("GITHUB_STEP_SUMMARY")
     return await run(
         job, sdk_runner, RECORD, Path(summary_file) if summary_file else None

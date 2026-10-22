@@ -22,6 +22,7 @@ from claude_agent_sdk import (
     SdkMcpTool,
     ToolUseBlock,
 )
+from githubkit.exception import RequestFailed
 
 import claude_gh as cg
 
@@ -850,3 +851,90 @@ def test_footer_formats_cost_and_duration():
     assert cg.footer(r, "opus") == "<sub>Cost $0.59 · 27 turns · 2m 13s · opus</sub>"
     r = make_result(total_cost_usd=None, duration_ms=45_000)
     assert cg.footer(r, "opus") == "<sub>Cost n/a · 3 turns · 45s · opus</sub>"
+
+
+DIFF = r"""diff --git a/old.rs b/new.rs
+similarity index 90%
+rename from old.rs
+rename to new.rs
+--- a/old.rs
++++ b/new.rs
+@@ -1,3 +1,4 @@
+ keep
+-gone
++--- not a header
++++ not a header
+ keep2
+@@ -10 +11,2 @@
+-x
++y
++z
+\ No newline at end of file
+diff --git a/fresh.rs b/fresh.rs
+new file mode 100644
+--- /dev/null
++++ b/fresh.rs
+@@ -0,0 +1,2 @@
++a
++b
+diff --git a/dead.rs b/dead.rs
+deleted file mode 100644
+--- a/dead.rs
++++ /dev/null
+@@ -1,2 +0,0 @@
+-a
+-b
+diff --git a/pure.rs b/moved.rs
+similarity index 100%
+rename from pure.rs
+rename to moved.rs
+"""
+
+
+def test_diff_lines():
+    assert cg.diff_lines(DIFF) == {
+        "new.rs": {1, 2, 3, 4, 11, 12},
+        "fresh.rs": {1, 2},
+    }
+
+
+def test_diff_lines_empty():
+    assert cg.diff_lines("") == {}
+
+
+def test_inline_comment_outside_diff_is_refused():
+    lines = cg.diff_lines(DIFF)
+    tools = cg.make_tools(FakeGitHub(), PR, SECRETS, cg.Record("review", "opus"), lines)
+    with pytest.raises(ValueError, match="not a file"):
+        call(tools, "inline_comment", {"path": "dead.rs", "line": 1, "body": "x"})
+    with pytest.raises(ValueError, match="not inside a diff hunk"):
+        call(tools, "inline_comment", {"path": "new.rs", "line": 5, "body": "x"})
+    call(tools, "inline_comment", {"path": "new.rs", "line": 12, "body": "x"})
+
+
+def failed(status: int, body: str) -> RequestFailed:
+    response = SimpleNamespace(
+        raw_request=None, raw_response=None, status_code=status, text=body
+    )
+    return RequestFailed(response)  # ty: ignore[invalid-argument-type]
+
+
+def test_github_error_shows_message_and_details():
+    body = json.dumps(
+        {
+            "message": "Unprocessable Entity",
+            "errors": [
+                {"field": "line", "message": "line must be part of the diff"},
+                "oops",
+            ],
+        }
+    )
+    assert (
+        cg.github_error(failed(422, body))
+        == "422 Unprocessable Entity line must be part of the diff oops"
+    )
+
+
+def test_github_error_non_json_and_other_exceptions():
+    assert cg.github_error(failed(502, "bad\n gateway")) == "502 bad gateway"
+    assert cg.github_error(RuntimeError("a\nb")) == "a b"

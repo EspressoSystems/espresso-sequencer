@@ -101,6 +101,25 @@ jobs:
       - name: Run the script tests
         run: just py::test
 
+  claude-gh:
+    name: claude-gh
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: taiki-e/install-action@just
+      - uses: astral-sh/setup-uv@v10.0.1
+        with:
+          python-version: "3.14"
+
+      - name: Install ruff and ty
+        run: uv tool install ruff && uv tool install ty
+
+      - name: Lint, type-check and test claude-gh
+        run: |
+          just claude::lint
+          just claude::check
+          just claude::test
+
   protos:
     name: protos
     if: github.event_name == 'pull_request'
