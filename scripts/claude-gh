@@ -81,6 +81,10 @@ THREAD_ID = re.compile(r"[A-Za-z0-9_=-]+")
 CLAUDE_DIR = Path(".github/claude")
 BACKPORT_MARKER = Path("tmp/is-backport")
 RECORD = Path("tmp/actions.json")
+PREFETCH_DIR = Path("tmp")
+READS = {"pr_diff", "pr_view", "issue_view"}
+# Review reads the PR from files written by `prefetch`, so it gets no read tools.
+JOB_READS = {"review": set(), "mention": READS, "code-review": READS}
 
 
 @dataclass(frozen=True)
@@ -167,6 +171,7 @@ class Thread:
 class GitHub(Protocol):
     async def pr_diff(self, pr: int) -> str: ...
     async def pr_view(self, pr: int) -> str: ...
+    async def pr_meta(self, pr: int) -> str: ...
     async def issue_view(self, number: int) -> str: ...
     async def head_sha(self, pr: int) -> str: ...
     async def inline_comment(
@@ -266,8 +271,8 @@ def options(job: Job, server: McpSdkServerConfig) -> ClaudeAgentOptions:
 
 
 def select_tools(tools: list[SdkMcpTool], job_name: str) -> list[SdkMcpTool]:
-    allowed = JOB_WRITES[job_name]
-    return [t for t in tools if t.name not in WRITES or t.name in allowed]
+    allowed = JOB_WRITES[job_name] | JOB_READS[job_name]
+    return [t for t in tools if t.name not in WRITES | READS or t.name in allowed]
 
 
 def tool_line(name: str, args: Mapping[str, Any]) -> str:
@@ -382,23 +387,22 @@ def login(user: Any) -> str:
     return "ghost" if user is None else user.login  # deleted accounts
 
 
-def view_json(item: Any, comments: list[Any]) -> str:
-    return json.dumps(
-        {
-            "title": item.title,
-            "body": item.body,
-            "author": login(item.user),
-            "state": item.state,
-            "comments": [
-                {
-                    "author": login(c.user),
-                    "body": c.body,
-                    "created_at": str(c.created_at),
-                }
-                for c in comments
-            ],
-        }
-    )
+def view_data(item: Any) -> dict[str, Any]:
+    return {
+        "title": item.title,
+        "body": item.body,
+        "author": login(item.user),
+        "state": item.state,
+    }
+
+
+def view_json(item: Any) -> str:
+    return json.dumps(view_data(item))
+
+
+def meta_json(pr: Any) -> str:
+    refs = {"base": pr.base.ref, "head": pr.head.ref}
+    return json.dumps({**view_data(pr), **refs})
 
 
 # Tools
@@ -443,7 +447,7 @@ def make_tools(
             define("pr_diff", "Diff of the PR.", {}, lambda a: gh.pr_diff(n)),
             define(
                 "pr_view",
-                "Title, body and comments of the PR.",
+                "Title, body and author of the PR.",
                 {},
                 lambda a: gh.pr_view(n),
             ),
@@ -452,7 +456,7 @@ def make_tools(
         reads = [
             define(
                 "issue_view",
-                "Title, body and comments of the issue.",
+                "Title, body and author of the issue.",
                 {},
                 lambda a: gh.issue_view(n),
             )
@@ -505,28 +509,25 @@ class GitHubKit:
         resp = await self.gh.rest.pulls.async_get(
             owner=self.owner, repo=self.name, pull_number=pr
         )
-        return view_json(resp.parsed_data, await self._comments(pr))
+        return view_json(resp.parsed_data)
+
+    async def pr_meta(self, pr: int) -> str:
+        resp = await self.gh.rest.pulls.async_get(
+            owner=self.owner, repo=self.name, pull_number=pr
+        )
+        return meta_json(resp.parsed_data)
 
     async def issue_view(self, number: int) -> str:
         resp = await self.gh.rest.issues.async_get(
             owner=self.owner, repo=self.name, issue_number=number
         )
-        return view_json(resp.parsed_data, await self._comments(number))
+        return view_json(resp.parsed_data)
 
     async def head_sha(self, pr: int) -> str:
         resp = await self.gh.rest.pulls.async_get(
             owner=self.owner, repo=self.name, pull_number=pr
         )
         return resp.parsed_data.head.sha
-
-    async def _comments(self, number: int) -> list[Any]:
-        pages = self.gh.paginate(
-            self.gh.rest.issues.async_list_comments,
-            owner=self.owner,
-            repo=self.name,
-            issue_number=number,
-        )
-        return [c async for c in pages]
 
     async def inline_comment(
         self, pr: int, path: str, line: int, body: str, sha: str
@@ -692,6 +693,12 @@ async def apply(
 # Run (read token, Claude)
 
 
+async def prefetch(gh: GitHub, pr: int, out: Path) -> None:
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "pr.json").write_text(await gh.pr_meta(pr))
+    (out / "pr.diff").write_text(await gh.pr_diff(pr))
+
+
 async def run(
     job: Job, runner: Runner, record_path: Path, step_summary: Path | None = None
 ) -> int:
@@ -821,6 +828,8 @@ async def amain(args: argparse.Namespace) -> int:
         return await apply(
             gh, args.job, target(event), raw, status, run_url, args.run_result, head_sha
         )
+    if args.job == "review":
+        await prefetch(gh, target(event).number, PREFETCH_DIR)
     job = build_job(args, gh, load_secrets(), event, run_url)
     summary_file = os.environ.get("GITHUB_STEP_SUMMARY")
     return await run(

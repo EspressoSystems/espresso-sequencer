@@ -56,6 +56,9 @@ class FakeGitHub:
     async def pr_view(self, pr: int) -> str:
         return f"pr {pr}"
 
+    async def pr_meta(self, pr: int) -> str:
+        return f"meta {pr}"
+
     async def issue_view(self, number: int) -> str:
         return f"issue {number}"
 
@@ -251,7 +254,8 @@ def test_pr_tools_vs_issue_tools():
 def test_job_writes_pinned(name, writes):
     assert cg.JOB_WRITES[name] == writes
     names = set(tools_by_name(cg.select_tools(make(FakeGitHub())[0], name)))
-    assert names == {"pr_diff", "pr_view"} | writes
+    reads = set() if name == "review" else {"pr_diff", "pr_view"}
+    assert names == reads | writes
 
 
 def test_reads_return_text():
@@ -543,26 +547,49 @@ def test_parse_thread_rejects_wrong_node(data):
         cg.parse_thread(data)
 
 
-def test_view_json_is_compact_and_complete():
+def test_prefetch_writes_pr_files(tmp_path):
+    out = tmp_path / "tmp"
+    asyncio.run(cg.prefetch(FakeGitHub(), 7, out))
+    assert (out / "pr.json").read_text() == "meta 7"
+    assert (out / "pr.diff").read_text() == "diff 7"
+
+
+def test_meta_json_adds_refs():
+    user = SimpleNamespace(login="amy")
+    pr = SimpleNamespace(
+        title="T",
+        body="B",
+        user=user,
+        state="open",
+        base=SimpleNamespace(ref="main"),
+        head=SimpleNamespace(ref="feat"),
+    )
+    assert json.loads(cg.meta_json(pr)) == {
+        "title": "T",
+        "body": "B",
+        "author": "amy",
+        "state": "open",
+        "base": "main",
+        "head": "feat",
+    }
+
+
+def test_view_json_is_compact_and_has_no_comments():
     user = SimpleNamespace(login="amy")
     item = SimpleNamespace(title="T", body="B", user=user, state="open")
-    comment = SimpleNamespace(user=user, body="hi", created_at="2026-01-01")
-    out = cg.view_json(item, [comment])
+    out = cg.view_json(item)
     assert "\n" not in out
     assert json.loads(out) == {
         "title": "T",
         "body": "B",
         "author": "amy",
         "state": "open",
-        "comments": [{"author": "amy", "body": "hi", "created_at": "2026-01-01"}],
     }
 
 
 def test_view_json_deleted_user_is_ghost():
     item = SimpleNamespace(title="T", body="B", user=None, state="open")
-    comment = SimpleNamespace(user=None, body="hi", created_at="2026-01-01")
-    out = json.loads(cg.view_json(item, [comment]))
-    assert out["author"] == "ghost" and out["comments"][0]["author"] == "ghost"
+    assert json.loads(cg.view_json(item))["author"] == "ghost"
 
 
 # Records and apply

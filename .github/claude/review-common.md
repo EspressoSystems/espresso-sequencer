@@ -1,4 +1,5 @@
-Before reviewing, read existing comments from `./tmp/pr-review-comments.json`.
+Before reviewing, read `./tmp/pr.json` (title, body, author, state, base and head refs), `./tmp/pr.diff` and the
+existing comments in `./tmp/pr-review-comments.json` with Read.
 
 - Do not duplicate feedback already given by any reviewer.
 - Your own threads are those authored by `github-actions` or `claude`.
