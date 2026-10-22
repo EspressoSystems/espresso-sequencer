@@ -27,7 +27,7 @@ jobs:
           sparse-checkout: .github/claude
           persist-credentials: false
 
-      - uses: astral-sh/setup-uv@v10.0.1
+      - uses: astral-sh/setup-uv@v10.3.2
         with:
           cache-dependency-glob: .github/claude/uv.lock
 
@@ -89,7 +89,7 @@ jobs:
           gh pr diff "$orig" > ./tmp/original.diff
           gh pr diff "$PR_NUMBER" > ./tmp/backport.diff
 
-      - uses: astral-sh/setup-uv@v10.0.1
+      - uses: astral-sh/setup-uv@v10.3.2
         with:
           cache-dependency-glob: .github/claude/uv.lock
 
@@ -123,7 +123,7 @@ jobs:
           sparse-checkout: .github/claude
           persist-credentials: false
 
-      - uses: astral-sh/setup-uv@v10.0.1
+      - uses: astral-sh/setup-uv@v10.3.2
         with:
           cache-dependency-glob: .github/claude/uv.lock
 
