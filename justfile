@@ -310,8 +310,8 @@ release-body version:
     scripts/release refresh --dry-run --version {{version}}
 
 # generate rust bindings for contracts
-VERSIONED := "LightClient(Arbitrum)?(V\\d+)?(Mock)?|PlonkVerifier(V\\d+)?|StakeTable(V\\d+)?|EspToken(V\\d+)?|RewardClaim(V\\d+)?"
-EXACT := "FeeContract|ERC1967Proxy|OpsTimelock|SafeExitTimelock|OwnableUpgradeable|AccessControlUpgradeable|IRewardClaim|IPlonkVerifier"
+VERSIONED := "LightClient(V\\d+)?(Mock)?|PlonkVerifier(V\\d+)?|StakeTable(V\\d+)?|EspToken(V\\d+)?|RewardClaim(V\\d+)?"
+EXACT := "FeeContract|ERC1967Proxy|OpsTimelock|SafeExitTimelock|OwnableUpgradeable|AccessControlUpgradeable"
 REGEXP := "^(" + VERSIONED + "|" + EXACT + ")$"
 gen-bindings:
     # Update the git submodules
