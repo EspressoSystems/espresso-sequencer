@@ -2,6 +2,7 @@
 
 import asyncio
 import importlib.util
+import json
 from pathlib import Path
 
 import pytest
@@ -50,3 +51,26 @@ def test_every_protocol_write_is_covered():
 
 def test_reads_delegate():
     assert asyncio.run(ev.ReadOnlyGitHub(Reads()).pr_view(7)) == "view 7"
+
+
+def test_section_lists_wrong_and_unjudged(tmp_path):
+    rec = cg.Record("review", "opus", [], "- **nit**: x", "<sub>f</sub>", None)
+    rec.candidates = [
+        cg.Candidate("a.rs", 1, "kept one", "kept", ""),
+        cg.Candidate("b.rs", 2, "wrong one", "wrong", "`if x`"),
+        cg.Candidate("c.rs", 3, "dup one", "duplicate", "c1"),
+        cg.Candidate("d.rs", 4, "open one"),
+    ]
+    (tmp_path / "actions.json").write_text(json.dumps(cg.to_json(rec)))
+    (tmp_path / "exit").write_text("0\n")
+    case = {"fixed_by": [9], "bug": "b"}
+    assert ev.section(7, case, tmp_path) == (
+        "## #7 (fixed by #9)\n\nBug: b\n\n"
+        "f · exit 0 · error None\n\n"
+        "Findings:\n- **nit**: x\n\n"
+        "Wrong candidates:\n- b.rs:2 wrong one\n  - evidence: `if x`\n\n"
+        "Unjudged candidates:\n- d.rs:4 open one\n"
+    )
+    assert ev.result_line(7, tmp_path) == (
+        "7: exit=0 f findings=1 wrong=1 unjudged=1 error=None"
+    )

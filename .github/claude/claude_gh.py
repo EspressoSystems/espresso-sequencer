@@ -86,7 +86,9 @@ READS = {"pr_diff", "pr_view", "issue_view"}
 NOTES = {"candidate", "verdict"}
 JOB_NOTES = {"review": NOTES, "mention": set(), "code-review": NOTES}
 TEXT_ARGS = {"body", "summary", "evidence"}
-Status = Literal["kept", "dropped"]
+Status = Literal["kept", "wrong", "duplicate"]
+STATUSES = ("kept", "wrong", "duplicate")
+CANDIDATE_ID = re.compile(r"c[1-9]\d*")
 
 
 @dataclass(frozen=True)
@@ -393,36 +395,52 @@ def add_candidate(rec: Record, path: str, line: int, summary: str) -> str:
 
 
 def set_verdict(rec: Record, cid: str, status: str, evidence: str) -> str:
-    index = int(cid[1:]) - 1 if re.fullmatch(r"c[1-9]\d*", cid) else -1
-    if not 0 <= index < len(rec.candidates):
+    index = candidate_index(rec, cid)
+    if index is None:
         raise ValueError(f"unknown candidate id {cid!r}")
     match status:
-        case "dropped" if not evidence.strip():
-            raise ValueError("dropped needs evidence quoted from the code")
-        case "kept" | "dropped":
+        case "wrong" if not evidence.strip():
+            raise ValueError("wrong needs evidence quoted from the code")
+        case "duplicate" if not names_other(rec, index, evidence):
+            raise ValueError("duplicate needs evidence naming another candidate id")
+        case "kept" | "wrong" | "duplicate":
             c = rec.candidates[index]
             c.status, c.evidence = status, evidence
         case _:
-            raise ValueError(f"status must be kept or dropped, got {status!r}")
+            raise ValueError(
+                f"status must be one of {', '.join(STATUSES)}, got {status!r}"
+            )
     log.info("verdict %s %s %s", cid, status, one_line(evidence))
     return "recorded"
+
+
+def names_other(rec: Record, index: int, evidence: str) -> bool:
+    ids = (candidate_index(rec, m) for m in re.findall(r"\bc\d+\b", evidence))
+    return any(i not in (None, index) for i in ids)
+
+
+def candidate_index(rec: Record, cid: str) -> int | None:
+    if not CANDIDATE_ID.fullmatch(cid):
+        return None
+    index = int(cid[1:]) - 1
+    return index if index < len(rec.candidates) else None
 
 
 def candidates_section(candidates: list[Candidate]) -> str | None:
     if not candidates:
         return None
-    counts = {s: sum(c.status == s for c in candidates) for s in ("kept", "dropped")}
+    counts = {s: sum(c.status == s for c in candidates) for s in STATUSES}
     unjudged = len(candidates) - sum(counts.values())
     lines = []
     for i, c in enumerate(candidates, 1):
         head = f"- c{i} {c.path}:{c.line} {one_line(c.summary, 200)}"
-        if c.status == "dropped":
-            lines.append(f"{head}: dropped: {one_line(c.evidence or '', 300)}")
+        if c.status == "wrong":
+            lines.append(f"{head}: wrong: {one_line(c.evidence or '', 300)}")
         elif c.status is None:
             lines.append(f"{head}: unjudged")
     title = (
-        f"Candidates: {counts['kept']} kept, {counts['dropped']} dropped, "
-        f"{unjudged} unjudged"
+        f"Candidates: {counts['kept']} kept, {counts['wrong']} wrong, "
+        f"{counts['duplicate']} duplicate, {unjudged} unjudged"
     )
     return "\n".join([f"<details><summary>{title}</summary>", "", *lines, "</details>"])
 
@@ -635,7 +653,8 @@ def make_tools(
         ),
         define(
             "verdict",
-            "Judge a candidate: status kept or dropped; dropped needs evidence from the code.",
+            "Judge a candidate: status kept, wrong (evidence: quoted code it misreads) or "
+            "duplicate (evidence: the candidate id it duplicates, e.g. c3).",
             {"id": str, "status": str, "evidence": str},
             note_verdict,
         ),

@@ -54,12 +54,13 @@ spend effort on anything those catch.
 
 ## Findings
 
-- In steps 3-10, call `candidate` the moment a possible defect is noticed, before investigating it further.
-- Before posting, call `verdict` for every candidate.
-- Drop only with evidence quoted from the code. "Probably fine" or "unlikely" keeps the candidate.
-- Post only kept candidates.
+- Call `candidate` the moment a possible defect is noticed in steps 3-10, before investigating further.
+- Before posting, call `verdict` for every candidate: `wrong` only when quoted code shows the candidate misreads it;
+  `duplicate` when another candidate covers it; otherwise `kept`.
+- Low impact, "not a regression", "acceptable", "unlikely" or "probably fine" are not grounds to discard: keep the
+  candidate and lower its severity to concern or nit.
+- Post every kept candidate: max 10, most severe first, correctness before cleanup.
 - Each: `path`, `line` (RIGHT side of the diff), one-line summary, failure scenario (inputs/state -> wrong result).
-- Dedup same defect at same location. Sort by severity. Max 10; correctness before cleanup.
 - Severity:
   - **blocking**: security, consensus or protocol correctness, data loss or state not persisted, breaking
     API/serialization/upgrade/config compatibility. A write the existing path performs and the new path skips or can

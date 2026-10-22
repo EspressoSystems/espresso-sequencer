@@ -297,42 +297,57 @@ def test_candidate_ids_sequential_and_logged(caplog):
 def test_verdict_sets_status_and_evidence(caplog):
     caplog.set_level(logging.INFO, logger="claude-gh")
     t, rec = make(FakeGitHub())
-    call(t, "candidate", {"path": "a.rs", "line": 1, "summary": "s"})
-    call(t, "candidate", {"path": "a.rs", "line": 2, "summary": "s"})
-    out = call(t, "verdict", {"id": "c2", "status": "dropped", "evidence": "`x?`"})
+    for line in (1, 2, 3):
+        call(t, "candidate", {"path": "a.rs", "line": line, "summary": "s"})
+    out = call(t, "verdict", {"id": "c2", "status": "wrong", "evidence": "`x?`"})
     assert text(out) == "recorded"
+    call(t, "verdict", {"id": "c3", "status": "duplicate", "evidence": "same as c1"})
     call(t, "verdict", {"id": "c1", "status": "kept", "evidence": ""})
     assert [(c.status, c.evidence) for c in rec.candidates] == [
         ("kept", ""),
-        ("dropped", "`x?`"),
+        ("wrong", "`x?`"),
+        ("duplicate", "same as c1"),
     ]
-    assert caplog.records[-2].getMessage() == "verdict c2 dropped `x?`"
+    assert caplog.records[-2].getMessage() == "verdict c3 duplicate same as c1"
 
 
 @pytest.mark.parametrize(
     "args,match",
     [
-        ({"id": "c2", "status": "kept"}, "unknown candidate id"),
+        ({"id": "c3", "status": "kept"}, "unknown candidate id"),
         ({"id": "c0", "status": "kept"}, "unknown candidate id"),
         ({"id": "1", "status": "kept"}, "unknown candidate id"),
-        ({"id": "c1", "status": "maybe"}, "kept or dropped"),
-        ({"id": "c1", "status": "dropped"}, "needs evidence"),
-        ({"id": "c1", "status": "dropped", "evidence": " \n"}, "needs evidence"),
+        ({"id": "c1", "status": "maybe"}, "kept, wrong, duplicate"),
+        (
+            {"id": "c1", "status": "dropped", "evidence": "`x`"},
+            "kept, wrong, duplicate",
+        ),
+        ({"id": "c1", "status": "wrong"}, "needs evidence"),
+        ({"id": "c1", "status": "wrong", "evidence": " \n"}, "needs evidence"),
+        ({"id": "c1", "status": "duplicate"}, "another candidate id"),
+        ({"id": "c1", "status": "duplicate", "evidence": "same as c1"}, "another"),
+        ({"id": "c1", "status": "duplicate", "evidence": "same as c3"}, "another"),
+        ({"id": "c1", "status": "duplicate", "evidence": "same as c0"}, "another"),
+        ({"id": "c1", "status": "duplicate", "evidence": "see abc2"}, "another"),
     ],
 )
 def test_verdict_errors(args, match):
     t, rec = make(FakeGitHub())
     call(t, "candidate", {"path": "a.rs", "line": 1, "summary": "s"})
+    call(t, "candidate", {"path": "a.rs", "line": 2, "summary": "s"})
     with pytest.raises(ValueError, match=match):
         call(t, "verdict", {"evidence": "", **args})
-    assert rec.candidates == [cg.Candidate("a.rs", 1, "s")]
+    assert rec.candidates == [
+        cg.Candidate("a.rs", 1, "s"),
+        cg.Candidate("a.rs", 2, "s"),
+    ]
 
 
 @pytest.mark.parametrize(
     "name,args",
     [
         ("candidate", {"path": "a", "line": 1, "summary": "leak sk-secret"}),
-        ("verdict", {"id": "c1", "status": "dropped", "evidence": "leak sk-secret"}),
+        ("verdict", {"id": "c1", "status": "wrong", "evidence": "leak sk-secret"}),
     ],
 )
 def test_secret_in_notes_refused(name, args):
@@ -772,8 +787,9 @@ ALL = [
 
 CANDIDATES = [
     cg.Candidate("a.rs", 3, "kept one", "kept", ""),
-    cg.Candidate("b.rs", 5, "dropped one", "dropped", "`if x > 0`\nguards it"),
+    cg.Candidate("b.rs", 5, "wrong one", "wrong", "`if x > 0`\nguards it"),
     cg.Candidate("c.rs", 7, "open one"),
+    cg.Candidate("d.rs", 9, "dup one", "duplicate", "c1"),
 ]
 
 
@@ -833,8 +849,9 @@ def test_apply_appends_candidates_section():
     assert do_apply(gh, rec) == 0
     assert gh.posted == []
     section = (
-        "<details><summary>Candidates: 1 kept, 1 dropped, 1 unjudged</summary>\n\n"
-        "- c2 b.rs:5 dropped one: dropped: `if x > 0` guards it\n"
+        "<details><summary>"
+        "Candidates: 1 kept, 1 wrong, 1 duplicate, 1 unjudged</summary>\n\n"
+        "- c2 b.rs:5 wrong one: wrong: `if x > 0` guards it\n"
         "- c3 c.rs:7 open one: unjudged\n"
         "</details>"
     )

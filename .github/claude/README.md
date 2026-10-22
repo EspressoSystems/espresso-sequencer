@@ -56,15 +56,15 @@ just claude::eval --out tmp/claude-eval/my-run 4456
 `tmp/claude-eval/<UTC time>-<model>/` (or `--out`, which must not exist):
 
 - `<pr>/event.json`, `<pr>/log.txt`, `<pr>/exit`, `<pr>/actions.json` (the record).
-- `report.md`: per case the expected bug, cost and duration, the summary's findings, and dropped candidates with
-  evidence.
+- `report.md`: per case the expected bug, cost and duration, the summary's findings, wrong candidates with evidence, and
+  unjudged candidates.
 
 ### Scoring
 
-Per case in `report.md`, compare findings and dropped candidates with `Bug`:
+Per case in `report.md`, compare findings and wrong candidates with `Bug`:
 
 - caught: a finding names the bug.
-- partial: a finding points at the right code with the wrong failure, or the bug was a candidate and dropped (check the
+- partial: a finding points at the right code with the wrong failure, or the bug was a candidate judged wrong (check the
   evidence).
 - missed: neither.
 

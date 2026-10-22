@@ -263,8 +263,12 @@ def findings(record: cg.Record) -> list[str]:
     ]
 
 
-def dropped(record: cg.Record) -> list[cg.Candidate]:
-    return [c for c in record.candidates if c.status == "dropped"]
+def wrong(record: cg.Record) -> list[cg.Candidate]:
+    return [c for c in record.candidates if c.status == "wrong"]
+
+
+def unjudged(record: cg.Record) -> list[cg.Candidate]:
+    return [c for c in record.candidates if c.status is None]
 
 
 def result_line(pr: int, pr_out: Path) -> str:
@@ -274,7 +278,8 @@ def result_line(pr: int, pr_out: Path) -> str:
         return f"{pr}: exit={code} no actions.json"
     return (
         f"{pr}: exit={code} {footer(record)} findings={len(findings(record))}"
-        f" dropped={len(dropped(record))} error={record.error}"
+        f" wrong={len(wrong(record))} unjudged={len(unjudged(record))}"
+        f" error={record.error}"
     )
 
 
@@ -295,14 +300,22 @@ def section(pr: int, case: dict[str, Any], pr_out: Path) -> str:
         "Findings:",
         *(findings(record) or ["- none"]),
         "",
-        "Dropped candidates:",
+        "Wrong candidates:",
+        *candidate_lines(wrong(record), evidence=True),
+        "",
+        "Unjudged candidates:",
+        *candidate_lines(unjudged(record), evidence=False),
     ]
-    for c in dropped(record):
-        lines.append(f"- {c.path}:{c.line} {cg.one_line(c.summary, 300)}")
-        lines.append(f"  - evidence: {cg.one_line(c.evidence or '', 600)}")
-    if not dropped(record):
-        lines.append("- none")
     return head + "\n".join(lines) + "\n"
+
+
+def candidate_lines(candidates: list[cg.Candidate], evidence: bool) -> list[str]:
+    lines = []
+    for c in candidates:
+        lines.append(f"- {c.path}:{c.line} {cg.one_line(c.summary, 300)}")
+        if evidence:
+            lines.append(f"  - evidence: {cg.one_line(c.evidence or '', 600)}")
+    return lines or ["- none"]
 
 
 if __name__ == "__main__":
