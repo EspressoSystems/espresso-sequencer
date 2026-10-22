@@ -246,8 +246,7 @@ def test_pr_tools_vs_issue_tools():
 def test_job_writes_pinned(name, writes):
     assert cg.JOB_WRITES[name] == writes
     names = set(tools_by_name(cg.select_tools(make(FakeGitHub())[0], name)))
-    reads = set() if name == "review" else {"pr_diff", "pr_view"}
-    assert names == reads | writes
+    assert names == {"pr_diff", "pr_view"} | writes
 
 
 def test_reads_return_text():
@@ -401,20 +400,22 @@ def test_code_review_prompt_is_one_slash_line():
     assert cg.target(event) == PR
 
 
-def test_review_prompt_header_and_order():
-    p = cg.review_prompt(PR, "abc123", "http://run", "FOCUS", "COMMON")
-    assert p.splitlines()[:4] == [
+def test_backport_prompt_header_and_doc():
+    p = cg.backport_prompt(PR, "abc123", "http://run", "DOC")
+    assert p.splitlines() == [
         "REPO: o/r",
         "PR NUMBER: 7",
         "HEAD SHA: abc123",
         "RUN URL: http://run",
+        "",
+        "DOC",
     ]
-    assert p.index("FOCUS") < p.index("COMMON")
 
 
-def test_focus_file_choice():
-    assert cg.focus_path(False).name == "review-standard.md"
-    assert cg.focus_path(True).name == "review-backport.md"
+def test_review_append_has_summary_and_thread_rules():
+    text = cg.review_append()
+    assert "### Review of #" in text and "resolve_thread" in text
+    assert "resolve_thread" not in (cg.CLAUDE_DIR / "code-review.md").read_text()
 
 
 def test_target_from_pull_request_event():
@@ -450,7 +451,7 @@ def test_run_ok_logs_final_line_and_writes_record(caplog, tmp_path):
     assert messages[0] == "tool comment body=<2 chars>"
     assert messages[1] == "done"
     assert messages[-1] == (
-        'total_cost_usd=0.5 turns=3 duration_s=2 permission_denials=[{"t": 1}]'
+        'total_cost_usd=0.5 turns=1 duration_s=2 permission_denials=[{"t": 1}]'
     )
     assert caplog.records[-1].levelno == logging.INFO
     assert json.loads(path.read_text()) == {
@@ -458,7 +459,7 @@ def test_run_ok_logs_final_line_and_writes_record(caplog, tmp_path):
         "model": "opus",
         "summary": "hi",
         "actions": [],
-        "footer": cg.footer(make_result(), "opus"),
+        "footer": cg.footer(make_result(), "opus", 1),
         "error": None,
     }
 
@@ -473,6 +474,22 @@ def test_run_error_records_subtype_and_partial_actions(tmp_path):
     record = cg.parse_record(json.loads(path.read_text()), "review")
     assert record.actions == [cg.Reply(1, "r")]
     assert record.error == "error_max_turns"
+
+
+def test_footer_turns_count_distinct_top_level_messages(tmp_path):
+    def msg(message_id, parent=None):
+        return AssistantMessage(
+            content=[], model="m", message_id=message_id, parent_tool_use_id=parent
+        )
+
+    async def runner(job: Any) -> AsyncIterator[Message]:
+        for m in [msg("a"), msg("a"), msg("b"), msg("c", "toolu_1"), msg(None)]:
+            yield m
+        yield make_result(num_turns=0)
+
+    j, path, _ = run_job(tmp_path, [], None)
+    asyncio.run(cg.run(j, runner, path))
+    assert "3 turns" in json.loads(path.read_text())["footer"]
 
 
 def test_run_missing_result_fails_and_records(tmp_path):
@@ -496,14 +513,16 @@ def test_run_raising_runner_still_writes_record(tmp_path):
 
 
 def test_run_is_error_fails():
-    lines, code = cg.result_lines(make_result(is_error=True, subtype="error_max_turns"))
+    lines, code = cg.result_lines(
+        make_result(is_error=True, subtype="error_max_turns"), 3
+    )
     assert code == 1
     assert "subtype=error_max_turns" in "\n".join(lines)
     assert lines[-1].startswith("total_cost_usd=")
 
 
 def test_cost_none_prints():
-    lines, code = cg.result_lines(make_result(total_cost_usd=None))
+    lines, code = cg.result_lines(make_result(total_cost_usd=None), 3)
     assert (
         code == 0
         and lines[-1]
@@ -516,7 +535,7 @@ def test_run_appends_step_summary(tmp_path):
     j, path, runner = run_job(tmp_path, [], make_result())
     asyncio.run(cg.run(j, runner, path, out))
     assert out.read_text() == (
-        "- claude-gh review: total_cost_usd=0.5 turns=3 duration_s=2 "
+        "- claude-gh review: total_cost_usd=0.5 turns=0 duration_s=2 "
         "permission_denials=[]\n"
     )
 
@@ -600,7 +619,7 @@ def test_view_json_deleted_user_is_ghost():
 
 # Records and apply
 
-FOOT = cg.footer(make_result(), "opus")
+FOOT = cg.footer(make_result(), "opus", 3)
 
 
 def record(
@@ -861,10 +880,12 @@ def test_start_prints_only_the_comment_id(capsys):
 
 
 def test_footer_formats_cost_and_duration():
-    r = make_result(total_cost_usd=0.589, num_turns=27, duration_ms=133_000)
-    assert cg.footer(r, "opus") == "<sub>Cost $0.59 · 27 turns · 2m 13s · opus</sub>"
+    r = make_result(total_cost_usd=0.589, duration_ms=133_000)
+    assert (
+        cg.footer(r, "opus", 27) == "<sub>Cost $0.59 · 27 turns · 2m 13s · opus</sub>"
+    )
     r = make_result(total_cost_usd=None, duration_ms=45_000)
-    assert cg.footer(r, "opus") == "<sub>Cost n/a · 3 turns · 45s · opus</sub>"
+    assert cg.footer(r, "opus", 3) == "<sub>Cost n/a · 3 turns · 45s · opus</sub>"
 
 
 DIFF = r"""diff --git a/old.rs b/new.rs

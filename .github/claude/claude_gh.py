@@ -80,8 +80,7 @@ BACKPORT_MARKER = Path("tmp/is-backport")
 RECORD = Path("tmp/actions.json")
 PREFETCH_DIR = Path("tmp")
 READS = {"pr_diff", "pr_view", "issue_view"}
-# Review reads the PR from files written by `prefetch`, so it gets no read tools.
-JOB_READS = {"review": set(), "mention": READS, "code-review": READS}
+JOB_READS = {"review": READS, "mention": READS, "code-review": READS}
 
 
 @dataclass(frozen=True)
@@ -219,18 +218,12 @@ def mention_from_event(name: str, event: dict) -> Mention:
     return Mention(target(event), reply_to, context)
 
 
-def focus_path(backport: bool) -> Path:
-    return CLAUDE_DIR / ("review-backport.md" if backport else "review-standard.md")
-
-
-def review_prompt(
-    target: Target, head_sha: str, run_url: str, focus: str, common: str
-) -> str:
+def backport_prompt(target: Target, head_sha: str, run_url: str, doc: str) -> str:
     header = (
         f"REPO: {target.repo}\nPR NUMBER: {target.number}\n"
         f"HEAD SHA: {head_sha}\nRUN URL: {run_url}"
     )
-    return f"{header}\n\n{focus}\n\n{common}"
+    return f"{header}\n\n{doc}"
 
 
 def mention_prompt(m: Mention, doc: str) -> str:
@@ -320,6 +313,8 @@ def options(job: Job, server: McpSdkServerConfig) -> ClaudeAgentOptions:
         mcp_servers={SERVER: server},
         permission_mode="dontAsk",
         env=CLI_ENV,
+        # Local runs on NixOS: the bundled CLI binary does not execute there.
+        cli_path=os.environ.get("CLAUDE_CLI_PATH"),
     )
 
 
@@ -336,7 +331,7 @@ def tool_line(name: str, args: Mapping[str, Any]) -> str:
     return f"tool {name.removeprefix(f'mcp__{SERVER}__')} {' '.join(parts)}".rstrip()
 
 
-def result_lines(result: ResultMessage | None) -> tuple[list[str], int]:
+def result_lines(result: ResultMessage | None, turns: int) -> tuple[list[str], int]:
     """Log lines for a run and its exit code; the last line is also the step summary."""
     if result is None:
         return ["no result message"], 1
@@ -347,17 +342,17 @@ def result_lines(result: ResultMessage | None) -> tuple[list[str], int]:
         code = 1
     denials = json.dumps(result.permission_denials)
     lines.append(
-        f"total_cost_usd={result.total_cost_usd} turns={result.num_turns} "
+        f"total_cost_usd={result.total_cost_usd} turns={turns} "
         f"duration_s={result.duration_ms / 1000:.0f} permission_denials={denials}"
     )
     return lines, code
 
 
-def footer(result: ResultMessage, model: str) -> str:
+def footer(result: ResultMessage, model: str, turns: int) -> str:
     cost = "n/a" if result.total_cost_usd is None else f"${result.total_cost_usd:.2f}"
     minutes, seconds = divmod(round(result.duration_ms / 1000), 60)
     duration = f"{minutes}m {seconds}s" if minutes else f"{seconds}s"
-    return f"<sub>Cost {cost} · {result.num_turns} turns · {duration} · {model}</sub>"
+    return f"<sub>Cost {cost} · {turns} turns · {duration} · {model}</sub>"
 
 
 def noun(job: str) -> str:
@@ -766,9 +761,14 @@ async def run(
     job: Job, runner: Runner, record_path: Path, step_summary: Path | None = None
 ) -> int:
     result = None
+    # ResultMessage.num_turns is unreliable for slash-command runs. One API response can span
+    # several messages sharing a message_id; subagent messages are not main-agent turns.
+    turn_ids: set[object] = set()
     try:
         async for message in runner(job):
             if isinstance(message, AssistantMessage):
+                if message.parent_tool_use_id is None:
+                    turn_ids.add(message.message_id or id(message))
                 for block in message.content:
                     if isinstance(block, ToolUseBlock):
                         log.info(tool_line(block.name, block.input))
@@ -776,11 +776,11 @@ async def run(
                 result = message
     finally:
         if result:
-            job.record.footer = footer(result, job.model)
+            job.record.footer = footer(result, job.model, len(turn_ids))
             job.record.error = result.subtype if result.is_error else None
         record_path.parent.mkdir(parents=True, exist_ok=True)
         record_path.write_text(json.dumps(to_json(job.record)))
-    lines, code = result_lines(result)
+    lines, code = result_lines(result, len(turn_ids))
     for line in lines:
         log.info(line)
     if step_summary and result:
@@ -801,6 +801,11 @@ def load_secrets() -> dict[str, str]:
     return secrets
 
 
+def review_append() -> str:
+    docs = (CLAUDE_DIR / name for name in ("code-review.md", "review-threads.md"))
+    return "\n".join(p.read_text() for p in docs)
+
+
 def build_job(
     args: argparse.Namespace,
     gh: GitHub,
@@ -814,10 +819,14 @@ def build_job(
     settings: list[SettingSource] = ["user", "project"]  # base-branch checkout
     if args.job == "review":
         tgt = target(event)
-        head_sha = event["pull_request"]["head"]["sha"]
-        focus = focus_path(BACKPORT_MARKER.exists()).read_text()
-        common = (CLAUDE_DIR / "review-common.md").read_text()
-        prompt = review_prompt(tgt, head_sha, run_url, focus, common)
+        if BACKPORT_MARKER.exists():
+            head_sha = event["pull_request"]["head"]["sha"]
+            doc = (CLAUDE_DIR / "review-backport.md").read_text()
+            prompt = backport_prompt(tgt, head_sha, run_url, doc)
+        else:
+            prompt = code_review_prompt(tgt, args.effort)
+            builtin = BUILTIN + ["Agent"]
+        append = review_append()
         settings = ["user"]  # PR head checkout: no project settings
     elif args.job == "mention":
         mention = mention_from_event(os.environ["GITHUB_EVENT_NAME"], event)
