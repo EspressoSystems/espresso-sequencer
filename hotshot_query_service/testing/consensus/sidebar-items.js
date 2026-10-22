@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"trait":["DataSourceLifeCycle","TestableDataSource"],"type":["MockDataSource","MockSqlDataSource"]};

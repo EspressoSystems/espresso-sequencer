@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"constant":["BLOCKS","GENESIS","L1_BLOCKS","NETWORK_CONFIG","NETWORK_CONFIG_UPDATE","STATE_CERTS"],"fn":["chain_dir","l1_block","mine_l1_block","replay_l1","replay_params","wait_for_height","wait_for_replay"],"struct":["LegacyChain","RecordedBlock","RecordedL1Block","RecordedNetworkConfigUpdate","ReplayNode","ReplaySource"]};

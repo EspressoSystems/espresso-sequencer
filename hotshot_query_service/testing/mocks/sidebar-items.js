@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"constant":["MOCK_UPGRADE"],"fn":["mock_transaction"],"struct":["MockInclusionProof","MockTypes"],"type":["MockHeader","MockMerkleTree","MockPayload","MockTransaction"]};

@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"constant":["STAKE_TABLE_CAPACITY_FOR_TEST"],"fn":["decided_leaves","deploy_stake_table","select_staking_key_sets","staking_priv_keys","wait_for_decide_on_handle","wait_for_epochs"],"struct":["TestConfig","TestConfigBuilder"],"type":["AnvilFillProvider"]};
