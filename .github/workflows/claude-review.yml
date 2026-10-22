@@ -62,6 +62,8 @@ jobs:
         env:
           REPO: ${{ github.repository }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -euo pipefail
           # Read from PR head, so PR-author controllable. Fine: fork PRs need manual
@@ -74,6 +76,8 @@ jobs:
           {
             echo "REPO: $REPO"
             echo "PR NUMBER: $PR_NUMBER"
+            echo "HEAD SHA: $HEAD_SHA"
+            echo "RUN URL: $RUN_URL"
             echo
             cat "$focus"
             echo
