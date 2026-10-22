@@ -1,6 +1,8 @@
 use std::{
     collections::{BTreeMap, BTreeSet, HashSet, btree_map::Entry},
+    num::NonZeroUsize,
     ops::Range,
+    sync::LazyLock,
 };
 
 use committable::Commitment;
@@ -13,9 +15,26 @@ use hotshot_types::{
     vid::avidm_gf2::{AvidmGf2Common, AvidmGf2Param, AvidmGf2Scheme, AvidmGf2Share},
 };
 use tokio::task::{AbortHandle, JoinSet};
-use tracing::{error, warn};
+use tracing::{error, info, warn};
 
 use super::ns_lens_match_metadata;
+
+/// Benchmark only: a node that sees at most `ESPRESSO_BENCH_SKIP_DECODE_MAX_CORES` cores drops
+/// every VID share, so it never rebuilds a block. With `--slow-nodes` only the slow nodes skip.
+/// Safe only from protocol 0.8, where no vote waits for a payload. Such a node never learns which
+/// of its transactions were included, so it resends them until they expire.
+static SKIP_DECODE: LazyLock<bool> = LazyLock::new(|| {
+    let Some(max_cores) = std::env::var("ESPRESSO_BENCH_SKIP_DECODE_MAX_CORES")
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+    else {
+        return false;
+    };
+    let cores = std::thread::available_parallelism().map_or(usize::MAX, NonZeroUsize::get);
+    let skip = cores <= max_cores;
+    info!(cores, max_cores, skip, "bench: skip VID decode");
+    skip
+});
 
 pub(crate) type Metadata<T> = <<T as NodeType>::BlockPayload as BlockPayload<T>>::Metadata;
 
@@ -204,6 +223,9 @@ impl<T: NodeType> VidReconstructor<T> {
         sender: T::SignatureKey,
         share: VidDisperseShare2<T>,
     ) {
+        if *SKIP_DECODE {
+            return;
+        }
         let view = share.view_number;
         // A share carries the voter it belongs to; only the authenticated
         // sender may contribute its own. This cheap check bounds each node to
