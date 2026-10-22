@@ -94,7 +94,7 @@ jobs:
       # alerts on, and no workflow ran their tests. `py::lint` and `py::check` still do not run
       # here: both need a tool installed, and nextest-ci has lint violations that belong in
       # their own change.
-      - uses: astral-sh/setup-uv@v10.0.1
+      - uses: astral-sh/setup-uv@v10.3.2
         with:
           python-version: "3.14"
 
@@ -107,12 +107,9 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: taiki-e/install-action@just
-      - uses: astral-sh/setup-uv@v10.0.1
+      - uses: astral-sh/setup-uv@v10.3.2
         with:
           python-version: "3.14"
-
-      - name: Install ruff and ty
-        run: uv tool install ruff && uv tool install ty
 
       - name: Lint, type-check and test claude-gh
         run: |

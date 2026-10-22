@@ -4,16 +4,16 @@ on:
   pull_request:
     types: [opened, ready_for_review, reopened]
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
-  cancel-in-progress: true
-
 # run holds ANTHROPIC_API_KEY and a read token and only records actions; start and apply hold the
-# write token and never run Claude. All three use the PR checkout, so .github/claude/claude_gh.py is
-# PR-author controllable. Fine: fork PRs need approval and get read-only tokens.
+# write token and never run Claude. All three check out the PR head, so .github/claude/claude_gh.py
+# is controlled by whoever pushed the head branch. Fine: fork PRs and Dependabot-authored PRs are
+# skipped, so the head branch lives in this repo and was pushed with write access.
 jobs:
   start:
-    if: github.event.pull_request.draft == false
+    if: |
+      github.event.pull_request.draft == false &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.user.login != 'dependabot[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -24,6 +24,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 1
+          ref: ${{ github.event.pull_request.head.sha }}
           sparse-checkout: .github/claude
           persist-credentials: false
 
@@ -41,6 +42,10 @@ jobs:
 
   run:
     needs: start
+    # Only run is cancelled: apply (if: always()) still marks a cancelled run's status comment.
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -51,10 +56,8 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 1
+          ref: ${{ github.event.pull_request.head.sha }}
           persist-credentials: false
-
-      - name: Remove project instructions
-        run: rm -f CLAUDE.md AGENTS.md
 
       - name: Fetch team review comments
         env:
@@ -120,6 +123,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 1
+          ref: ${{ github.event.pull_request.head.sha }}
           sparse-checkout: .github/claude
           persist-credentials: false
 

@@ -2,13 +2,15 @@ r"""Run Claude on a GitHub PR or issue with a fixed set of tools, in three workf
 
     claude-gh start review          # write token: post the status comment, print its id
     claude-gh run review            # read token, Claude: record actions in tmp/actions.json
-    claude-gh run code-review --model opus --effort high
+    claude-gh run code-review --model opus --effort high --workdir pr \
+        --head-sha <sha> --base-sha <sha>
     claude-gh apply review --status-id 1 --run-result success --record tmp/actions/actions.json
 
 Jobs: review (PR opened), mention (@claude mention, answers in the thread), code-review.
 
-`run` gives the model Read/Grep/Glob and an in-process MCP server `gh`. There is no Bash.
-Reads go to the PR or issue bound at startup. Writes are only recorded, never sent.
+`run` gives the model Read/Grep/Glob (plus Agent on code-review) and an in-process MCP
+server `gh`. There is no Bash. Reads go to the PR or issue bound at startup. Writes are only
+recorded, never sent; the record is rewritten after each one.
 
 `apply` is best effort: each action is validated and posted independently. An action that
 fails validation or that GitHub rejects is skipped and listed in the status comment under
@@ -17,11 +19,11 @@ unusable record (bad JSON, unknown kind, job mismatch) is refused as a whole.
 
 The record is not a trust boundary on review: the PR author controls the apply workflow
 too. The checks catch model mistakes and prompt injection: a thread must be started by a
-bot and belong to the same PR, and the target, mention routing and head sha come from the
-event, never from the record.
+bot and belong to the same PR, the target and mention routing come from the event, and
+the head sha is set by `run`, never by a tool call.
 
 Env: GH_TOKEN, GITHUB_EVENT_PATH, GITHUB_REPOSITORY, GITHUB_SERVER_URL, GITHUB_RUN_ID,
-GITHUB_EVENT_NAME, ANTHROPIC_API_KEY (optional, run), GITHUB_STEP_SUMMARY (optional).
+GITHUB_EVENT_NAME, ANTHROPIC_API_KEY (optional, run).
 """
 
 import argparse
@@ -42,6 +44,7 @@ from claude_agent_sdk import (
     Message,
     ResultMessage,
     SdkMcpTool,
+    TextBlock,
     ToolUseBlock,
     create_sdk_mcp_server,
     query,
@@ -60,6 +63,7 @@ from githubkit.exception import RequestFailed
 log = logging.getLogger("claude-gh")
 
 BUILTIN = ["Read", "Grep", "Glob"]
+# Read rules also govern Grep and Glob, so this keeps /proc/*/environ (tokens) unreadable.
 DISALLOWED = ["Read(//proc/**)"]
 BOTS = {"github-actions", "claude"}
 WRITES = {"inline_comment", "reply", "comment", "resolve_thread"}
@@ -76,11 +80,8 @@ SERVER = "gh"
 THREAD_ID = re.compile(r"[A-Za-z0-9_=-]+")
 HUNK = re.compile(r"@@ -\d+(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")
 CLAUDE_DIR = Path(__file__).parent
-BACKPORT_MARKER = Path("tmp/is-backport")
-RECORD = Path("tmp/actions.json")
-PREFETCH_DIR = Path("tmp")
+TMP = Path("tmp")
 READS = {"pr_diff", "pr_view", "issue_view"}
-JOB_READS = {"review": READS, "mention": READS, "code-review": READS}
 # In-process bookkeeping: recorded on the Record, never posted as an action.
 NOTES = {"candidate", "verdict"}
 JOB_NOTES = {"review": NOTES, "mention": set(), "code-review": NOTES}
@@ -157,6 +158,8 @@ class Record:
     footer: str | None = None  # cost line; None without a result message
     error: str | None = None  # result subtype when the run ended in error
     candidates: list[Candidate] = field(default_factory=list)  # id c<n> is index n-1
+    head_sha: str | None = None  # PR head the run saw; None for mention
+    diff_too_large: bool = False  # GitHub refused the diff, inline lines unchecked
 
 
 @dataclass(frozen=True)
@@ -169,7 +172,10 @@ class Job:
     tools: list[SdkMcpTool]
     builtin: list[str]
     settings: list[SettingSource]
+    cwd: Path | None  # None: the process cwd
     record: Record
+    record_path: Path
+    secrets: Mapping[str, str]
 
 
 @dataclass(frozen=True)
@@ -181,8 +187,8 @@ class Thread:
 
 class GitHub(Protocol):
     async def pr_diff(self, pr: int) -> str: ...
+    async def compare_diff(self, base: str, head: str) -> str: ...
     async def pr_view(self, pr: int) -> str: ...
-    async def pr_meta(self, pr: int) -> str: ...
     async def issue_view(self, number: int) -> str: ...
     async def head_sha(self, pr: int) -> str: ...
     async def inline_comment(
@@ -233,11 +239,8 @@ def mention_from_event(name: str, event: dict) -> Mention:
     return Mention(target(event), reply_to, context)
 
 
-def backport_prompt(target: Target, head_sha: str, run_url: str, doc: str) -> str:
-    header = (
-        f"REPO: {target.repo}\nPR NUMBER: {target.number}\n"
-        f"HEAD SHA: {head_sha}\nRUN URL: {run_url}"
-    )
+def review_prompt(target: Target, head_sha: str, doc: str) -> str:
+    header = f"REPO: {target.repo}\nPR NUMBER: {target.number}\nHEAD SHA: {head_sha}"
     return f"{header}\n\n{doc}"
 
 
@@ -324,8 +327,11 @@ def options(job: Job, server: McpSdkServerConfig) -> ClaudeAgentOptions:
         allowed_tools=job.builtin + [f"mcp__{SERVER}"],
         disallowed_tools=DISALLOWED,
         setting_sources=job.settings,
+        cwd=job.cwd,
         system_prompt=prompt,
         mcp_servers={SERVER: server},
+        # Only the `gh` server: no .mcp.json from the checkout.
+        strict_mcp_config=True,
         permission_mode="dontAsk",
         env=CLI_ENV,
         # Local runs on NixOS: the bundled CLI binary does not execute there.
@@ -334,9 +340,8 @@ def options(job: Job, server: McpSdkServerConfig) -> ClaudeAgentOptions:
 
 
 def select_tools(tools: list[SdkMcpTool], job_name: str) -> list[SdkMcpTool]:
-    allowed = JOB_WRITES[job_name] | JOB_READS[job_name] | JOB_NOTES[job_name]
-    gated = WRITES | READS | NOTES
-    return [t for t in tools if t.name not in gated or t.name in allowed]
+    allowed = JOB_WRITES[job_name] | JOB_NOTES[job_name]
+    return [t for t in tools if t.name not in WRITES | NOTES or t.name in allowed]
 
 
 def is_note(name: str) -> bool:
@@ -352,28 +357,28 @@ def tool_line(name: str, args: Mapping[str, Any]) -> str:
     return f"tool {name.removeprefix(f'mcp__{SERVER}__')} {' '.join(parts)}".rstrip()
 
 
-def result_lines(result: ResultMessage | None, turns: int) -> tuple[list[str], int]:
-    """Log lines for a run and its exit code; the last line is also the step summary."""
+def result_lines(result: ResultMessage | None) -> tuple[list[str], int]:
+    """Log lines for a run and its exit code."""
     if result is None:
         return ["no result message"], 1
-    lines = [result.result] if result.result else []
+    lines = [f"result {len(result.result)} chars"] if result.result else []
     code = 0
     if result.is_error:
         lines.append(f"result is_error, subtype={result.subtype}")
         code = 1
     denials = json.dumps(result.permission_denials)
     lines.append(
-        f"total_cost_usd={result.total_cost_usd} turns={turns} "
+        f"total_cost_usd={result.total_cost_usd} "
         f"duration_s={result.duration_ms / 1000:.0f} permission_denials={denials}"
     )
     return lines, code
 
 
-def footer(result: ResultMessage, model: str, turns: int) -> str:
+def footer(result: ResultMessage, model: str) -> str:
     cost = "n/a" if result.total_cost_usd is None else f"${result.total_cost_usd:.2f}"
     minutes, seconds = divmod(round(result.duration_ms / 1000), 60)
     duration = f"{minutes}m {seconds}s" if minutes else f"{seconds}s"
-    return f"<sub>Cost {cost} · {turns} turns · {duration} · {model}</sub>"
+    return f"<sub>Cost {cost} · {duration} · {model}</sub>"
 
 
 def one_line(text: str, limit: int = 120) -> str:
@@ -427,11 +432,17 @@ def noun(job: str) -> str:
 
 
 def status_body(
-    record: Record, run_result: str, run_url: str, skipped: list[str]
+    record: Record, pr: int, run_result: str, run_url: str, skipped: list[str]
 ) -> str:
     what = noun(record.job)
     reason = record.error or (run_result if run_result != "success" else None)
-    parts = [record.summary] if record.summary else []
+    parts = []
+    if record.head_sha:
+        parts.append(f"### Review of #{pr} at {record.head_sha[:7]}")
+    if record.summary:
+        parts.append(record.summary)
+    if record.diff_too_large:
+        parts.append("Diff too large for line validation.")
     if skipped:
         parts.append("**Not applied**\n" + "\n".join(skipped))
     if reason:
@@ -518,11 +529,6 @@ def view_json(item: Any) -> str:
     return json.dumps(view_data(item))
 
 
-def meta_json(pr: Any) -> str:
-    refs = {"base": pr.base.ref, "head": pr.head.ref}
-    return json.dumps({**view_data(pr), **refs})
-
-
 # Tools
 
 
@@ -531,14 +537,16 @@ def make_tools(
     target: Target,
     secrets: Mapping[str, str],
     rec: Record,
-    lines: Mapping[str, set[int]] | None = None,
+    lines: Mapping[str, set[int]] | None,
+    save: Callable[[], None],
+    read_diff: Callable[[], Awaitable[str]],
 ) -> list[SdkMcpTool]:
     """Reads act on `target`; the model never names a PR, issue or repo.
 
-    Builds every tool; `select_tools` drops the writes a job may not use. Writes append to
-    `rec` and post nothing. With `lines` (see `diff_lines`), inline comments outside the
-    diff are refused. Handlers raise ValueError on refused calls, which the SDK
-    reports to the model as an error result.
+    Builds every tool; `select_tools` drops the writes a job may not use. Writes and notes
+    update `rec`, call `save` and post nothing. With `lines` (see `diff_lines`), inline
+    comments outside the diff are refused. `pr_diff` returns `read_diff()`. Handlers raise
+    ValueError on refused calls, which the SDK reports to the model as an error result.
     """
     n = target.number
 
@@ -552,6 +560,8 @@ def make_tools(
             for key in TEXT_ARGS & args.keys():
                 check_body(args[key], secrets)
             out = await run(args)
+            if name not in READS:
+                save()
             return {"content": [{"type": "text", "text": out}]}
 
         return tool(name, desc, schema)(handler)
@@ -575,7 +585,7 @@ def make_tools(
 
     if target.is_pr:
         reads = [
-            define("pr_diff", "Diff of the PR.", {}, lambda a: gh.pr_diff(n)),
+            define("pr_diff", "Diff of the PR.", {}, lambda a: read_diff()),
             define(
                 "pr_view",
                 "Title, body and author of the PR.",
@@ -648,17 +658,19 @@ class GitHubKit:
         )
         return resp.text
 
+    async def compare_diff(self, base: str, head: str) -> str:
+        resp = await self.gh.arequest(
+            "GET",
+            f"/repos/{self.owner}/{self.name}/compare/{base}...{head}",
+            headers={"Accept": "application/vnd.github.diff"},
+        )
+        return resp.text
+
     async def pr_view(self, pr: int) -> str:
         resp = await self.gh.rest.pulls.async_get(
             owner=self.owner, repo=self.name, pull_number=pr
         )
         return view_json(resp.parsed_data)
-
-    async def pr_meta(self, pr: int) -> str:
-        resp = await self.gh.rest.pulls.async_get(
-            owner=self.owner, repo=self.name, pull_number=pr
-        )
-        return meta_json(resp.parsed_data)
 
     async def issue_view(self, number: int) -> str:
         resp = await self.gh.rest.issues.async_get(
@@ -800,11 +812,10 @@ async def apply(
     status: Posted,
     run_url: str,
     run_result: str,
-    head_sha: str | None,
 ) -> int:
     """Post each action independently, then edit the status. Returns the exit code.
 
-    `head_sha` comes from the event when it has one; otherwise it is fetched once.
+    Inline comments bind to the head sha `run` recorded; without one it is fetched once.
     """
     what = noun(job)
     if raw is None:
@@ -819,6 +830,7 @@ async def apply(
             status, f"{what} failed: invalid actions. [run]({run_url})"
         )
         raise
+    head_sha = record.head_sha
     if head_sha is None and any(isinstance(a, InlineComment) for a in record.actions):
         head_sha = await gh.head_sha(tgt.number)
     skipped = []
@@ -829,52 +841,77 @@ async def apply(
             reason = github_error(e)
             log.error("skipped %s: %s", label(action), reason)
             skipped.append(f"- {label(action)}: {reason}")
-    await gh.edit_comment(status, status_body(record, run_result, run_url, skipped))
+    body = status_body(record, tgt.number, run_result, run_url, skipped)
+    await gh.edit_comment(status, body)
     return 0 if run_result == "success" and not skipped else 1
 
 
 # Run (read token, Claude)
 
 
-async def prefetch(gh: GitHub, pr: int, out: Path) -> str:
-    """Writes the PR files for the model and returns the diff."""
-    out.mkdir(parents=True, exist_ok=True)
-    diff = await gh.pr_diff(pr)
-    (out / "pr.json").write_text(await gh.pr_meta(pr))
-    (out / "pr.diff").write_text(diff)
-    return diff
+async def fetch_diff(gh: GitHub, base: str, head: str) -> str | None:
+    """Diff of `base...head`; None when GitHub refuses it as too large."""
+    try:
+        return await gh.compare_diff(base, head)
+    except RequestFailed as e:
+        if e.response.status_code != 406:
+            raise
+        log.warning("diff refused, inline lines unchecked: %s", github_error(e))
+        return None
 
 
-async def run(
-    job: Job, runner: Runner, record_path: Path, step_summary: Path | None = None
-) -> int:
+def served(diff: str | None) -> Callable[[], Awaitable[str]]:
+    """`pr_diff` for a prefetched diff: the same text the inline lines are checked against."""
+
+    async def read() -> str:
+        if diff is None:
+            raise ValueError("GitHub refused the diff as too large")
+        return diff
+
+    return read
+
+
+def write_record(path: Path, record: Record) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    part = path.with_name(path.name + ".part")
+    part.write_text(json.dumps(to_json(record)))
+    os.replace(part, path)  # a killed run never leaves a truncated record
+
+
+async def run(job: Job, runner: Runner) -> int:
     result = None
-    # ResultMessage.num_turns is unreliable for slash-command runs. One API response can span
-    # several messages sharing a message_id; subagent messages are not main-agent turns.
-    turn_ids: set[object] = set()
+    rec = job.record
     try:
         async for message in runner(job):
             if isinstance(message, AssistantMessage):
-                if message.parent_tool_use_id is None:
-                    turn_ids.add(message.message_id or id(message))
                 for block in message.content:
-                    if isinstance(block, ToolUseBlock) and not is_note(block.name):
+                    if isinstance(block, TextBlock):
+                        log.info("text %s", one_line(block.text, 300))
+                    elif isinstance(block, ToolUseBlock) and not is_note(block.name):
                         log.info(tool_line(block.name, block.input))
             elif isinstance(message, ResultMessage):
                 result = message
     finally:
         if result:
-            job.record.footer = footer(result, job.model, len(turn_ids))
-            job.record.error = result.subtype if result.is_error else None
-        record_path.parent.mkdir(parents=True, exist_ok=True)
-        record_path.write_text(json.dumps(to_json(job.record)))
-    lines, code = result_lines(result, len(turn_ids))
+            rec.footer = footer(result, job.model)
+            rec.error = result.subtype if result.is_error else None
+            if job.name == "mention" and rec.summary is None and result.result:
+                answer_fallback(rec, result.result, job.secrets)
+        write_record(job.record_path, rec)
+    lines, code = result_lines(result)
     for line in lines:
         log.info(line)
-    if step_summary and result:
-        with step_summary.open("a") as f:
-            f.write(f"- claude-gh {job.name}: {lines[-1]}\n")
     return code
+
+
+def answer_fallback(rec: Record, text: str, secrets: Mapping[str, str]) -> None:
+    """A mention answered in text, without `comment`."""
+    try:
+        check_body(text, secrets)
+    except ValueError as e:
+        rec.error = f"answer text: {e}"
+        return
+    rec.summary = text
 
 
 def sdk_runner(job: Job) -> AsyncIterator[Message]:
@@ -882,52 +919,58 @@ def sdk_runner(job: Job) -> AsyncIterator[Message]:
     return query(prompt=job.prompt, options=options(job, server))
 
 
-def load_secrets() -> dict[str, str]:
-    secrets = {"GH_TOKEN": os.environ["GH_TOKEN"]}
-    if key := os.environ.get("ANTHROPIC_API_KEY"):  # unset: CLI uses the local login
+def load_secrets(env: Mapping[str, str]) -> dict[str, str]:
+    secrets = {"GH_TOKEN": env["GH_TOKEN"]}
+    if key := env.get("ANTHROPIC_API_KEY"):  # unset: CLI uses the local login
         secrets["ANTHROPIC_API_KEY"] = key
     return secrets
-
-
-def review_append() -> str:
-    docs = (CLAUDE_DIR / name for name in ("code-review.md", "review-threads.md"))
-    return "\n".join(p.read_text() for p in docs)
 
 
 def build_job(
     args: argparse.Namespace,
     gh: GitHub,
     secrets: Mapping[str, str],
+    event_name: str,
     event: dict,
-    run_url: str,
+    head_sha: str | None,
     diff: str | None,
+    tmp: Path,
 ) -> Job:
+    """`head_sha` and `diff` are None for mention; `diff` also when GitHub refused it."""
     append = None
     builtin = BUILTIN
-    settings: list[SettingSource] = ["user", "project"]  # base-branch checkout
+    settings: list[SettingSource] = ["user"]  # PR head checkout: no project settings
+    record = Record(
+        args.job,
+        args.model,
+        head_sha=head_sha,
+        diff_too_large=args.job != "mention" and diff is None,
+    )
     if args.job == "review":
+        assert head_sha is not None
         tgt = target(event)
-        if BACKPORT_MARKER.exists():
-            head_sha = event["pull_request"]["head"]["sha"]
-            doc = (CLAUDE_DIR / "review-backport.md").read_text()
-            prompt = backport_prompt(tgt, head_sha, run_url, doc)
-        else:
-            prompt = code_review_prompt(tgt, args.effort)
-            builtin = BUILTIN + ["Agent"]
-        append = review_append()
-        settings = ["user"]  # PR head checkout: no project settings
+        doc = (CLAUDE_DIR / "review.md").read_text()
+        if (tmp / "is-backport").exists():
+            doc += "\n\n" + (CLAUDE_DIR / "review-backport.md").read_text()
+        prompt = review_prompt(tgt, head_sha, doc)
     elif args.job == "mention":
-        mention = mention_from_event(os.environ["GITHUB_EVENT_NAME"], event)
+        mention = mention_from_event(event_name, event)
         tgt = mention.target
         prompt = mention_prompt(mention, (CLAUDE_DIR / "mention.md").read_text())
+        settings = ["user", "project"]  # default-branch checkout
     else:
         tgt = target(event)
         prompt = code_review_prompt(tgt, args.effort)
         append = (CLAUDE_DIR / "code-review.md").read_text()
         builtin = BUILTIN + ["Agent"]
-    record = Record(args.job, args.model)
+    path = tmp / "actions.json"
     lines = None if diff is None else diff_lines(diff)
-    tools = make_tools(gh, tgt, secrets, record, lines)
+    read_diff = (
+        (lambda: gh.pr_diff(tgt.number)) if args.job == "mention" else served(diff)
+    )
+    tools = make_tools(
+        gh, tgt, secrets, record, lines, lambda: write_record(path, record), read_diff
+    )
     return Job(
         args.job,
         prompt,
@@ -937,7 +980,10 @@ def build_job(
         select_tools(tools, args.job),
         builtin,
         settings,
+        args.workdir,
         record,
+        path,
+        secrets,
     )
 
 
@@ -952,11 +998,21 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         if command == "run":
             p.add_argument("--model", default="opus")
             p.add_argument("--effort", default="high", choices=get_args(EffortLevel))
+            p.add_argument("--workdir", type=Path, help="Claude's cwd")
+            p.add_argument("--head-sha", help="code-review: PR head checked out")
+            p.add_argument("--base-sha", help="code-review: PR base")
         if command == "apply":
             p.add_argument("--status-id", type=int, required=True)
             p.add_argument("--run-result", required=True)
             p.add_argument("--record", type=Path, required=True)
-    return parser.parse_args(argv)
+    args = parser.parse_args(argv)
+    if args.command == "run":
+        given = (args.head_sha is not None, args.base_sha is not None)
+        if given != (args.job == "code-review",) * 2:
+            parser.error(
+                "--head-sha and --base-sha: required for code-review, only there"
+            )
+    return args
 
 
 def main() -> int:
@@ -966,16 +1022,21 @@ def main() -> int:
         stream=sys.stderr,
     )
     args = parse_args(sys.argv[1:])
-    return asyncio.run(amain(args))
+    gh = GitHubKit(os.environ["GITHUB_REPOSITORY"], os.environ["GH_TOKEN"])
+    return asyncio.run(amain(args, gh, os.environ, sdk_runner, TMP))
 
 
-async def amain(args: argparse.Namespace) -> int:
-    event = json.loads(Path(os.environ["GITHUB_EVENT_PATH"]).read_text())
-    repo = os.environ["GITHUB_REPOSITORY"]
-    server, run_id = os.environ["GITHUB_SERVER_URL"], os.environ["GITHUB_RUN_ID"]
-    run_url = f"{server}/{repo}/actions/runs/{run_id}"
-    gh: GitHub = GitHubKit(repo, os.environ["GH_TOKEN"])
-    name = os.environ["GITHUB_EVENT_NAME"]
+async def amain(
+    args: argparse.Namespace,
+    gh: GitHub,
+    env: Mapping[str, str],
+    runner: Runner,
+    tmp: Path,
+) -> int:
+    event = json.loads(Path(env["GITHUB_EVENT_PATH"]).read_text())
+    repo = env["GITHUB_REPOSITORY"]
+    run_url = f"{env['GITHUB_SERVER_URL']}/{repo}/actions/runs/{env['GITHUB_RUN_ID']}"
+    name = env["GITHUB_EVENT_NAME"]
     if args.command == "start":
         return await print_start(gh, args.job, name, event, run_url)
     if args.command == "apply":
@@ -984,22 +1045,23 @@ async def amain(args: argparse.Namespace) -> int:
         )
         raw = args.record.read_text() if args.record.exists() else None
         status = Posted(args.status_id, review=root is not None)
-        head_sha = (
-            event["pull_request"]["head"]["sha"] if args.job == "review" else None
-        )
         return await apply(
-            gh, args.job, target(event), raw, status, run_url, args.run_result, head_sha
+            gh, args.job, target(event), raw, status, run_url, args.run_result
         )
-    diff = None
+    head_sha = diff = None
     if args.job == "review":
-        diff = await prefetch(gh, target(event).number, PREFETCH_DIR)
+        pr = event["pull_request"]
+        head_sha = pr["head"]["sha"]
+        diff = await fetch_diff(gh, pr["base"]["sha"], head_sha)
+        if diff is not None:
+            tmp.mkdir(parents=True, exist_ok=True)
+            (tmp / "pr.diff").write_text(diff)
     elif args.job == "code-review":
-        diff = await gh.pr_diff(target(event).number)
-    job = build_job(args, gh, load_secrets(), event, run_url, diff)
-    summary_file = os.environ.get("GITHUB_STEP_SUMMARY")
-    return await run(
-        job, sdk_runner, RECORD, Path(summary_file) if summary_file else None
-    )
+        head_sha = args.head_sha
+        diff = await fetch_diff(gh, args.base_sha, head_sha)
+    secrets = load_secrets(env)
+    job = build_job(args, gh, secrets, name, event, head_sha, diff, tmp)
+    return await run(job, runner)
 
 
 if __name__ == "__main__":

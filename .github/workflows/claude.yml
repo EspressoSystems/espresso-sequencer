@@ -172,6 +172,28 @@ jobs:
           ref: ${{ github.event.repository.default_branch }}
           persist-credentials: false
 
+      # One head and base for the checkout, the diff and the record.
+      - name: Resolve PR shas
+        id: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          set -euo pipefail
+          shas=$(gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" \
+            --json headRefOid,baseRefOid -q '"\(.headRefOid) \(.baseRefOid)"')
+          read -r head base <<< "$shas"
+          echo "head-sha=$head" >> "$GITHUB_OUTPUT"
+          echo "base-sha=$base" >> "$GITHUB_OUTPUT"
+
+      # Claude's cwd. claude_gh.py and its prompts run from the default-branch checkout above.
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+          ref: ${{ steps.pr.outputs.head-sha }}
+          path: pr
+          persist-credentials: false
+
       - name: Parse arguments
         id: args
         env:
@@ -208,7 +230,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           EFFORT: ${{ steps.args.outputs.effort }}
           MODEL: ${{ steps.args.outputs.model }}
-        run: uv run --locked --project .github/claude claude-gh run code-review --model "$MODEL" --effort "$EFFORT"
+          HEAD_SHA: ${{ steps.pr.outputs.head-sha }}
+          BASE_SHA: ${{ steps.pr.outputs.base-sha }}
+        run: |
+          uv run --locked --project .github/claude claude-gh run code-review \
+            --model "$MODEL" --effort "$EFFORT" --workdir pr \
+            --head-sha "$HEAD_SHA" --base-sha "$BASE_SHA"
 
       - uses: actions/upload-artifact@v7
         if: always()

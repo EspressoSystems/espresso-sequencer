@@ -1,14 +1,13 @@
 # claude-gh uv project; just runs module recipes in this directory.
 
 fmt *args:
-    ruff format . {{args}}
+    uv run --locked ruff format . {{args}}
 
 lint *args:
-    ruff check . {{args}}
+    uv run --locked ruff check . {{args}}
 
 check *args:
-    uv sync --locked
-    ty check --python .venv . {{args}}
+    uv run --locked ty check . {{args}}
 
 test *args:
     uv run --locked pytest {{args}}

@@ -8,7 +8,7 @@ Goal: find every real defect in the PR. Recall over precision.
 
 ## Inputs
 
-- PR description: `pr_view`. Diff: `pr_diff`. The diff is the scope.
+- PR description: `pr_view`. Diff: `pr_diff`, also in `./tmp/pr.diff`. The diff is the scope.
 - Checkout: the PR head. Read and Grep it for surrounding code, callers, tests.
 - Earlier review comments: `./tmp/pr-review-comments.json`.
 
