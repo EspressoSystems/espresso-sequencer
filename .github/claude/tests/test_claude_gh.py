@@ -1,17 +1,15 @@
-"""Tests for `claude-gh`: tool recording, apply validation, status texts and exit codes, with fake GitHub and agent.
+"""Tests for `claude_gh`: tool recording, apply validation, status texts and exit codes, with fake GitHub and agent.
 
 No network or SDK calls. Run with:
 
-    just py::test test_claude_gh.py
+    just claude::test
 """
 
 import asyncio
-import importlib.util
 import json
 import logging
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
-from importlib.machinery import SourceFileLoader
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -25,14 +23,7 @@ from claude_agent_sdk import (
     ToolUseBlock,
 )
 
-SCRIPT = Path(__file__).with_name("claude-gh")
-_spec = importlib.util.spec_from_loader(
-    "claude_gh", SourceFileLoader("claude_gh", str(SCRIPT))
-)
-assert _spec is not None
-cg = importlib.util.module_from_spec(_spec)
-assert _spec.loader is not None
-_spec.loader.exec_module(cg)
+import claude_gh as cg
 
 PR = cg.Target("o/r", 7, True)
 ISSUE = cg.Target("o/r", 9, False)
@@ -136,7 +127,7 @@ def make(gh: FakeGitHub, target: cg.Target = PR, name: str = "review"):
 
 
 def call(tools: list[SdkMcpTool], name: str, args: dict) -> dict:
-    return asyncio.run(tools_by_name(tools)[name].handler(args))
+    return asyncio.run(tools_by_name(tools)[name].handler(args))  # ty: ignore[invalid-argument-type]
 
 
 def text(out: dict) -> str:
@@ -169,7 +160,7 @@ def job(tools: list[SdkMcpTool] | None = None, **kw: Any) -> Any:
 
 def test_options_no_bash():
     t, _ = make(FakeGitHub())
-    o = cg.options(job(t), {"type": "sdk", "name": "gh", "instance": None})
+    o = cg.options(job(t), {"type": "sdk", "name": "gh", "instance": None})  # ty: ignore[invalid-argument-type]
     assert o.tools == ["Read", "Grep", "Glob"]
     assert "Bash" not in o.allowed_tools
     assert "mcp__gh" in o.allowed_tools
@@ -181,14 +172,14 @@ def test_options_no_bash():
 
 
 def test_options_builtin_and_settings_per_job():
-    o = cg.options(job(builtin=["Read", "Agent"], settings=["user", "project"]), {})
+    o = cg.options(job(builtin=["Read", "Agent"], settings=["user", "project"]), {})  # ty: ignore[invalid-argument-type, missing-typed-dict-key]
     assert o.tools == ["Read", "Agent"]
     assert o.allowed_tools == ["Read", "Agent", "mcp__gh"]
     assert o.setting_sources == ["user", "project"]
 
 
 def test_options_model_effort_and_append():
-    o = cg.options(job(model="sonnet", effort="max", append="extra"), {})
+    o = cg.options(job(model="sonnet", effort="max", append="extra"), {})  # ty: ignore[invalid-argument-type, missing-typed-dict-key]
     assert (o.model, o.effort) == ("sonnet", "max")
     assert o.system_prompt == {
         "type": "preset",

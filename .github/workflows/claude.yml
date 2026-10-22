@@ -33,19 +33,19 @@ jobs:
         with:
           fetch-depth: 1
           ref: ${{ github.event.repository.default_branch }}
-          sparse-checkout: scripts/claude-gh
+          sparse-checkout: .github/claude
           persist-credentials: false
 
       - uses: astral-sh/setup-uv@v10.0.1
         with:
-          cache-dependency-glob: scripts/claude-gh
+          cache-dependency-glob: .github/claude/uv.lock
 
       - name: Post status comment
         id: start
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          id=$(uv run scripts/claude-gh start mention)
+          id=$(uv run --locked --project .github/claude claude-gh start mention)
           echo "comment-id=$id" >> "$GITHUB_OUTPUT"
 
   mention:
@@ -68,13 +68,13 @@ jobs:
 
       - uses: astral-sh/setup-uv@v10.0.1
         with:
-          cache-dependency-glob: scripts/claude-gh
+          cache-dependency-glob: .github/claude/uv.lock
 
       - name: Claude
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GH_TOKEN: ${{ github.token }}
-        run: uv run scripts/claude-gh run mention
+        run: uv run --locked --project .github/claude claude-gh run mention
 
       - uses: actions/upload-artifact@v7
         if: always()
@@ -98,12 +98,12 @@ jobs:
         with:
           fetch-depth: 1
           ref: ${{ github.event.repository.default_branch }}
-          sparse-checkout: scripts/claude-gh
+          sparse-checkout: .github/claude
           persist-credentials: false
 
       - uses: astral-sh/setup-uv@v10.0.1
         with:
-          cache-dependency-glob: scripts/claude-gh
+          cache-dependency-glob: .github/claude/uv.lock
 
       - uses: actions/download-artifact@v8
         continue-on-error: true # missing when run failed before writing the record
@@ -117,7 +117,7 @@ jobs:
           STATUS_ID: ${{ needs.mention-start.outputs.comment-id }}
           RUN_RESULT: ${{ needs.mention.result }}
         run: |
-          uv run scripts/claude-gh apply mention \
+          uv run --locked --project .github/claude claude-gh apply mention \
             --status-id "$STATUS_ID" --run-result "$RUN_RESULT" \
             --record tmp/actions/actions.json
 
@@ -140,19 +140,19 @@ jobs:
         with:
           fetch-depth: 1
           ref: ${{ github.event.repository.default_branch }}
-          sparse-checkout: scripts/claude-gh
+          sparse-checkout: .github/claude
           persist-credentials: false
 
       - uses: astral-sh/setup-uv@v10.0.1
         with:
-          cache-dependency-glob: scripts/claude-gh
+          cache-dependency-glob: .github/claude/uv.lock
 
       - name: Post status comment
         id: start
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          id=$(uv run scripts/claude-gh start code-review)
+          id=$(uv run --locked --project .github/claude claude-gh start code-review)
           echo "comment-id=$id" >> "$GITHUB_OUTPUT"
 
   code-review:
@@ -200,7 +200,7 @@ jobs:
 
       - uses: astral-sh/setup-uv@v10.0.1
         with:
-          cache-dependency-glob: scripts/claude-gh
+          cache-dependency-glob: .github/claude/uv.lock
 
       - name: Claude Code Review
         env:
@@ -208,7 +208,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           EFFORT: ${{ steps.args.outputs.effort }}
           MODEL: ${{ steps.args.outputs.model }}
-        run: uv run scripts/claude-gh run code-review --model "$MODEL" --effort "$EFFORT"
+        run: uv run --locked --project .github/claude claude-gh run code-review --model "$MODEL" --effort "$EFFORT"
 
       - uses: actions/upload-artifact@v7
         if: always()
@@ -231,12 +231,12 @@ jobs:
         with:
           fetch-depth: 1
           ref: ${{ github.event.repository.default_branch }}
-          sparse-checkout: scripts/claude-gh
+          sparse-checkout: .github/claude
           persist-credentials: false
 
       - uses: astral-sh/setup-uv@v10.0.1
         with:
-          cache-dependency-glob: scripts/claude-gh
+          cache-dependency-glob: .github/claude/uv.lock
 
       - uses: actions/download-artifact@v8
         continue-on-error: true # missing when run failed before writing the record
@@ -250,6 +250,6 @@ jobs:
           STATUS_ID: ${{ needs.code-review-start.outputs.comment-id }}
           RUN_RESULT: ${{ needs.code-review.result }}
         run: |
-          uv run scripts/claude-gh apply code-review \
+          uv run --locked --project .github/claude claude-gh apply code-review \
             --status-id "$STATUS_ID" --run-result "$RUN_RESULT" \
             --record tmp/actions/actions.json

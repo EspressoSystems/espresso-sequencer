@@ -28,3 +28,12 @@ updates:
           - "jf-*"
     schedule:
       interval: "daily"
+
+  - package-ecosystem: "uv"
+    directory: "/.github/claude"
+    groups:
+      all:
+        patterns:
+          - "*"
+    schedule:
+      interval: "weekly"

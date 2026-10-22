@@ -9,7 +9,7 @@ concurrency:
   cancel-in-progress: true
 
 # run holds ANTHROPIC_API_KEY and a read token and only records actions; start and apply hold the
-# write token and never run Claude. All three use the PR checkout, so scripts/claude-gh is
+# write token and never run Claude. All three use the PR checkout, so .github/claude/claude_gh.py is
 # PR-author controllable. Fine: fork PRs need approval and get read-only tokens.
 jobs:
   start:
@@ -24,19 +24,19 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 1
-          sparse-checkout: scripts/claude-gh
+          sparse-checkout: .github/claude
           persist-credentials: false
 
       - uses: astral-sh/setup-uv@v10.0.1
         with:
-          cache-dependency-glob: scripts/claude-gh
+          cache-dependency-glob: .github/claude/uv.lock
 
       - name: Post status comment
         id: start
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          id=$(uv run scripts/claude-gh start review)
+          id=$(uv run --locked --project .github/claude claude-gh start review)
           echo "comment-id=$id" >> "$GITHUB_OUTPUT"
 
   run:
@@ -91,13 +91,13 @@ jobs:
 
       - uses: astral-sh/setup-uv@v10.0.1
         with:
-          cache-dependency-glob: scripts/claude-gh
+          cache-dependency-glob: .github/claude/uv.lock
 
       - name: Claude Code Review
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GH_TOKEN: ${{ github.token }}
-        run: uv run scripts/claude-gh run review
+        run: uv run --locked --project .github/claude claude-gh run review
 
       - uses: actions/upload-artifact@v7
         if: always()
@@ -120,12 +120,12 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 1
-          sparse-checkout: scripts/claude-gh
+          sparse-checkout: .github/claude
           persist-credentials: false
 
       - uses: astral-sh/setup-uv@v10.0.1
         with:
-          cache-dependency-glob: scripts/claude-gh
+          cache-dependency-glob: .github/claude/uv.lock
 
       - uses: actions/download-artifact@v8
         continue-on-error: true # missing when run failed before writing the record
@@ -139,6 +139,6 @@ jobs:
           STATUS_ID: ${{ needs.start.outputs.comment-id }}
           RUN_RESULT: ${{ needs.run.result }}
         run: |
-          uv run scripts/claude-gh apply review \
+          uv run --locked --project .github/claude claude-gh apply review \
             --status-id "$STATUS_ID" --run-result "$RUN_RESULT" \
             --record tmp/actions/actions.json

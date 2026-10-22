@@ -1,14 +1,9 @@
-#!/usr/bin/env -S uv run --script
-# /// script
-# requires-python = ">=3.11"
-# dependencies = ["claude-agent-sdk", "githubkit"]
-# ///
 r"""Run Claude on a GitHub PR or issue with a fixed set of tools, in three workflow jobs.
 
-    scripts/claude-gh start review          # write token: post the status comment, print its id
-    scripts/claude-gh run review            # read token, Claude: record actions in tmp/actions.json
-    scripts/claude-gh run code-review --model opus --effort high
-    scripts/claude-gh apply review --status-id 1 --run-result success --record tmp/actions/actions.json
+    claude-gh start review          # write token: post the status comment, print its id
+    claude-gh run review            # read token, Claude: record actions in tmp/actions.json
+    claude-gh run code-review --model opus --effort high
+    claude-gh apply review --status-id 1 --run-result success --record tmp/actions/actions.json
 
 Jobs: review (PR opened), mention (@claude mention, answers in the thread), code-review.
 
@@ -78,7 +73,7 @@ CLI_ENV = {"GH_TOKEN": "", "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS": "1"}
 MAX_TURNS = 120
 SERVER = "gh"
 THREAD_ID = re.compile(r"[A-Za-z0-9_=-]+")
-CLAUDE_DIR = Path(".github/claude")
+CLAUDE_DIR = Path(__file__).parent
 BACKPORT_MARKER = Path("tmp/is-backport")
 RECORD = Path("tmp/actions.json")
 PREFETCH_DIR = Path("tmp")
