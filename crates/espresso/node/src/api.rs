@@ -23,7 +23,7 @@ use espresso_types::{
     config::PublicNetworkConfig,
     retain_accounts,
     traits::{EventsPersistenceRead, MembershipPersistence},
-    v0::traits::{SequencerPersistence, StateCatchup},
+    v0::traits::{SequencerPersistence, StateCatchup, StateCertPersistence},
     v0_3::{
         ChainConfig, RegisteredValidator, RewardAccountQueryDataV1, RewardAccountV1, RewardAmount,
         RewardMerkleTreeV1, StakeTableEvent,
@@ -104,20 +104,20 @@ type BoxLazy<T> = Pin<Arc<Lazy<T, BoxFuture<'static, T>>>>;
 
 #[derive(Derivative)]
 #[derivative(Clone(bound = ""), Debug(bound = ""))]
-struct ApiState<C: ApiContext> {
+struct ApiState {
     // The node context is initialized lazily so we can start the API (and healthcheck endpoints)
     // before consensus has started. Any endpoint that uses consensus state will wait for
     // initialization to finish, but endpoints that do not require a consensus handle can proceed
     // without waiting.
     #[derivative(Debug = "ignore")]
-    context: BoxLazy<C>,
+    context: BoxLazy<Box<dyn ApiContext>>,
 
     // we cache `token_supply` for up to an hour, to avoid repeatedly querying the contract for information that rarely changes
     token_supply: Cache<(), U256>,
 }
 
-impl<C: ApiContext> ApiState<C> {
-    fn new(context_init: impl Future<Output = C> + Send + 'static) -> Self {
+impl ApiState {
+    fn new(context_init: impl Future<Output = Box<dyn ApiContext>> + Send + 'static) -> Self {
         Self {
             context: Arc::pin(Lazy::from_future(context_init.boxed())),
             token_supply: Cache::builder()
@@ -127,16 +127,20 @@ impl<C: ApiContext> ApiState<C> {
         }
     }
 
-    async fn context(&self) -> &C {
-        self.context.as_ref().get().await.get_ref()
+    async fn context(&self) -> &dyn ApiContext {
+        self.context.as_ref().get().await.get_ref().as_ref()
     }
 
     async fn consensus(&self) -> Arc<dyn ConsensusSource> {
         self.context().await.consensus()
     }
 
-    async fn persistence(&self) -> Arc<C::Persistence> {
-        self.context().await.persistence()
+    async fn membership(&self) -> Arc<dyn MembershipPersistence> {
+        self.context().await.membership()
+    }
+
+    async fn state_certs(&self) -> Arc<dyn StateCertPersistence> {
+        self.context().await.state_certs()
     }
 
     async fn network_config(&self) -> NetworkConfig<SeqTypes> {
@@ -144,9 +148,9 @@ impl<C: ApiContext> ApiState<C> {
     }
 }
 
-type StorageState<C, D> = ExtensibleDataSource<D, ApiState<C>>;
+type StorageState<D> = ExtensibleDataSource<D, ApiState>;
 
-impl<C: ApiContext, D: Send + Sync> TokenDataSource<SeqTypes> for StorageState<C, D> {
+impl<D: Send + Sync> TokenDataSource<SeqTypes> for StorageState<D> {
     async fn get_initial_supply_l1(&self) -> anyhow::Result<U256> {
         self.as_ref().get_initial_supply_l1().await
     }
@@ -160,13 +164,13 @@ impl<C: ApiContext, D: Send + Sync> TokenDataSource<SeqTypes> for StorageState<C
     }
 }
 
-impl<C: ApiContext, D: Send + Sync> SubmitDataSource for StorageState<C, D> {
+impl<D: Send + Sync> SubmitDataSource for StorageState<D> {
     async fn submit(&self, tx: Transaction) -> anyhow::Result<Commitment<Transaction>> {
         self.as_ref().submit(tx).await
     }
 }
 
-impl<C: ApiContext, D: Sync> StakeTableDataSource<SeqTypes> for StorageState<C, D> {
+impl<D: Sync> StakeTableDataSource<SeqTypes> for StorageState<D> {
     /// Get the stake table for a given epoch
     async fn get_stake_table(
         &self,
@@ -246,7 +250,7 @@ impl<C: ApiContext, D: Sync> StakeTableDataSource<SeqTypes> for StorageState<C, 
     }
 }
 
-impl<C: ApiContext> TokenDataSource<SeqTypes> for ApiState<C> {
+impl TokenDataSource<SeqTypes> for ApiState {
     async fn get_initial_supply_l1(&self) -> anyhow::Result<U256> {
         let node_state = self.context().await.node_state();
         let fetcher = node_state.coordinator.membership().fetcher().clone();
@@ -287,7 +291,7 @@ impl<C: ApiContext> TokenDataSource<SeqTypes> for ApiState<C> {
     }
 }
 
-impl<C: ApiContext> StakeTableDataSource<SeqTypes> for ApiState<C> {
+impl StakeTableDataSource<SeqTypes> for ApiState {
     /// Get the stake table for a given epoch
     async fn get_stake_table(
         &self,
@@ -426,8 +430,10 @@ impl<C: ApiContext> StakeTableDataSource<SeqTypes> for ApiState<C> {
         offset: u64,
         limit: u64,
     ) -> anyhow::Result<Vec<RegisteredValidator<PubKey>>> {
-        let storage = self.persistence().await;
-        storage.load_all_validators(epoch, offset, limit).await
+        self.membership()
+            .await
+            .load_all_validators(epoch, offset, limit)
+            .await
     }
 
     async fn stake_table_events(
@@ -435,8 +441,11 @@ impl<C: ApiContext> StakeTableDataSource<SeqTypes> for ApiState<C> {
         from_l1_block: u64,
         to_l1_block: u64,
     ) -> anyhow::Result<Vec<StakeTableEvent>> {
-        let storage = self.persistence().await;
-        let (status, events) = storage.load_events(from_l1_block, to_l1_block).await?;
+        let (status, events) = self
+            .membership()
+            .await
+            .load_events(from_l1_block, to_l1_block)
+            .await?;
         ensure!(
             status == Some(EventsPersistenceRead::Complete),
             "some events in range [{from_l1_block}, {to_l1_block}] are not available ({status:?})"
@@ -445,7 +454,7 @@ impl<C: ApiContext> StakeTableDataSource<SeqTypes> for ApiState<C> {
     }
 }
 
-impl<C: ApiContext, D: Sync> RequestResponseDataSource<SeqTypes> for StorageState<C, D> {
+impl<D: Sync> RequestResponseDataSource<SeqTypes> for StorageState<D> {
     async fn request_vid_shares(
         &self,
         block_number: u64,
@@ -459,7 +468,7 @@ impl<C: ApiContext, D: Sync> RequestResponseDataSource<SeqTypes> for StorageStat
 }
 
 #[async_trait]
-impl<C: ApiContext, D: Sync> StateCertFetchingDataSource<SeqTypes> for StorageState<C, D> {
+impl<D: Sync> StateCertFetchingDataSource<SeqTypes> for StorageState<D> {
     async fn request_state_cert(
         &self,
         epoch: u64,
@@ -469,7 +478,7 @@ impl<C: ApiContext, D: Sync> StateCertFetchingDataSource<SeqTypes> for StorageSt
     }
 }
 
-impl<C: ApiContext> RequestResponseDataSource<SeqTypes> for ApiState<C> {
+impl RequestResponseDataSource<SeqTypes> for ApiState {
     async fn request_vid_shares(
         &self,
         block_number: u64,
@@ -559,7 +568,7 @@ where
 }
 
 #[async_trait]
-impl<C: ApiContext> StateCertFetchingDataSource<SeqTypes> for ApiState<C> {
+impl StateCertFetchingDataSource<SeqTypes> for ApiState {
     async fn request_state_cert(
         &self,
         epoch: u64,
@@ -645,7 +654,7 @@ impl<C: ApiContext> StateCertFetchingDataSource<SeqTypes> for ApiState<C> {
 
 // Thin wrapper implementations that delegate to persistence
 #[async_trait]
-impl<C: ApiContext, D: Sync> StateCertDataSource for StorageState<C, D> {
+impl<D: Sync> StateCertDataSource for StorageState<D> {
     async fn get_state_cert_by_epoch(
         &self,
         epoch: u64,
@@ -663,13 +672,15 @@ impl<C: ApiContext, D: Sync> StateCertDataSource for StorageState<C, D> {
 }
 
 #[async_trait]
-impl<C: ApiContext> StateCertDataSource for ApiState<C> {
+impl StateCertDataSource for ApiState {
     async fn get_state_cert_by_epoch(
         &self,
         epoch: u64,
     ) -> anyhow::Result<Option<LightClientStateUpdateCertificateV2<SeqTypes>>> {
-        let storage = self.persistence().await;
-        storage.get_state_cert_by_epoch(epoch).await
+        self.state_certs()
+            .await
+            .get_state_cert_by_epoch(epoch)
+            .await
     }
 
     async fn insert_state_cert(
@@ -677,12 +688,14 @@ impl<C: ApiContext> StateCertDataSource for ApiState<C> {
         epoch: u64,
         cert: LightClientStateUpdateCertificateV2<SeqTypes>,
     ) -> anyhow::Result<()> {
-        let storage = self.persistence().await;
-        storage.insert_state_cert(epoch, cert).await
+        self.state_certs()
+            .await
+            .insert_state_cert(epoch, cert)
+            .await
     }
 }
 
-impl<C: ApiContext> SubmitDataSource for ApiState<C> {
+impl SubmitDataSource for ApiState {
     async fn submit(&self, tx: Transaction) -> anyhow::Result<Commitment<Transaction>> {
         let handle = self.consensus().await;
 
@@ -717,14 +730,13 @@ impl<C: ApiContext> SubmitDataSource for ApiState<C> {
     }
 }
 
-impl<C: ApiContext, D: Sync> NodeStateDataSource for StorageState<C, D> {
+impl<D: Sync> NodeStateDataSource for StorageState<D> {
     async fn node_state(&self) -> NodeState {
         self.as_ref().node_state().await
     }
 }
 
-impl<C: ApiContext, D: CatchupStorage + Send + Sync> data_source::DatabaseMetadataSource
-    for StorageState<C, D>
+impl<D: CatchupStorage + Send + Sync> data_source::DatabaseMetadataSource for StorageState<D>
 where
     D: data_source::DatabaseMetadataSource + Send + Sync,
 {
@@ -737,8 +749,7 @@ where
     }
 }
 
-impl<C: ApiContext, D: CatchupStorage + Send + Sync> data_source::PruningDataSource
-    for StorageState<C, D>
+impl<D: CatchupStorage + Send + Sync> data_source::PruningDataSource for StorageState<D>
 where
     D: data_source::PruningDataSource + Send + Sync,
 {
@@ -757,7 +768,7 @@ where
     }
 }
 
-impl<C: ApiContext, D: CatchupStorage + Send + Sync> CatchupDataSource for StorageState<C, D> {
+impl<D: CatchupStorage + Send + Sync> CatchupDataSource for StorageState<D> {
     #[tracing::instrument(skip(self, instance))]
     async fn get_accounts(
         &self,
@@ -951,21 +962,22 @@ impl<C: ApiContext, D: CatchupStorage + Send + Sync> CatchupDataSource for Stora
         &self,
         epoch: u64,
     ) -> anyhow::Result<LightClientStateUpdateCertificateV2<SeqTypes>> {
-        let storage = self.as_ref().persistence().await;
-        storage
+        self.as_ref()
+            .state_certs()
+            .await
             .get_state_cert_by_epoch(epoch)
             .await?
             .context(format!("state cert for epoch {epoch} not found"))
     }
 }
 
-impl<C: ApiContext> NodeStateDataSource for ApiState<C> {
+impl NodeStateDataSource for ApiState {
     async fn node_state(&self) -> NodeState {
         self.context().await.node_state()
     }
 }
 
-impl<C: ApiContext> CatchupDataSource for ApiState<C> {
+impl CatchupDataSource for ApiState {
     #[tracing::instrument(skip(self, _instance))]
     async fn get_accounts(
         &self,
@@ -1109,25 +1121,25 @@ impl<C: ApiContext> CatchupDataSource for ApiState<C> {
     }
 }
 
-impl<C: ApiContext, D: Sync> HotShotConfigDataSource for StorageState<C, D> {
+impl<D: Sync> HotShotConfigDataSource for StorageState<D> {
     async fn get_config(&self) -> PublicNetworkConfig {
         self.as_ref().network_config().await.into()
     }
 }
 
-impl<C: ApiContext> HotShotConfigDataSource for ApiState<C> {
+impl HotShotConfigDataSource for ApiState {
     async fn get_config(&self) -> PublicNetworkConfig {
         self.network_config().await.into()
     }
 }
 
-impl<C: ApiContext, D: Sync> NodeKeysDataSource for StorageState<C, D> {
+impl<D: Sync> NodeKeysDataSource for StorageState<D> {
     async fn node_public_keys(&self) -> Option<NodePublicKeys> {
         self.as_ref().node_public_keys().await
     }
 }
 
-impl<C: ApiContext> NodeKeysDataSource for ApiState<C> {
+impl NodeKeysDataSource for ApiState {
     async fn node_public_keys(&self) -> Option<NodePublicKeys> {
         let ctx = self.context().await;
         let config = ctx.validator_config()?;
@@ -1149,14 +1161,14 @@ impl<C: ApiContext> NodeKeysDataSource for ApiState<C> {
 }
 
 #[async_trait]
-impl<C: ApiContext, D: Sync> StateSignatureDataSource for StorageState<C, D> {
+impl<D: Sync> StateSignatureDataSource for StorageState<D> {
     async fn get_state_signature(&self, height: u64) -> Option<LCV3StateSignatureRequestBody> {
         self.as_ref().get_state_signature(height).await
     }
 }
 
 #[async_trait]
-impl<C: ApiContext> StateSignatureDataSource for ApiState<C> {
+impl StateSignatureDataSource for ApiState {
     async fn get_state_signature(&self, height: u64) -> Option<LCV3StateSignatureRequestBody> {
         self.context()
             .await
@@ -1706,18 +1718,18 @@ pub(crate) fn light_client_genesis(config: &NetworkConfig<SeqTypes>, chain_id: C
 /// tries again.
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""))]
-pub(crate) struct LightClientProvider<C: ApiContext> {
+pub(crate) struct LightClientProvider {
     light_client: OnceCell<Arc<NodeLightClient>>,
-    state: ApiState<C>,
+    state: ApiState,
     client: FallbackClient<QueryServiceClient>,
     opt: LightClientOptions,
     db_opt: LightClientDbOptions,
 }
 
-impl<C: ApiContext> LightClientProvider<C> {
+impl LightClientProvider {
     fn new(
         peers: impl IntoIterator<Item = Url>,
-        state: ApiState<C>,
+        state: ApiState,
         opt: LightClientOptions,
         db_opt: LightClientDbOptions,
     ) -> anyhow::Result<Self> {
@@ -1766,9 +1778,8 @@ impl<C: ApiContext> LightClientProvider<C> {
 }
 
 #[async_trait]
-impl<C, T> Provider<SeqTypes, T> for LightClientProvider<C>
+impl<T> Provider<SeqTypes, T> for LightClientProvider
 where
-    C: ApiContext,
     T: fetching::Request<SeqTypes> + 'static,
     NodeLightClient: Provider<SeqTypes, T>,
 {
@@ -2993,7 +3004,7 @@ mod api_tests {
 
     use super::{update::ApiEventConsumer, *};
     use crate::{
-        persistence::{no_storage::NoStorage, sql::DECIDE_GAP_FILL_HORIZON},
+        persistence::sql::DECIDE_GAP_FILL_HORIZON,
         testing::{TestConfigBuilder, wait_for_decide_on_handle},
     };
 
@@ -3208,13 +3219,12 @@ mod api_tests {
 
         let storage = D::create_storage().await;
         let persistence = D::persistence_options(&storage).create().await.unwrap();
-        let data_source: Arc<StorageState<SequencerContext<NoStorage>, _>> =
-            Arc::new(StorageState::new(
-                D::create(D::persistence_options(&storage), Default::default(), false)
-                    .await
-                    .unwrap(),
-                ApiState::new(future::pending()),
-            ));
+        let data_source: Arc<StorageState<_>> = Arc::new(StorageState::new(
+            D::create(D::persistence_options(&storage), Default::default(), false)
+                .await
+                .unwrap(),
+            ApiState::new(future::pending()),
+        ));
 
         // Create two non-consecutive leaf chains.
         let mut chain1 = vec![];
@@ -3431,13 +3441,12 @@ mod api_tests {
 
         let storage = D::create_storage().await;
         let persistence = D::persistence_options(&storage).create().await.unwrap();
-        let data_source: Arc<StorageState<SequencerContext<NoStorage>, _>> =
-            Arc::new(StorageState::new(
-                D::create(D::persistence_options(&storage), Default::default(), false)
-                    .await
-                    .unwrap(),
-                ApiState::new(future::pending()),
-            ));
+        let data_source: Arc<StorageState<_>> = Arc::new(StorageState::new(
+            D::create(D::persistence_options(&storage), Default::default(), false)
+                .await
+                .unwrap(),
+            ApiState::new(future::pending()),
+        ));
         let consumer = ApiEventConsumer::from(data_source.clone());
 
         let node_state = NodeState::mock().with_genesis_version(NEW_PROTOCOL_VERSION);
