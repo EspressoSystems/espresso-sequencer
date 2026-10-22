@@ -453,8 +453,6 @@ opt-level = 1
 opt-level = 1
 [profile.test.package.hotshot-new-protocol]
 opt-level = 1
-[profile.test.package.espresso-node]
-opt-level = 1
 [profile.test.package.cliquenet]
 opt-level = 1
 [profile.test.package.cliquenet-types]
