@@ -27,7 +27,7 @@ use hotshot_query_service::{
         storage::{
             AvailabilityStorage, MerklizedStateStorage, NodeStorage, SqlStorage,
             pruning::{PrunerCfg, PrunerConfig},
-            sql::{Backend as _, Db, TransactionMode, Write, query_as},
+            sql::{Backend as _, Db, DbKind, TransactionMode, Write, query_as},
         },
     },
     merklized_state::Snapshot,
@@ -436,7 +436,10 @@ impl RewardMerkleTreeDataSource for SqlStorage {
             // Postgres supports improved performance by using `FOR UPDATE` in a sub-select to
             // acquire exclusive locks on visited rows, which are later deleted. SQLite does not
             // support this syntax.
-            let for_update = if Db::EMBEDDED { "" } else { "FOR UPDATE" };
+            let for_update = match Db::KIND {
+                DbKind::Sqlite => "",
+                DbKind::Postgres => "FOR UPDATE",
+            };
 
             // Delete batches from the merkle data table until there is nothing left to delete.
             loop {
@@ -1222,7 +1225,7 @@ impl super::data_source::DatabaseMetadataSource for SqlStorage {
             .await
             .context("opening transaction to fetch table sizes")?;
 
-        if !Db::EMBEDDED {
+        if Db::KIND == DbKind::Postgres {
             let query = r#"
                 SELECT
                     schemaname || '.' || relname AS table_name,

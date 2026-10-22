@@ -16,6 +16,7 @@ use std::{collections::HashMap, time::Duration};
 
 use anyhow::Context as _;
 use futures::{FutureExt as _, stream::TryStreamExt};
+use hotshot_types::traits::node_implementation::NodeType;
 use sqlx::{
     Row as _,
     pool::PoolOptions,
@@ -24,17 +25,16 @@ use sqlx::{
 };
 
 use super::{
-    Backend, Config, Db, Migration, QueryBuilder, StateQueries, Transaction, Write,
+    Backend, Config, Db, DbKind, Migration, QueryBuilder, StateQueries, Transaction, Write,
     queries::state::Node, release_only_idle,
 };
-use crate::{QueryError, QueryResult, include_migrations};
+use crate::{QueryError, QueryResult, include_migrations, merklized_state::MerklizedState};
 
 impl Backend for Db {
     type ConnectOptions = PgConnectOptions;
 
-    const EMBEDDED: bool = false;
+    const KIND: DbKind = DbKind::Postgres;
     const MAX_FN: &'static str = "GREATEST";
-    const BINARY_TYPE: &'static str = "BYTEA";
 
     fn default_connect_options() -> PgConnectOptions {
         PgConnectOptions::default()
@@ -110,14 +110,18 @@ impl StateQueries for Db {
         Ok(result)
     }
 
-    async fn upsert_nodes(
-        name: &str,
+    async fn upsert_nodes<Types, State, const ARITY: usize>(
         nodes: Vec<Node>,
         tx: &mut Transaction<Write>,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<()>
+    where
+        Types: NodeType,
+        State: MerklizedState<Types, ARITY>,
+    {
         if nodes.is_empty() {
             return Ok(());
         }
+        let name = State::state_type();
 
         // Deduplicate nodes by (path, created) - keep the last occurrence
         // This is required because UNNEST + ON CONFLICT cannot handle duplicates in the same batch
@@ -184,11 +188,15 @@ impl StateQueries for Db {
         }
     }
 
-    fn get_path_query<'q>(
-        table: &'static str,
+    fn get_path_query<'q, Types, State, const ARITY: usize>(
         paths: Vec<serde_json::Value>,
         created: i64,
-    ) -> QueryResult<(QueryBuilder<'q>, String)> {
+    ) -> QueryResult<(QueryBuilder<'q>, String)>
+    where
+        Types: NodeType,
+        State: MerklizedState<Types, ARITY>,
+    {
+        let table = State::state_type();
         let mut query = QueryBuilder::default();
         let paths_param = query.bind(paths)?;
         let created_param = query.bind(created)?;
