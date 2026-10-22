@@ -132,10 +132,11 @@ bitvec = { workspace = true }
 bs58 = { workspace = true }
 escargot = { workspace = true }
 espresso-macros = { workspace = true }
-# Enable "testing" feature when running tests
-espresso-node = { path = ".", features = ["testing"] }
+espresso-types = { workspace = true, features = ["testing"] }
+espresso-utils = { workspace = true, features = ["testing"] }
 hotshot-example-types = { workspace = true }
-hotshot-query-service = { workspace = true }
+hotshot-new-protocol = { workspace = true, features = ["testing"] }
+hotshot-query-service = { workspace = true, features = ["testing"] }
 hotshot-testing = { workspace = true }
 insta = { workspace = true }
 light-client = { workspace = true, features = ["rlp", "testing"] }
