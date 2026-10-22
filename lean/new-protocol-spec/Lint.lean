@@ -8,8 +8,8 @@ import NewProtocolSpec
 # Names in prose
 
 The documentation is part of the specification, and it names things:
-`SafetySpec.vote2NotInSkippedView`, `GcSpec.voted2Retained`,
-`Vote1Justification.parentLinked`. A rename leaves those mentions behind, and a
+`SafeHistory.vote2BeforeTimeout`, `Synchrony.timeoutLockSpread`,
+`Network.revoteGenuine`. A rename leaves those mentions behind, and a
 reader who looks one up finds nothing. Nothing in Lean checks them — a docstring
 is a string.
 
@@ -74,7 +74,8 @@ and Lean syntax, which is a command rather than a constant and so resolves to
 nothing however it is spelled. Anything else that fails to resolve is a stale name.
 -/
 def elsewhere : List String :=
-  ["NewProtocolImpl.Demo", "NewProtocolImpl.Checks", "NewProtocolDiff.Corpus", "run_meta"]
+  ["NewProtocolImpl.Demo", "NewProtocolImpl.Checks", "NewProtocolImpl.conforms",
+   "NewProtocolDiff.Corpus", "run_meta"]
 
 /--
 Whether a name resolves to a declaration, a module, or something known to be elsewhere.

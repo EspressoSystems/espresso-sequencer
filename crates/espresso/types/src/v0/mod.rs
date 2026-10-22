@@ -45,7 +45,7 @@ use vbs::version::StaticVersion;
 // instead we write `with_minor_versions!(some_macro!(args))`.
 macro_rules! with_minor_versions {
     ($m:ident!($($arg:tt),*)) => {
-        $m!($($arg,)* v0_1, v0_2, v0_3, v0_4, v0_5, v0_6);
+        $m!($($arg,)* v0_1, v0_2, v0_3, v0_4, v0_5, v0_6, v0_7);
     };
 }
 
@@ -96,6 +96,7 @@ reexport_unchanged_types!(
     Iter,
     L1BlockInfo,
     L1ClientOptions,
+    L1SafetyMargin,
     L1Snapshot,
     NamespaceId,
     NsIndex,
@@ -136,7 +137,6 @@ pub use v0_3::StateCertQueryDataV1;
 #[cfg(feature = "node")]
 pub(crate) use v0_3::{L1ClientMetrics, L1Event, L1State, L1UpdateTask};
 pub use v0_4::StateCertQueryDataV2;
-use versions::version;
 
 #[derive(
     Clone, Copy, Debug, Default, Hash, Eq, PartialEq, PartialOrd, Ord, Deserialize, Serialize,
@@ -155,8 +155,10 @@ impl NodeType for SeqTypes {
     type StateSignatureKey = SchnorrPubKey;
 }
 
-pub const MOCK_SEQUENCER_VERSIONS: versions::Upgrade =
-    versions::Upgrade::new(version(0, 1), version(0, 2));
+/// The version integration tests run a network at: the oldest one a live
+/// network can start from.
+pub const TEST_UPGRADE: versions::Upgrade =
+    versions::Upgrade::trivial(versions::NEW_PROTOCOL_VERSION);
 
 pub type FeeVersion = StaticVersion<0, 2>;
 pub type EpochVersion = StaticVersion<0, 3>;

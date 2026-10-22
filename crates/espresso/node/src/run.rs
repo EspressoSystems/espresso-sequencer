@@ -1,38 +1,59 @@
-use clap::Parser;
+use anyhow::Context;
 use espresso_telemetry as telemetry;
-use espresso_types::traits::NullEventConsumer;
+use espresso_types::{traits::NullEventConsumer, v0::traits::SequencerPersistence};
 use futures::future::FutureExt;
 use hotshot_types::traits::metrics::NoMetrics;
+use process_metrics::log_cpu_probe;
 use url::Url;
 
 use super::{
-    Genesis, L1Params, NetworkParams,
+    CatchupParams, Genesis, L1Params, NetworkParams,
     api::{self, data_source::DataSourceOptions},
     context::SequencerContext,
-    init_node, network,
+    init_node,
     options::{Modules, Options, PublicNodeConfig},
     persistence,
 };
-use crate::{default_telemetry_endpoint, keyset::KeySet};
+use crate::{
+    default_telemetry_endpoint,
+    follower::{FollowerContext, FollowerParams, init_follower_node},
+    keyset::KeySet,
+};
 
-/// Blocking entry point for the binaries.
-///
-/// The runtime is created and driven here, inside the library, so that no binary crate polls a
-/// future defined in this crate. Polling one from a wrapper `main.rs` instantiates the `poll` shim
-/// of every future it transitively awaits in the *binary* crate, which re-monomorphizes the whole
-/// node: it costs ~280 s per wrapper binary in CI at `opt-level = 3`, where `-Cshare-generics` is
-/// off. See `doc/compile-times.md`.
-pub fn main_blocking(migrated_envs: Vec<(&str, &str)>) -> anyhow::Result<()> {
-    let rt = tokio::runtime::Runtime::new()?;
-    let result = rt.block_on(main(migrated_envs));
-    // Bound teardown so a stuck blocking-pool task cannot hang exit indefinitely.
-    rt.shutdown_timeout(std::time::Duration::from_secs(5));
-    result
+pub enum NodeContext<P: SequencerPersistence> {
+    Validator(Box<SequencerContext<P>>),
+    Follower(Box<FollowerContext<P>>),
+}
+
+impl<P: SequencerPersistence> NodeContext<P> {
+    pub async fn start(&mut self) -> anyhow::Result<()> {
+        match self {
+            Self::Validator(ctx) => ctx.start_consensus().await,
+            // Following began in `init_follower_node`.
+            Self::Follower(_) => {},
+        }
+        Ok(())
+    }
+
+    pub async fn join(&mut self) {
+        match self {
+            Self::Validator(ctx) => ctx.join().await,
+            Self::Follower(ctx) => ctx.join().await,
+        }
+    }
+
+    pub async fn shut_down(&mut self) {
+        match self {
+            Self::Validator(ctx) => ctx.shut_down().await,
+            Self::Follower(ctx) => ctx.shut_down().await,
+        }
+    }
 }
 
 pub async fn main(migrated_envs: Vec<(&str, &str)>) -> anyhow::Result<()> {
     espresso_types::assert_node_feature();
-    let opt = Options::parse();
+    let (opt, ignored_network_options) = Options::parse_with_ignored();
+    let mut modules = opt.modules();
 
     // Genesis carries the chain ID, which selects the default telemetry
     // endpoint. Load it before telemetry init; the genesis log line is emitted
@@ -73,6 +94,15 @@ pub async fn main(migrated_envs: Vec<(&str, &str)>) -> anyhow::Result<()> {
                 )],
                 None,
             ),
+            (Err(_), _) if telemetry_enabled && modules.follower.is_some() => (
+                None,
+                vec![
+                    "telemetry enabled but a follower has no staking key to identify itself with; \
+                     continuing without telemetry"
+                        .into(),
+                ],
+                None,
+            ),
             // Keyset error (surfaced later) or telemetry not requested.
             _ => (None, Vec::new(), None),
         };
@@ -85,9 +115,26 @@ pub async fn main(migrated_envs: Vec<(&str, &str)>) -> anyhow::Result<()> {
         tracing::error!("{e:#}; continuing without telemetry");
     }
     espresso_utils::env_compat::log_migrated_env_vars(&migrated_envs);
+    if !ignored_network_options.is_empty() {
+        tracing::warn!(
+            ?ignored_network_options,
+            "the CDN and libp2p options are deprecated and ignored: consensus has run over \
+             cliquenet since protocol 0.6. Remove them from the command line and environment."
+        );
+    }
+    log_cpu_probe(genesis.drb_difficulty.max(genesis.drb_upgrade_difficulty)).await;
 
-    let mut modules = opt.modules();
     tracing::warn!(?modules, "sequencer starting up");
+    if modules
+        .query
+        .as_ref()
+        .is_some_and(|query| query.peers.is_empty())
+    {
+        tracing::error!(
+            "module query fetches missing data from its peers but none are set: set --peers \
+             (ESPRESSO_NODE_API_PEERS)"
+        );
+    }
 
     let public_node_config = PublicNodeConfig::new(&opt, &modules, &genesis);
 
@@ -152,8 +199,7 @@ where
         handle.attach_metrics_push(registry);
     }
 
-    // Start doing consensus.
-    ctx.start_consensus().await;
+    ctx.start().await?;
 
     tokio::select! {
         () = ctx.join() => tracing::warn!("consensus stopped; exiting"),
@@ -165,107 +211,79 @@ where
 
 pub async fn init_with_storage<S>(
     genesis: Genesis,
-    modules: Modules,
+    mut modules: Modules,
     opt: Options,
     mut storage_opt: S,
     public_node_config: PublicNodeConfig,
-) -> anyhow::Result<SequencerContext<network::Production, S::Persistence>>
+) -> anyhow::Result<NodeContext<S::Persistence>>
 where
     S: DataSourceOptions,
 {
-    let KeySet {
-        staking,
-        state,
-        x25519,
-    } = opt.key_set.try_into()?;
+    let follower_params = match (&modules.follower, &modules.query) {
+        (Some(follower), Some(query)) => {
+            Some(opt.follower_params(follower, query, storage_opt.light_client_db(query)?)?)
+        },
+        _ => None,
+    };
     let l1_params = L1Params {
         urls: opt.l1_provider_url,
         options: opt.l1_options,
     };
 
+    if let Some(params) = follower_params {
+        let ctx = init_follower_with_storage(
+            genesis,
+            modules,
+            params,
+            l1_params,
+            storage_opt,
+            public_node_config,
+        )
+        .await?;
+        return Ok(NodeContext::Follower(Box::new(ctx)));
+    }
+
+    let KeySet {
+        staking,
+        state,
+        x25519,
+    } = opt.key_set.try_into()?;
+
     let network_params = NetworkParams {
-        cdn_endpoint: opt.cdn_endpoint,
         cliquenet_bind_addr: opt.cliquenet_bind_address,
         cliquenet_advertise_addr: opt.cliquenet_advertise_address,
         x25519_secret_key: x25519,
-        libp2p_advertise_address: opt.libp2p_advertise_address,
-        libp2p_bind_address: opt.libp2p_bind_address,
-        libp2p_bootstrap_nodes: opt.libp2p_bootstrap_nodes,
         orchestrator_url: opt.orchestrator_url,
         builder_urls: opt.builder_urls,
         state_relay_server_url: opt.state_relay_server_url,
         public_api_url: opt.public_api_url,
         private_staking_key: staking,
         private_state_key: state,
-        state_peers: opt.state_peers,
         config_peers: opt.config_peers,
-        catchup_backoff: opt.catchup_backoff,
-        catchup_base_timeout: opt.catchup_base_timeout,
-        local_catchup_timeout: opt.local_catchup_timeout,
+        catchup: CatchupParams {
+            state_peers: opt.state_peers,
+            backoff: opt.catchup_backoff,
+            base_timeout: opt.catchup_base_timeout,
+            local_timeout: opt.local_catchup_timeout,
+            http_delay: opt.http_catchup_delay,
+        },
         bootstrap_epoch_catchup_timeout: opt.bootstrap_epoch_catchup_timeout,
-        libp2p_history_gossip: opt.libp2p_history_gossip,
-        libp2p_history_length: opt.libp2p_history_length,
-        libp2p_max_ihave_length: opt.libp2p_max_ihave_length,
-        libp2p_max_ihave_messages: opt.libp2p_max_ihave_messages,
-        libp2p_max_gossip_transmit_size: opt.libp2p_max_gossip_transmit_size,
-        libp2p_max_direct_transmit_size: opt.libp2p_max_direct_transmit_size,
-        libp2p_mesh_outbound_min: opt.libp2p_mesh_outbound_min,
-        libp2p_mesh_n: opt.libp2p_mesh_n,
-        libp2p_mesh_n_high: opt.libp2p_mesh_n_high,
-        libp2p_heartbeat_interval: opt.libp2p_heartbeat_interval,
-        libp2p_mesh_n_low: opt.libp2p_mesh_n_low,
-        libp2p_published_message_ids_cache_time: opt.libp2p_published_message_ids_cache_time,
-        libp2p_iwant_followup_time: opt.libp2p_iwant_followup_time,
-        libp2p_max_messages_per_rpc: opt.libp2p_max_messages_per_rpc,
-        libp2p_gossip_retransmission: opt.libp2p_gossip_retransmission,
-        libp2p_flood_publish: opt.libp2p_flood_publish,
-        libp2p_duplicate_cache_time: opt.libp2p_duplicate_cache_time,
-        libp2p_fanout_ttl: opt.libp2p_fanout_ttl,
-        libp2p_heartbeat_initial_delay: opt.libp2p_heartbeat_initial_delay,
-        libp2p_gossip_factor: opt.libp2p_gossip_factor,
-        libp2p_gossip_lazy: opt.libp2p_gossip_lazy,
-        libp2p_dht_put_quorum: opt.libp2p_dht_put_quorum,
     };
 
     let proposal_fetcher_config = opt.proposal_fetcher_config;
+    let empty_block_delay = opt.empty_block_delay;
 
+    if modules.query.is_none() {
+        storage_opt.set_consensus_only();
+    }
     let persistence = storage_opt.create().await?;
 
     // Initialize HotShot. If the user requested the HTTP module, we must initialize the handle in
     // a special way, in order to populate the API with consensus metrics. Otherwise, we initialize
     // the handle directly, with no metrics.
-    let ctx = match modules.http {
+    let ctx = match modules.http.take() {
         Some(http_opt) => {
-            // Add optional API modules as requested.
-            let mut http_opt = api::Options::from(http_opt);
-            if let Some(query) = modules.query {
-                http_opt = storage_opt.enable_query_module(http_opt, query);
-            }
-            if let Some(submit) = modules.submit {
-                http_opt = http_opt.submit(submit);
-            }
-            if let Some(status) = modules.status {
-                http_opt = http_opt.status(status);
-            }
-
-            if let Some(catchup) = modules.catchup {
-                http_opt = http_opt.catchup(catchup);
-            }
-            if let Some(hotshot_events) = modules.hotshot_events {
-                http_opt = http_opt.hotshot_events(hotshot_events);
-            }
-            if let Some(explorer) = modules.explorer {
-                http_opt = http_opt.explorer(explorer);
-            }
-            if let Some(light_client) = modules.light_client {
-                http_opt = http_opt.light_client(light_client);
-            }
-            if let Some(config) = modules.config {
-                http_opt = http_opt
-                    .config(config)
-                    .public_node_config(public_node_config);
-            }
-
+            let http_opt = api_options(http_opt, modules, &storage_opt, public_node_config);
             http_opt
                 .serve(move |metrics, consumer, storage| {
                     async move {
@@ -280,6 +298,7 @@ where
                             opt.is_da,
                             opt.identity,
                             proposal_fetcher_config,
+                            empty_block_delay,
                         )
                         .await
                     }
@@ -299,18 +318,88 @@ where
                 opt.is_da,
                 opt.identity,
                 proposal_fetcher_config,
+                empty_block_delay,
             )
             .await?
         },
     };
 
-    Ok(ctx)
+    Ok(NodeContext::Validator(Box::new(ctx)))
+}
+
+/// Module parsing has checked that the http, query and storage-sql modules are present.
+async fn init_follower_with_storage<S>(
+    genesis: Genesis,
+    mut modules: Modules,
+    params: FollowerParams,
+    l1_params: L1Params,
+    mut storage_opt: S,
+    public_node_config: PublicNodeConfig,
+) -> anyhow::Result<FollowerContext<S::Persistence>>
+where
+    S: DataSourceOptions,
+{
+    let http_opt = modules
+        .http
+        .take()
+        .context("a follower needs the http module")?;
+    let http_opt = api_options(http_opt, modules, &storage_opt, public_node_config);
+    let persistence = storage_opt.create().await?;
+    http_opt
+        .serve(move |metrics, sink, _storage| {
+            async move {
+                init_follower_node(genesis, params, metrics, persistence, l1_params, sink).await
+            }
+            .boxed()
+        })
+        .await
+        .map(FollowerContext::new)
+}
+
+fn api_options<S: DataSourceOptions>(
+    http_opt: api::options::Http,
+    modules: Modules,
+    storage_opt: &S,
+    public_node_config: PublicNodeConfig,
+) -> api::Options {
+    let mut http_opt = api::Options::from(http_opt);
+    if let Some(query) = modules.query {
+        http_opt = storage_opt.enable_query_module(http_opt, query);
+    }
+    if let Some(submit) = modules.submit {
+        http_opt = http_opt.submit(submit);
+    }
+    if let Some(status) = modules.status {
+        http_opt = http_opt.status(status);
+    }
+    if let Some(catchup) = modules.catchup {
+        http_opt = http_opt.catchup(catchup);
+    }
+    if modules.hotshot_events.is_some() {
+        tracing::warn!(
+            "the hotshot-events module is deprecated and ignored: the node no longer serves \
+             /hotshot-events. Remove it from the command line."
+        );
+    }
+    if let Some(explorer) = modules.explorer {
+        http_opt = http_opt.explorer(explorer);
+    }
+    if let Some(light_client) = modules.light_client {
+        http_opt = http_opt.light_client(light_client);
+    }
+    if let Some(config) = modules.config {
+        http_opt = http_opt
+            .config(config)
+            .public_node_config(public_node_config);
+    }
+    http_opt
 }
 
 #[cfg(test)]
 mod test {
     use std::time::Duration;
 
+    use clap::Parser;
     use espresso_types::{
         PubKey, Upgrade, UpgradeType,
         v0_1::{UpgradeMode, ViewBasedUpgrade},
@@ -321,7 +410,7 @@ mod test {
     use tempfile::TempDir;
     use test_utils::reserve_tcp_port;
     use tokio::spawn;
-    use vbs::version::Version;
+    use versions::{LARGE_BLOCK_VERSION, NEW_PROTOCOL_VERSION};
 
     use super::*;
     use crate::{
@@ -348,10 +437,8 @@ mod test {
             accounts: Default::default(),
             l1_finalized: L1Finalized::Number { number: 0 },
             header: Default::default(),
-            // `validate_fee_contract` would reject this upgrade (no fee_contract); the test
-            // never reaches validation because startup blocks at the orchestrator first.
             upgrades: [(
-                Version { major: 0, minor: 2 },
+                LARGE_BLOCK_VERSION,
                 Upgrade {
                     mode: UpgradeMode::View(ViewBasedUpgrade {
                         start_proposing_view: 100,
@@ -359,21 +446,21 @@ mod test {
                         start_voting_view: None,
                         stop_voting_view: None,
                     }),
-                    upgrade_type: UpgradeType::Fee {
+                    upgrade_type: UpgradeType::LargeBlock {
                         chain_config: Default::default(),
                     },
                 },
             )]
             .into_iter()
             .collect(),
-            base_version: Version { major: 0, minor: 1 },
-            upgrade_version: Version { major: 0, minor: 2 },
-            epoch_height: None,
+            base_version: NEW_PROTOCOL_VERSION,
+            upgrade_version: LARGE_BLOCK_VERSION,
+            epoch_height: Some(10),
             drb_difficulty: None,
             drb_upgrade_difficulty: None,
             epoch_start_block: None,
             stake_table_capacity: None,
-            genesis_version: Version { major: 0, minor: 1 },
+            genesis_version: NEW_PROTOCOL_VERSION,
             da_committees: None,
         };
         genesis.to_file(&genesis_file).unwrap();
@@ -400,6 +487,8 @@ mod test {
                 .expect("valid key")
                 .to_string(),
             "--cliquenet-bind-address",
+            &format!("127.0.0.1:{port2}"),
+            "--cliquenet-advertise-address",
             &format!("127.0.0.1:{port2}"),
             // Never bound: this test blocks at orchestrator before libp2p starts. Port 0 is a
             // placeholder to satisfy the orchestrator-bootstrap requirement on the advertise
@@ -485,15 +574,15 @@ mod test {
             "expected testing in features: {lines:#?}"
         );
         let genesis_line = concat!(
-            r#"consensus_genesis{base_version="0.1",genesis_version="0.1","#,
-            r#"upgrade_version="0.2"} 1"#
+            r#"consensus_genesis{base_version="0.6",genesis_version="0.6","#,
+            r#"upgrade_version="0.7"} 1"#
         );
         assert!(
             lines.contains(&genesis_line),
             "missing consensus_genesis metric: {lines:#?}"
         );
         assert!(
-            lines.contains(&r#"consensus_genesis_upgrade{version="0.2"} 1"#),
+            lines.contains(&r#"consensus_genesis_upgrade{version="0.7"} 1"#),
             "missing consensus_genesis_upgrade metric: {lines:#?}"
         );
 
@@ -536,12 +625,12 @@ mod test {
         }
         assert_eq!(
             node_cfg["genesis"]["base_version"],
-            serde_json::Value::String("0.1".into()),
+            serde_json::Value::String("0.6".into()),
             "genesis.base_version mismatch: {node_cfg}"
         );
         assert_eq!(
             node_cfg["genesis"]["upgrade"][0]["version"],
-            serde_json::Value::String("0.2".into()),
+            serde_json::Value::String("0.7".into()),
             "genesis.upgrade[0].version mismatch: {node_cfg}"
         );
         assert_eq!(

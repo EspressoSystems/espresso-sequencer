@@ -99,6 +99,9 @@ catchup_base_timeout:
 local_catchup_timeout:
   secs: 5
   nanos: 0
+http_catchup_delay:
+  secs: 2
+  nanos: 0
 bootstrap_epoch_catchup_timeout:
   secs: 30
   nanos: 0
@@ -114,6 +117,7 @@ catchup_backoff:
     numerator: 1
     denominator: 10
   disable: false
+follower: ~
 proposal_fetcher:
   num_workers: 2
   fetch_timeout:
@@ -160,6 +164,15 @@ l1:
   polling_interval:
     secs: 7
     nanos: 0
+  wait_refresh_interval:
+    secs: 0
+    nanos: 500000000
+  wait_refresh_timeout:
+    secs: 1
+    nanos: 500000000
+  request_timeout:
+    secs: 10
+    nanos: 0
   blocks_cache_size: 100
   events_channel_capacity: 100
   events_max_block_range: 10000
@@ -180,7 +193,7 @@ l1:
   events_max_retry_duration:
     secs: 1200
     nanos: 0
-  finalized_safety_margin: ~
+  finalized_safety_margin: 100
 l1_provider_count: 1
 l1_ws_provider_count: 0
 storage:
@@ -189,6 +202,8 @@ storage:
   sql:
     prune: true
     archive: false
+    archive_state_min_retention: 500000
+    archive_full_state: false
     lightweight: false
     disable_proactive_fetching: false
     fetch_rate_limit: ~
@@ -232,13 +247,13 @@ modules:
     max_connections: ~
     tonic_port: ~
   query:
-    peers: []
+    peers:
+      - "http://peer.example:24000/"
     light_client:
       num_stake_tables_in_memory: 100
     light_client_db:
       num_connections: 5
       num_leaves: 100
-      num_stake_tables: 100
       lc_path: ~
   submit: false
   status: false

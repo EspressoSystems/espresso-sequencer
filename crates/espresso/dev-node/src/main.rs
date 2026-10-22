@@ -31,9 +31,7 @@ use espresso_contract_deployer::{
     self as deployer, Contract, Contracts, DEFAULT_EXIT_ESCROW_PERIOD_SECONDS, DeployedContracts,
     HttpProviderWithWallet, network_config::light_client_genesis_from_stake_table,
 };
-use espresso_dev_node::{
-    AltChainInfo, DevInfo, DevNodeVersion, SetHotshotDownReqBody, SetHotshotUpReqBody,
-};
+use espresso_dev_node::{AltChainInfo, DevInfo, SetHotshotDownReqBody, SetHotshotUpReqBody};
 use espresso_node::{
     SequencerApiVersion,
     api::{
@@ -184,10 +182,6 @@ struct Args {
     #[clap(long, env = "ESPRESSO_NODE_TONIC_PORT")]
     tonic_port: Option<u16>,
 
-    /// Port for connecting to the builder.
-    #[clap(short, long, env = "ESPRESSO_BUILDER_PORT")]
-    builder_port: Option<u16>,
-
     /// Port for connecting to the prover.
     #[clap(short, long, env = "ESPRESSO_PROVER_PORT")]
     prover_port: Option<u16>,
@@ -230,10 +224,6 @@ struct Args {
     #[clap(flatten)]
     sql: persistence::sql::Options,
 
-    /// protocol version to run (V3, V4, V5, or V6)
-    #[clap(long, env = "ESPRESSO_DEV_NODE_VERSION", default_value = "0.3")]
-    version: DevNodeVersion,
-
     #[clap(flatten)]
     logging: logging::Config,
 }
@@ -272,7 +262,6 @@ async fn async_main(migrated_envs: Vec<(&str, &str)>) -> anyhow::Result<()> {
         sequencer_api_port,
         sequencer_api_max_connections,
         tonic_port,
-        builder_port,
         prover_port,
         dev_node_port,
         sql,
@@ -289,7 +278,6 @@ async fn async_main(migrated_envs: Vec<(&str, &str)>) -> anyhow::Result<()> {
         initial_token_supply,
         token_name,
         token_symbol,
-        version,
     } = cli_params;
 
     logging.init();
@@ -331,7 +319,6 @@ async fn async_main(migrated_envs: Vec<(&str, &str)>) -> anyhow::Result<()> {
 
     let network_config = TestConfigBuilder::default()
         .epoch_height(epoch_height)
-        .builder_port(builder_port)
         .stake_table_capacity(STAKE_TABLE_CAPACITY_FOR_TEST)
         .state_relay_url(relay_server_url.clone())
         .l1_url(l1_url.clone())
@@ -528,12 +515,9 @@ async fn async_main(migrated_envs: Vec<(&str, &str)>) -> anyhow::Result<()> {
             )
             .await?;
 
-            if matches!(version, DevNodeVersion::V0_6) {
-                let l1_client = l1_opt.clone().connect(vec![l1_url.clone()])?;
-                deployer::upgrade_stake_table_v2(&provider, l1_client, contracts, admin, admin)
-                    .await?;
-                deployer::upgrade_stake_table_v3(&provider, contracts).await?;
-            }
+            let l1_client = l1_opt.clone().connect(vec![l1_url.clone()])?;
+            deployer::upgrade_stake_table_v2(&provider, l1_client, contracts, admin, admin).await?;
+            deployer::upgrade_stake_table_v3(&provider, contracts).await?;
 
             if let Some(multisig) = multisig_address {
                 deployer::transfer_ownership(
@@ -669,7 +653,6 @@ async fn async_main(migrated_envs: Vec<(&str, &str)>) -> anyhow::Result<()> {
     .config(Default::default())
     .explorer(Default::default())
     .query_sql(Default::default(), sql)
-    .hotshot_events(Default::default())
     .light_client(Default::default());
     let consensus_dbs = join_all((0..NUM_NODES).map(|_| DataSource::create_storage())).await;
     let persistences: [_; NUM_NODES] = consensus_dbs
@@ -687,15 +670,7 @@ async fn async_main(migrated_envs: Vec<(&str, &str)>) -> anyhow::Result<()> {
         .build();
 
     // Start the nodes
-    let network = {
-        let u = match version {
-            DevNodeVersion::V0_3 => Upgrade::trivial(versions::version(0, 3)),
-            DevNodeVersion::V0_4 => Upgrade::trivial(versions::version(0, 4)),
-            DevNodeVersion::V0_5 => Upgrade::trivial(versions::version(0, 5)),
-            DevNodeVersion::V0_6 => Upgrade::trivial(versions::NEW_PROTOCOL_VERSION),
-        };
-        TestNetwork::new(config, u).await
-    };
+    let network = TestNetwork::new(config, Upgrade::trivial(versions::NEW_PROTOCOL_VERSION)).await;
 
     let relay_server_handle = spawn(async move {
         // using explicit relayer state will avoid it calling the dev-node on `/config/hotshot` for epoch info,

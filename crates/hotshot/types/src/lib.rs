@@ -38,6 +38,7 @@ pub mod error;
 pub mod event;
 /// Holds the configuration file specification for a HotShot node.
 pub mod hotshot_config_file;
+pub mod initializer;
 pub mod light_client;
 pub mod message;
 pub mod new_protocol;
@@ -308,6 +309,36 @@ impl<TYPES: NodeType> HotShotConfig<TYPES> {
     /// Return the `known_nodes_with_stake` as a `HSStakeTable`
     pub fn hotshot_stake_table(&self) -> HSStakeTable<TYPES> {
         self.known_nodes_with_stake.clone().into()
+    }
+}
+
+/// `serde_bytes` for `Arc<[u8]>`, which it has no impl for.
+///
+/// serde's slice impl is `collect_seq`, one call per byte. The encoding is the same either way,
+/// so the swap is wire-compatible; `serde_bytes`' visitor still accepts a sequence.
+pub mod arc_bytes {
+    use std::{borrow::Cow, sync::Arc};
+
+    use serde::{Deserializer, Serializer};
+
+    /// # Errors
+    ///
+    /// Errors if the underlying serializer does.
+    pub fn serialize<S>(bytes: &Arc<[u8]>, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serde_bytes::serialize(bytes.as_ref(), serializer)
+    }
+
+    /// # Errors
+    ///
+    /// Errors if the underlying deserializer does.
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Arc<[u8]>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        serde_bytes::deserialize::<Cow<[u8]>, _>(deserializer).map(|bytes| Arc::from(&*bytes))
     }
 }
 

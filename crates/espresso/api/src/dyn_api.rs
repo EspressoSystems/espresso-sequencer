@@ -10,7 +10,7 @@
 //! Each trait has a blanket impl forwarding to the corresponding `v1` trait, so every state type
 //! gets the erased view for free, and only those forwarders are monomorphized per state.
 
-use std::sync::Arc;
+use std::{ops::Range, sync::Arc};
 
 use async_trait::async_trait;
 use axum::http::HeaderMap;
@@ -41,7 +41,7 @@ pub(crate) type NodeState = Arc<dyn DynNodeApi>;
 pub(crate) type CatchupState = Arc<dyn DynCatchupApi>;
 pub(crate) type SubmitState = Arc<dyn DynSubmitApi>;
 pub(crate) type StateSignatureState = Arc<dyn DynStateSignatureApi>;
-pub(crate) type HotShotEventsState = Arc<dyn DynHotShotEventsApi>;
+
 pub(crate) type LightClientState = Arc<dyn DynLightClientApi>;
 pub(crate) type ExplorerState = Arc<dyn DynExplorerApi>;
 pub(crate) type DatabaseState = Arc<dyn DynDatabaseApi>;
@@ -271,6 +271,9 @@ pub(crate) trait DynHotShotAvailabilityApi: Send + Sync {
     async fn get_payload_range(&self, from: usize, until: usize) -> anyhow::Result<Erased>;
     async fn get_vid_common(&self, id: v1::BlockId) -> anyhow::Result<Erased>;
     async fn get_vid_common_range(&self, from: usize, until: usize) -> anyhow::Result<Erased>;
+    async fn get_leaf_ranges(&self, ranges: Vec<Range<u64>>) -> anyhow::Result<Erased>;
+    async fn get_block_ranges(&self, ranges: Vec<Range<u64>>) -> anyhow::Result<Erased>;
+    async fn get_vid_common_ranges(&self, ranges: Vec<Range<u64>>) -> anyhow::Result<Erased>;
     async fn get_transaction_by_position(&self, height: u64, index: u64) -> anyhow::Result<Erased>;
     async fn get_transaction_by_hash(&self, hash: String) -> anyhow::Result<Erased>;
     async fn get_transaction_proof_by_position(
@@ -345,6 +348,21 @@ impl<T: v1::HotShotAvailabilityApi + Send + Sync> DynHotShotAvailabilityApi for 
     }
     async fn get_vid_common_range(&self, from: usize, until: usize) -> anyhow::Result<Erased> {
         v1::HotShotAvailabilityApi::get_vid_common_range(self, from, until)
+            .await
+            .map(erase)
+    }
+    async fn get_leaf_ranges(&self, ranges: Vec<Range<u64>>) -> anyhow::Result<Erased> {
+        v1::HotShotAvailabilityApi::get_leaf_ranges(self, ranges)
+            .await
+            .map(erase)
+    }
+    async fn get_block_ranges(&self, ranges: Vec<Range<u64>>) -> anyhow::Result<Erased> {
+        v1::HotShotAvailabilityApi::get_block_ranges(self, ranges)
+            .await
+            .map(erase)
+    }
+    async fn get_vid_common_ranges(&self, ranges: Vec<Range<u64>>) -> anyhow::Result<Erased> {
+        v1::HotShotAvailabilityApi::get_vid_common_ranges(self, ranges)
             .await
             .map(erase)
     }
@@ -803,8 +821,8 @@ impl<T: v1::CatchupApi + Send + Sync> DynCatchupApi for T {
 
 #[async_trait]
 pub(crate) trait DynSubmitApi: Send + Sync {
-    /// The transaction type is erased, so the body is decoded behind the trait object; a bad
-    /// body is the 400 [`decode_body`] returns and a submit failure a 500, as on the typed path.
+    /// The transaction type is erased, so the body is decoded behind the trait object. A bad
+    /// body is a 400, and a submit failure goes through [`classify`].
     async fn submit(&self, headers: &HeaderMap, body: &[u8]) -> Result<Erased, ApiError>;
 }
 
@@ -815,7 +833,7 @@ impl<T: v1::SubmitApi + Send + Sync> DynSubmitApi for T {
         v1::SubmitApi::submit(self, tx)
             .await
             .map(erase)
-            .map_err(ApiError::Internal)
+            .map_err(classify)
     }
 }
 
@@ -834,22 +852,6 @@ impl<T: v1::StateSignatureApi + Send + Sync> DynStateSignatureApi for T {
 }
 
 #[async_trait]
-pub(crate) trait DynHotShotEventsApi: Send + Sync {
-    async fn startup_info(&self) -> anyhow::Result<Erased>;
-    async fn events(&self) -> anyhow::Result<BoxStream<'static, Erased>>;
-}
-
-#[async_trait]
-impl<T: v1::HotShotEventsApi + Send + Sync> DynHotShotEventsApi for T {
-    async fn startup_info(&self) -> anyhow::Result<Erased> {
-        v1::HotShotEventsApi::startup_info(self).await.map(erase)
-    }
-    async fn events(&self) -> anyhow::Result<BoxStream<'static, Erased>> {
-        Ok(v1::HotShotEventsApi::events(self).await?.map(erase).boxed())
-    }
-}
-
-#[async_trait]
 pub(crate) trait DynLightClientApi: Send + Sync {
     async fn get_leaf_proof(
         &self,
@@ -864,6 +866,7 @@ pub(crate) trait DynLightClientApi: Send + Sync {
     async fn get_light_client_stake_table(&self, epoch: u64) -> anyhow::Result<Erased>;
     async fn get_payload_proof(&self, height: u64) -> anyhow::Result<Erased>;
     async fn get_payload_proof_range(&self, start: u64, end: u64) -> anyhow::Result<Erased>;
+    async fn get_payload_proof_ranges(&self, ranges: Vec<Range<u64>>) -> anyhow::Result<Erased>;
     async fn get_lc_namespace_proof(&self, height: u64, namespace: u64) -> anyhow::Result<Erased>;
     async fn get_lc_namespace_proof_range(
         &self,
@@ -911,6 +914,11 @@ impl<T: v1::LightClientApi + Send + Sync> DynLightClientApi for T {
     }
     async fn get_payload_proof_range(&self, start: u64, end: u64) -> anyhow::Result<Erased> {
         v1::LightClientApi::get_payload_proof_range(self, start, end)
+            .await
+            .map(erase)
+    }
+    async fn get_payload_proof_ranges(&self, ranges: Vec<Range<u64>>) -> anyhow::Result<Erased> {
+        v1::LightClientApi::get_payload_proof_ranges(self, ranges)
             .await
             .map(erase)
     }

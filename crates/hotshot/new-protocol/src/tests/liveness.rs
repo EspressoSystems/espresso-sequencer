@@ -33,11 +33,11 @@
 //! ordinary `BlockReconstructed`. The first test walks the stall up to the
 //! emitted request; the second walks through the exit.
 
-use hotshot::types::BLSPubKey;
 use hotshot_example_types::{block_types::TestBlockHeader, node_types::TEST_VERSIONS};
 use hotshot_types::{
     data::{EpochNumber, ViewNumber},
     message::Proposal,
+    signature_key::BLSPubKey,
     traits::signature_key::SignatureKey,
     vote::HasViewNumber,
 };
@@ -217,11 +217,11 @@ async fn one_missed_payload_stalls_certification() {
         // vote that makes the timeout certificate reach its threshold.
         if current.contains(&node) {
             harness
-                .apply(ConsensusInput::Timeout(ViewNumber::new(2), epoch))
+                .apply(ConsensusInput::Timeout(ViewNumber::new(2)))
                 .await;
         } else {
             harness
-                .apply(ConsensusInput::TimeoutOneHonest(ViewNumber::new(2), epoch))
+                .apply(ConsensusInput::TimeoutOneHonest(ViewNumber::new(2)))
                 .await;
         }
 
@@ -455,7 +455,7 @@ async fn fetched_payload_restores_certification() {
         .apply_pair(test_data.views[1].proposal_input_consensus(&key))
         .await;
     harness
-        .apply(ConsensusInput::TimeoutOneHonest(ViewNumber::new(2), epoch))
+        .apply(ConsensusInput::TimeoutOneHonest(ViewNumber::new(2)))
         .await;
     // The certificate carries the node into view 3, which is what puts view 1
     // two views earlier than the current view: up to that point a missed share
@@ -496,10 +496,11 @@ async fn fetched_payload_restores_certification() {
     // What the coordinator injects once a peer's response re-committed to the
     // proposal's payload commitment.
     harness
-        .apply(ConsensusInput::BlockReconstructed(
-            ViewNumber::new(1),
-            test_data.views[0].vid_commitment(),
-        ))
+        .apply(ConsensusInput::BlockReconstructed {
+            view: ViewNumber::new(1),
+            payload_commitment: test_data.views[0].vid_commitment(),
+            payload: test_data.views[0].payload.clone(),
+        })
         .await;
 
     assert!(
@@ -574,7 +575,7 @@ async fn missing_certificate_still_requests_the_payload() {
         .apply_pair(test_data.views[1].proposal_input_consensus(&key))
         .await;
     harness
-        .apply(ConsensusInput::TimeoutOneHonest(ViewNumber::new(2), epoch))
+        .apply(ConsensusInput::TimeoutOneHonest(ViewNumber::new(2)))
         .await;
     harness
         .apply(ConsensusInput::TimeoutCertificate(ValidCert::new(

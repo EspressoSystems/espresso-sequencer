@@ -11,10 +11,6 @@ use async_trait::async_trait;
 use committable::Commitment;
 use futures::{FutureExt, TryFutureExt};
 #[cfg(feature = "node")]
-use hotshot::{HotShotInitializer, InitializerEpochInfo, types::EventType};
-#[cfg(feature = "node")]
-use hotshot_libp2p_networking::network::behaviours::dht::store::persistent::DhtPersistentStorage;
-#[cfg(feature = "node")]
 use hotshot_new_protocol::storage::NewProtocolStorage;
 #[cfg(feature = "node")]
 use hotshot_types::simple_certificate::{Certificate1, Certificate2};
@@ -26,6 +22,7 @@ use hotshot_types::{
     },
     drb::DrbInput,
     event::{HotShotAction, LeafInfo},
+    initializer::{HotShotInitializer, InitializerEpochInfo},
     message::{Proposal, convert_proposal},
     simple_certificate::{
         CertificatePair, NextEpochQuorumCertificate2, QuorumCertificate, QuorumCertificate2,
@@ -493,6 +490,7 @@ pub trait PersistenceOptions: Clone + Send + Sync + Debug + 'static {
     type Persistence: SequencerPersistence + MembershipPersistence;
 
     fn set_view_retention(&mut self, view_retention: u64);
+    fn set_consensus_only(&mut self);
     async fn create(&mut self) -> anyhow::Result<Self::Persistence>;
     async fn reset(self) -> anyhow::Result<()>;
 }
@@ -578,7 +576,7 @@ pub trait MembershipPersistence: Send + Sync + 'static {
 #[cfg(feature = "node")]
 #[async_trait]
 pub trait SequencerPersistence:
-    Sized + Send + Sync + Clone + 'static + DhtPersistentStorage + MembershipPersistence
+    Sized + Send + Sync + Clone + 'static + MembershipPersistence
 {
     /// Use this storage as a state catchup backend, if supported.
     fn into_catchup_provider(
@@ -838,8 +836,8 @@ pub trait SequencerPersistence:
     }
 
     /// Decode a consensus decide event and persist its leaves, for the consensus event loop.
-    /// Returns `Some((decided_view, deciding_qc))` on a decide so the caller can wake a background
-    /// task to run [`process_decided_events`](Self::process_decided_events); `None` otherwise.
+    /// Returns the decided view on a decide so the caller can wake a background task to run
+    /// [`process_decided_events`](Self::process_decided_events); `None` otherwise.
     ///
     /// This is the persist-only half of a decide: query-service ingestion and GC are deferred to
     /// [`process_decided_events`](Self::process_decided_events). Tests that want the synchronous
@@ -848,42 +846,12 @@ pub trait SequencerPersistence:
         &self,
         event: &CoordinatorEvent<SeqTypes>,
         consumer: &(impl EventConsumer + 'static),
-    ) -> Option<(ViewNumber, Option<Arc<CertificatePair<SeqTypes>>>)> {
+    ) -> Option<ViewNumber> {
         match event {
-            CoordinatorEvent::LegacyEvent(hotshot_event) => {
-                let EventType::Decide {
-                    leaf_chain,
-                    committing_qc,
-                    deciding_qc,
-                    ..
-                } = &hotshot_event.event
-                else {
-                    return None;
-                };
-                let LeafInfo { leaf, .. } = leaf_chain.first()?;
-                let decided_view = leaf.view_number();
-
-                let chain = leaf_chain.iter().zip(
-                    std::iter::once((**committing_qc).clone()).chain(
-                        leaf_chain
-                            .iter()
-                            .map(|leaf| CertificatePair::for_parent(&leaf.leaf)),
-                    ),
-                );
-
-                if let Err(err) = self
-                    .persist_decided_leaves(decided_view, chain, deciding_qc.clone(), consumer)
-                    .await
-                {
-                    tracing::error!(
-                        "failed to save decided leaves, chain may not be up to date: {err:#}"
-                    );
-                    return None;
-                }
-                Some((decided_view, deciding_qc.clone()))
-            },
             CoordinatorEvent::NewDecide {
-                leaf_infos, cert1, ..
+                leaf_infos,
+                cert1,
+                cert2,
             } => {
                 let first = leaf_infos.first()?;
                 let decided_view = first.leaf.view_number();
@@ -891,15 +859,14 @@ pub trait SequencerPersistence:
                 // `cert1` certifies the newest leaf; each newer leaf's justify_qc certifies the
                 // next older leaf.
                 let certifying_qcs = std::iter::once(cert1.clone())
-                    .chain(leaf_infos.iter().map(|info| info.leaf.justify_qc()))
+                    .chain(leaf_infos.iter().map(|info| info.leaf.justify_qc().clone()))
                     .take(leaf_infos.len())
                     .map(CertificatePair::non_epoch_change);
 
                 if let Err(err) = self
                     .persist_decided_leaves(
-                        decided_view,
                         leaf_infos.iter().zip(certifying_qcs),
-                        None,
+                        cert2.as_ref(),
                         consumer,
                     )
                     .await
@@ -910,7 +877,7 @@ pub trait SequencerPersistence:
                     );
                     return None;
                 }
-                Some((decided_view, None))
+                Some(decided_view)
             },
             _ => None,
         }
@@ -949,16 +916,12 @@ pub trait SequencerPersistence:
         &self,
         decided_view: ViewNumber,
         leaf_chain: impl IntoIterator<Item = (&LeafInfo<SeqTypes>, CertificatePair<SeqTypes>)> + Send,
-        deciding_qc: Option<Arc<CertificatePair<SeqTypes>>>,
         consumer: &(impl EventConsumer + 'static),
     ) -> anyhow::Result<()> {
-        self.persist_decided_leaves(decided_view, leaf_chain, deciding_qc.clone(), consumer)
+        self.persist_decided_leaves(leaf_chain, None, consumer)
             .await?;
         // Leaves are persisted; processing failures are non-fatal here and retried in production.
-        if let Err(err) = self
-            .process_decided_events(decided_view, deciding_qc, consumer)
-            .await
-        {
+        if let Err(err) = self.process_decided_events(decided_view, consumer).await {
             tracing::warn!(?decided_view, "decide event processing failed: {err:#}");
         }
         Ok(())
@@ -968,11 +931,14 @@ pub trait SequencerPersistence:
     /// anchor for restart recovery). Query-service ingestion and GC are deferred to
     /// [`process_decided_events`](Self::process_decided_events). Backends with no replayable storage
     /// (e.g. `NoStorage`) may instead forward decide events to `consumer` here.
+    ///
+    /// `cert2` finalizes the newest leaf of `leaf_chain`. It is persisted atomically with the
+    /// leaves, so [`process_decided_events`](Self::process_decided_events) never sees that leaf
+    /// without it.
     async fn persist_decided_leaves(
         &self,
-        decided_view: ViewNumber,
         leaf_chain: impl IntoIterator<Item = (&LeafInfo<SeqTypes>, CertificatePair<SeqTypes>)> + Send,
-        deciding_qc: Option<Arc<CertificatePair<SeqTypes>>>,
+        cert2: Option<&Certificate2<SeqTypes>>,
         consumer: &(impl EventConsumer + 'static),
     ) -> anyhow::Result<()>;
 
@@ -989,7 +955,6 @@ pub trait SequencerPersistence:
     async fn process_decided_events(
         &self,
         decided_view: ViewNumber,
-        _deciding_qc: Option<Arc<CertificatePair<SeqTypes>>>,
         _consumer: &(impl EventConsumer + 'static),
     ) -> anyhow::Result<Option<ViewNumber>> {
         Ok(Some(decided_view))
@@ -1268,14 +1233,6 @@ impl<P: SequencerPersistence> Storage<SeqTypes> for Arc<P> {
 #[cfg(feature = "node")]
 #[async_trait]
 impl<P: SequencerPersistence> NewProtocolStorage<SeqTypes> for Arc<P> {
-    async fn append_cert2(
-        &self,
-        view: ViewNumber,
-        cert: Certificate2<SeqTypes>,
-    ) -> anyhow::Result<()> {
-        (**self).append_cert2(view, cert).await
-    }
-
     async fn append_high_qc2(&self, high_qc: Certificate1<SeqTypes>) -> anyhow::Result<()> {
         // Writes are spawned concurrently and retried, so a stale write can land
         // after a newer one. The backend applies a monotonic compare-and-set

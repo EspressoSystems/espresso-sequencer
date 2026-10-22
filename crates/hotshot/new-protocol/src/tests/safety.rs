@@ -15,7 +15,6 @@
 //! a network does for them. Delivery order is the variable under test, so it is
 //! controlled rather than left to a real network.
 
-use hotshot::types::BLSPubKey;
 use hotshot_example_types::{
     block_types::TestBlockHeader,
     node_types::{TEST_VERSIONS, TestTypes},
@@ -23,6 +22,7 @@ use hotshot_example_types::{
 use hotshot_types::{
     data::{EpochNumber, ViewNumber},
     message::Proposal,
+    signature_key::BLSPubKey,
     stake_table::StakeTableEntries,
     traits::{block_contents::BlockHeader, signature_key::SignatureKey},
     vote::{Certificate, HasViewNumber, Vote},
@@ -264,10 +264,7 @@ async fn conflicting_quorums_cannot_both_reach_threshold() {
         // the burst, so its timer never fires and its `timeout_view` stays 0.
         if NEVER_LOCKED.contains(&node) {
             harness
-                .apply(ConsensusInput::Timeout(
-                    ViewNumber::new(2),
-                    EpochNumber::genesis(),
-                ))
+                .apply(ConsensusInput::Timeout(ViewNumber::new(2)))
                 .await;
         }
 
@@ -413,10 +410,11 @@ async fn conflicting_quorums_cannot_both_reach_threshold() {
             )))
             .await;
         harness
-            .apply(ConsensusInput::BlockReconstructed(
-                ViewNumber::new(6),
-                test_data.views[5].vid_commitment(),
-            ))
+            .apply(ConsensusInput::BlockReconstructed {
+                view: ViewNumber::new(6),
+                payload_commitment: test_data.views[5].vid_commitment(),
+                payload: test_data.views[5].payload.clone(),
+            })
             .await;
         for output in harness.outputs().iter().skip(before) {
             if let ConsensusOutput::SendVote2(v) = output

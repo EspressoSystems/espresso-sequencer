@@ -1,40 +1,27 @@
 module
 
-import NewProtocolSpec.Safety
-import NewProtocolSpec.DecideStream
-import NewProtocolSpec.Implements
+import NewProtocolSpec.Proofs.Decide
+import NewProtocolSpec.Proofs.Liveness.Epochs
+import NewProtocolSpec.Witness
 meta import Lean.Elab.Command
 
 /-!
-# Checks on the claims this specification makes about itself
+# Checks on the specification's own shape
 
-`NewProtocolSpec.Assumptions` names what is believed and asserts that nothing
-else is; `NewProtocolSpec` names the results and the way in. Prose cannot check
-either, so what can be checked is checked here at build time:
+Two things prose cannot check, checked at build time:
 
-* the results depend on no axiom beyond Lean's own, and on no `sorry`;
-* `SafetySpec` has exactly the clauses the no-fork proof is entitled to, so a
-  clause added to it is a deliberate widening of what safety rests on rather
-  than something that happens while a proof is being repaired;
-* the premises are exactly the fields of `Committee` and `Network`, so a premise
-  cannot be added without the trust surface being restated.
+* nothing the specification declares rests on an axiom beyond Lean's own, and on
+  no `sorry`;
+* the rule structures, the premises and the synchrony assumptions have exactly the
+  fields listed below. A field added to `SafeHistory` widens what safety rests on,
+  and one added to `Network`, `Committee` or `Synchrony` widens what is assumed; so
+  either should be a deliberate change here, not something that happens while a
+  proof is being repaired.
 
-These exist because that rot has happened here: two premises that became theorems
-and stayed listed as premises, and two clause counts that drifted after a clause
-was removed.
-
-What is checked here is the specification only. `new-protocol-impl` claims an
-axiom footprint of its own, for the conformance proof, and checks it in
-`NewProtocolImpl.Checks` — it has to, since this package cannot see that one.
-
-What is *not* checked here is that the declarations named in prose still exist.
-Two things cover that between them: `../Lint.lean` walks every docstring in the
-specification and fails on a backticked name that resolves to nothing, and
-`new-protocol-docs` fails to build when a declaration it splices is renamed.
-
-The docstring check cannot run here — docstrings of imported declarations are not
-visible to `run_meta` in a later module — so it is a program that imports the
-specification itself.
+That the safety premises can be met together is `NewProtocolSpec.Witness`: a network
+meeting all of them, in which a block is committed and a new epoch opened behind
+it. That the liveness premises can be met is the implementation package's
+witness: a node running the machine meets every premise of `ChainGrows`.
 -/
 
 open Lean
@@ -42,29 +29,45 @@ open Lean
 namespace NewProtocol
 namespace Checks
 
-/-! ## Axioms
+/-- Nothing the specification declares rests on an axiom beyond Lean's own. -/
+meta def checkAxioms : MetaM Unit := do
+  let env ← getEnv
+  let allowed : List Name := [`propext, `Classical.choice, `Quot.sound]
+  let mut bad : Array (Name × Name) := #[]
+  for (name, idx) in env.const2ModIdx.toList do
+    let some m := env.allImportedModuleNames[idx.toNat]? | continue
+    unless m == `NewProtocolSpec || (`NewProtocolSpec).isPrefixOf m do continue
+    for a in ← Lean.collectAxioms name do
+      unless allowed.contains a do bad := bad.push (name, a)
+  unless bad.isEmpty do
+    throwError m!"the specification rests on axioms beyond Lean's own:\n{bad.toList}"
 
-`propext`, `Classical.choice` and `Quot.sound` are Lean's own. `sorryAx` would
-appear here if any proof were incomplete.
+run_meta checkAxioms
+
+/-! The results proved so far, and their footprints. -/
+
+/-- info: 'NewProtocol.noFork' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in #print axioms noFork
+
+/-- info: 'NewProtocol.decideAgreement' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in #print axioms decideAgreement
+
+/-- info: 'NewProtocol.decidesValid' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in #print axioms decidesValid
+
+/--
+info: 'NewProtocol.Liveness.chainGrows' depends on axioms: [propext, Classical.choice, Quot.sound]
 -/
+#guard_msgs in #print axioms Liveness.chainGrows
 
-/-- info: 'NewProtocol.decideSafety' depends on axioms: [propext, Classical.choice, Quot.sound] -/
-#guard_msgs in #print axioms decideSafety
+/-- info: 'NewProtocol.Witness.premises_met' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in #print axioms Witness.premises_met
 
-/-- info: 'NewProtocol.decideInv_reachable' depends on axioms: [propext, Classical.choice, Quot.sound] -/
-#guard_msgs in #print axioms decideInv_reachable
+/-- info: 'NewProtocol.Witness.per_epoch' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in #print axioms Witness.per_epoch
 
-/-! ## What is stated where
-
-The three lists below are the specification's own claims about its shape: which
-clauses safety rests on, and which premises there are. Each is compared with the
-declaration it describes, and a mismatch fails the build with the name of what
-changed and where else it is written down.
--/
-
-/-- Fail with an actionable message when a structure's fields are not what is expected. -/
-meta def checkFields (parent : Name) (expected : List Name) (alsoUpdate : String) :
-    MetaM Unit := do
+/-- Fail when a structure's fields are not what is expected. -/
+meta def checkFields (parent : Name) (expected : List Name) : MetaM Unit := do
   let actual := (getStructureFields (← getEnv) parent).toList
   if actual == expected then return
   let gained := actual.filter (!expected.contains ·)
@@ -73,57 +76,50 @@ meta def checkFields (parent : Name) (expected : List Name) (alsoUpdate : String
   unless gained.isEmpty do msg := msg ++ m!"\n  gained: {gained}"
   unless lost.isEmpty do msg := msg ++ m!"\n  lost: {lost}"
   if gained.isEmpty && lost.isEmpty then msg := msg ++ m!"\n  reordered: {actual}"
-  throwError msg ++ m!"\n\nIf that is intended, update this check and {alsoUpdate}."
+  throwError msg
 
-/-!
-The twenty-one clauses no-fork rests on, by name.
+/-! The signing rules: what safety rests on. -/
+run_meta (checkFields `NewProtocol.SafeHistory
+  [`vote1Justified, `vote1Once, `vote2Justified, `vote2Once, `vote2BeforeTimeout, `timeoutLock,
+   `decideJustified, `decideOnce])
 
-A count would miss the change most worth catching: swapping one clause for
-another, or renaming one, leaves the count alone.
--/
-run_meta (checkFields `NewProtocol.SafetySpec
-  [`proposalProvenance, `admissionJustified, `cert1Provenance,
-   `barredViewUnchanged, `vote1NotBarred, `vote2NotBarred,
-   `lockMono, `decidedRetained, `voted1Retained, `vote1BranchesRetained, `voted2Retained,
-   `vote1Once, `vote1Justified, `vote1Records,
-   `vote2Once, `vote2Justified, `vote2LockOrdered, `vote2NotInSkippedView, `vote2AboveFloor,
-   `lockJustified, `timeoutVoteSound]
-  "the clause count in `NewProtocolSpec.Safety` and the one in `new-protocol-docs`")
+/-! The rest of the protocol: what liveness reads of a node beyond safety. -/
+run_meta (checkFields `NewProtocol.ProtocolHistory
+  [`toSafeHistory, `vote1Leader, `timeoutJustified, `timeoutAnswered, `proposeJustified,
+   `revoteJustified, `proposeOnce])
 
-/-!
-And that `StepSpec` adds the rest, rather than moving one of them across.
+/-! What a node owes. -/
+run_meta (checkFields `NewProtocol.OwedVote1
+  [`received, `wellFormed, `validated, `parent, `safe, `opens, `current, `notTimedOut, `notVoted,
+   `inView])
 
-`toSafetySpec` is the parent projection, so it stands for all twenty-one above.
--/
-run_meta (checkFields `NewProtocol.StepSpec
-  [`toSafetySpec,
-   `vidShareProvenance, `validatedProvenance, `reconstructedProvenance, `headerProvenance,
-   `cert2Provenance, `timeoutCertProvenance,
-   `proposalIngested, `cert1Ingested, `cert2Ingested, `timeoutCertIngested,
-   `blockValidatedIngested, `reconstructedIngested, `headerIngested,
-   `currentViewMono, `currentViewJustified, `timeoutViewMono, `timeoutViewJustified,
-   `proposeNotBarred, `contentRetained, `proposedRetained,
-   `vote1Bar, `vote1CarriesShare, `vote1Marked, `vote1BranchesSound,
-   `vote2NotAfterCert2, `vote2Marked,
-   `proposeOnce, `proposeBar, `proposeJustified, `proposedMarked,
-   `decideJustified, `decidedMarked, `cert2RelayOwed,
-   `advanceOwed, `timeoutCertSound, `timeoutCertAdvanceOwed, `timeoutVoteOwed]
-  "the clause count in `new-protocol-docs`")
+run_meta (checkFields `NewProtocol.OwedVote1Again
+  [`received, `wellFormed, `safe, `payload, `current, `notTimedOut, `notVoted, `inView])
 
-/-! What the argument takes from stake, and nothing more. -/
+run_meta (checkFields `NewProtocol.OwedVote2
+  [`holds, `notVoted, `notCommitted, `notPast, `afterFloor])
+
+run_meta (checkFields `NewProtocol.OwedDecide [`holds])
+
+/-! What is assumed of committees. -/
 run_meta (checkFields `NewProtocol.Committee
-  [`honest, `Quorum, `intersect]
-  "`NewProtocolSpec.Assumptions`, which lists the premises")
+  [`honest, `members, `Quorum, `intersect, `honestFinite])
 
-/-!
-The premises about a network.
-
-`run` and `start` say what a network *is*; the rest are taken on trust.
--/
+/-! What is assumed of certificates: the verification layer's contract. -/
 run_meta (checkFields `NewProtocol.Network
-  [`run, `start, `Before, `beforeNext, `beforeTrans, `beforeWF,
-   `evidenceValid, `timeoutOneHonestBacked, `cert1Delivered, `parentCertValid]
-  "`NewProtocolSpec.Assumptions`, which lists the premises")
+  [`trace, `safe, `cert1Genuine, `cert2Genuine, `timeoutCertGenuine, `revoteGenuine])
+
+/-! What a timed network adds: times, the full protocol, and causality of the timeout inputs. -/
+run_meta (checkFields `NewProtocol.TimedNetwork
+  [`toNetwork, `honestQuorum, `time, `timeMono, `protocol,
+   `timeoutCertCausal, `oneHonestCausal, `authentic])
+
+/-! What is assumed of timing and delivery after GST. -/
+run_meta (checkFields `NewProtocol.Synchrony
+  [`proposal, `revote, `cert1, `cert2, `cert2Spread, `certSpread, `lockSpread, `blockSpread,
+   `timeoutCert, `timeoutOneHonest, `timeoutCertForward, `timeoutCatchUp, `timeoutLockSpread, `epochChange,
+   `proposalValid, `validatedSound, `validated, `header, `timeUnbounded, `timerNotEarly,
+   `timerFires])
 
 end Checks
 end NewProtocol

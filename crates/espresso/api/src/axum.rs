@@ -2,7 +2,7 @@
 
 pub mod routes;
 
-use std::sync::Arc;
+use std::{ops::Range, sync::Arc};
 
 use aide::{
     axum::{
@@ -22,41 +22,42 @@ use axum::{
     extract::{Path, Request, State, ws::WebSocketUpgrade},
     http::{HeaderMap, StatusCode, Uri, header},
     response::{Html, IntoResponse, Response},
-    routing::get,
+    routing::{any, get},
 };
 use http_wire::{
-    ContentType, DecodeFailure, WireFormat, drive_ws_stream, healthcheck_response,
+    ContentType, DecodeFailure, WireError, drive_ws_stream, healthcheck_response,
     module_healthcheck_response,
 };
 use schemars::transform::Transform;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tokio::sync::Semaphore;
-use vbs::version::StaticVersion;
 
 use crate::{
     dyn_api::{
         AvailabilityState, BlockState, CatchupState, ConfigState, DatabaseState, ExplorerState,
-        FeeState, HotShotEventsState, LightClientState, NodeState, RewardState,
-        StateSignatureState, StatusState, SubmitState, TokenState,
+        FeeState, LightClientState, NodeState, RewardState, StateSignatureState, StatusState,
+        SubmitState, TokenState,
     },
     error::{ApiError, classify as classify_availability_error},
     v1,
 };
 
-/// API error response — wire-compatible with the `Custom` variant of the per-module error enums
+/// API error response, wire-compatible with the `Custom` variant of the per-module error enums
 /// (`node::Error::Custom`, `merklized_state::Error::Custom`, etc.) that all of tide-disco's
 /// `Error::catch_all` calls produce. Most of our migrated endpoints (catchup, submit,
 /// state-signature, light-client, node, status, config, token, database) take that path, so this
 /// envelope is byte-identical with tide's error response for them. Endpoints that use a specific
 /// variant directly (e.g. `availability::Error::FetchLeaf`) emit their own shape on tide; those
 /// bytes are not matched here.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize, thiserror::Error)]
+#[error("{custom}")]
 struct ErrorResponse {
     #[serde(rename = "Custom")]
     custom: CustomError,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize, thiserror::Error)]
+#[error("error {status}: {message}")]
 struct CustomError {
     // Field order matches `node::Error::Custom { message, status }` declaration so serde_json
     // emits the same key order on the wire.
@@ -84,33 +85,21 @@ impl IntoResponse for ApiError {
         let status = match &self {
             ApiError::BadRequest(_) => StatusCode::BAD_REQUEST,
             ApiError::NotFound(_) => StatusCode::NOT_FOUND,
+            ApiError::Gone(_) => StatusCode::GONE,
             ApiError::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            ApiError::Unavailable(_) => StatusCode::SERVICE_UNAVAILABLE,
         };
         (status, Json(ErrorResponse::new(status, self.to_string()))).into_response()
     }
 }
 
-/// Binary framing version for VBS-negotiated bodies and websocket frames: every v1 endpoint in
-/// this codebase uses the V0_1 API version.
-type WireVersion = StaticVersion<0, 1>;
-
-/// Wire format of this API: [`WireVersion`] VBS framing and the [`ErrorResponse`] envelope. The
-/// negotiation itself lives in [`crate::wire`], shared with the other axum-migrated services.
-struct NodeApiWire;
-
-impl WireFormat for NodeApiWire {
-    type Error = ErrorResponse;
-    type Version = WireVersion;
-
-    fn status(err: &ErrorResponse) -> StatusCode {
-        StatusCode::from_u16(err.custom.status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR)
+impl WireError for ErrorResponse {
+    fn status(&self) -> StatusCode {
+        StatusCode::from_u16(self.custom.status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR)
     }
 
-    fn serialize_failure(message: String) -> ErrorResponse {
-        ErrorResponse::new(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("serialize: {message}"),
-        )
+    fn catch_all(status: StatusCode, message: String) -> Self {
+        Self::new(status, message)
     }
 }
 
@@ -121,19 +110,19 @@ impl WireFormat for NodeApiWire {
 /// (peer-catchup, submit-transactions, light-client provider) expect VBS-encoded responses for
 /// the endpoints that flow large structured data. Falls back to JSON otherwise.
 fn encode_response<T: Serialize>(headers: &HeaderMap, value: T) -> Response {
-    http_wire::encode_ok::<NodeApiWire, _>(headers, value)
+    http_wire::encode_ok::<ErrorResponse, _>(headers, value)
 }
 
 /// Decode a request body based on its `Content-Type`, matched by media-type essence.
 ///
-/// - `application/octet-stream`: VBS (versioned binary) — what `Request::body_binary`
+/// - `application/octet-stream`: VBS (versioned binary), what `Request::body_binary`
 ///   sends, and what production peer-catchup / submit-transactions clients use.
 /// - `application/json`: serde_json.
 pub(crate) fn decode_body<T: serde::de::DeserializeOwned>(
     headers: &HeaderMap,
     body: &[u8],
 ) -> Result<T, ApiError> {
-    http_wire::decode_body::<WireVersion, T>(headers, body).map_err(|err| {
+    http_wire::decode_body(headers, body).map_err(|err| {
         ApiError::BadRequest(match err {
             DecodeFailure::Binary(err) => anyhow::anyhow!("invalid binary body: {err}"),
             DecodeFailure::Json(err) => anyhow::anyhow!("invalid json body: {err}"),
@@ -155,7 +144,7 @@ impl OperationOutput for ApiError {
 }
 
 /// Successful JSON response for v1 handlers, most of which return domain types (from
-/// `espresso-types`, `hotshot-query-service`, etc.) that don't implement `schemars::JsonSchema` —
+/// `espresso-types`, `hotshot-query-service`, etc.) that don't implement `schemars::JsonSchema`;
 /// this crate doesn't add OpenAPI derives to domain types. Wire format is identical to
 /// `axum::Json<T>`; only the OpenAPI operation gets an untyped 200 response instead of a generated
 /// schema.
@@ -182,9 +171,10 @@ impl<T> OperationOutput for ApiJson<T> {
 #[derive(Clone)]
 pub(crate) struct RequestLimit(pub(crate) Arc<Semaphore>);
 
-/// Each request holds a slot while in flight; excess gets 429. A websocket's slot is released
-/// at the 101 upgrade: long-lived streams are deliberately unbounded here, since demo workloads
-/// (nasty-client holds hundreds of streams by design) dwarf the request budget of 25.
+/// Each request holds a slot while in flight, excess gets 429. A websocket's slot is released
+/// at the 101 upgrade and an SSE stream's once its headers go out: long-lived streams are
+/// deliberately unbounded here, since demo workloads (nasty-client holds hundreds of streams by
+/// design) dwarf the request budget of 25.
 pub(crate) async fn limit_requests(
     Extension(RequestLimit(semaphore)): Extension<RequestLimit>,
     req: Request,
@@ -194,17 +184,6 @@ pub(crate) async fn limit_requests(
         Ok(_permit) => next.run(req).await,
         Err(_) => StatusCode::TOO_MANY_REQUESTS.into_response(),
     }
-}
-
-/// Wrapper so the v1 spec is looked up by a distinct type. v2 serves a build-time document
-/// rather than an `Extension<OpenApi>`, so nothing collides today, but the newtype keeps an
-/// `Extension<OpenApi>` added later from silently resolving to v1's.
-#[derive(Clone)]
-struct OpenApiV1(OpenApi);
-
-/// Serve the v1 OpenAPI spec (extracted from Extension)
-async fn serve_openapi_spec_v1(Extension(OpenApiV1(api)): Extension<OpenApiV1>) -> Json<OpenApi> {
-    Json(api)
 }
 
 /// Serve custom Swagger UI with collapsed defaults, pointed at the given OpenAPI spec route.
@@ -436,67 +415,99 @@ pub(crate) fn router_reward(state: RewardState) -> ApiRouter {
         .api_route(
             routes::v1::REWARD_CLAIM_INPUT_ROUTE,
             get_with(get_reward_claim_input, |op| {
-                op.summary("Get reward claim input").description("Returns the RewardClaimInput needed to call claimRewards() on L1: lifetime rewards, Merkle proof, and auth root inputs, for the account at the given block height finalized by the light client contract.")
+                op.summary("Get reward claim input").description(
+                    "Returns the RewardClaimInput needed to call claimRewards() on L1: lifetime \
+                     rewards, Merkle proof, and auth root inputs, for the account at the given \
+                     block height finalized by the light client contract.",
+                )
             }),
         )
         .api_route(
             routes::v1::REWARD_BALANCE_ROUTE,
             get_with(get_reward_balance, |op| {
-                op.summary("Get reward balance at height").description("Get balance in reward state at a specific height for an Ethereum address.")
+                op.summary("Get reward balance at height").description(
+                    "Get balance in reward state at a specific height for an Ethereum address.",
+                )
             }),
         )
         .api_route(
             routes::v1::LATEST_REWARD_BALANCE_ROUTE,
             get_with(get_latest_reward_balance, |op| {
-                op.summary("Get latest reward balance").description("Get current balance in reward state for an Ethereum address.")
+                op.summary("Get latest reward balance")
+                    .description("Get current balance in reward state for an Ethereum address.")
             }),
         )
         .api_route(
             routes::v1::REWARD_ACCOUNT_PROOF_ROUTE,
             get_with(get_reward_account_proof, |op| {
-                op.summary("Get reward account proof").description("Get the Merkle proof for a reward account at a given block height (RewardAccountProofV1 pre-V4, RewardAccountProofV2 from V4 onward).")
+                op.summary("Get reward account proof").description(
+                    "Get the Merkle proof for a reward account at a given block height \
+                     (RewardAccountProofV1 pre-V4, RewardAccountProofV2 from V4 onward).",
+                )
             }),
         )
         .api_route(
             routes::v1::LATEST_REWARD_ACCOUNT_PROOF_ROUTE,
             get_with(get_latest_reward_account_proof, |op| {
-                op.summary("Get latest reward account proof").description("Get the Merkle proof (RewardAccountProofV2) for a reward account at the latest block height finalized by the light client contract.")
+                op.summary("Get latest reward account proof").description(
+                    "Get the Merkle proof (RewardAccountProofV2) for a reward account at the \
+                     latest block height finalized by the light client contract.",
+                )
             }),
         )
         .api_route(
             routes::v1::REWARD_AMOUNTS_ROUTE,
             get_with(get_reward_amounts, |op| {
-                op.summary("List reward amounts").description("Return all RewardMerkleTreeV2 accounts stored for the requested height, paginated by offset and limit (limit must be <= 10000).")
+                op.summary("List reward amounts").description(
+                    "Return all RewardMerkleTreeV2 accounts stored for the requested height, \
+                     paginated by offset and limit (limit must be <= 10000).",
+                )
             }),
         )
         .api_route(
             routes::v1::REWARD_MERKLE_TREE_V2_ROUTE,
             get_with(get_reward_merkle_tree_v2, |op| {
-                op.summary("Get RewardMerkleTreeV2 snapshot").description("Get the snapshot of this node's RewardMerkleTreeV2 at the given block height, serialized as RewardMerkleTreeV2Data.")
+                op.summary("Get RewardMerkleTreeV2 snapshot").description(
+                    "Get the snapshot of this node's RewardMerkleTreeV2 at the given block \
+                     height, serialized as RewardMerkleTreeV2Data.",
+                )
             }),
         )
         .api_route(
             routes::v1::REWARD_STATE_HEIGHT_ROUTE,
             get_with(get_reward_state_height, |op| {
-                op.summary("Get reward-state block height").description("Latest block height for which the merklized reward state (V1) is available.")
+                op.summary("Get reward-state block height").description(
+                    "Latest block height for which the merklized reward state (V1) is available.",
+                )
             }),
         )
         .api_route(
             routes::v1::REWARD_STATE_V2_HEIGHT_ROUTE,
             get_with(get_reward_state_v2_height, |op| {
-                op.summary("Get reward-state-v2 block height").description("Latest block height for which the merklized reward state (V2) is available.")
+                op.summary("Get reward-state-v2 block height").description(
+                    "Latest block height for which the merklized reward state (V2) is available.",
+                )
             }),
         )
         .api_route(
             routes::v1::REWARD_V1_BALANCE_ROUTE,
             get_with(get_reward_balance_v1, |op| {
-                op.summary("Get reward balance at height (v1 mount)").description("Same handler as reward-state-v2/reward-balance, registered on the reward-state mount; tide-disco shared this handler across both merklized-state mounts.")
+                op.summary("Get reward balance at height (v1 mount)")
+                    .description(
+                        "Same handler as reward-state-v2/reward-balance, registered on the \
+                         reward-state mount; tide-disco shared this handler across both \
+                         merklized-state mounts.",
+                    )
             }),
         )
         .api_route(
             routes::v1::REWARD_V1_ACCOUNT_PROOF_ROUTE,
             get_with(get_reward_account_proof_v1, |op| {
-                op.summary("Get reward account proof (v1 mount)").description("Same handler as reward-state-v2/proof, registered on the reward-state mount; tide-disco shared this handler across both merklized-state mounts.")
+                op.summary("Get reward account proof (v1 mount)")
+                    .description(
+                        "Same handler as reward-state-v2/proof, registered on the reward-state \
+                         mount; tide-disco shared this handler across both merklized-state mounts.",
+                    )
             }),
         )
         // Tide-disco twins of the reward-state-v2 routes above, registered on the same
@@ -504,49 +515,84 @@ pub(crate) fn router_reward(state: RewardState) -> ApiRouter {
         .api_route(
             routes::v1::REWARD_V1_LATEST_BALANCE_ROUTE,
             get_with(get_latest_reward_balance, |op| {
-                op.summary("Get latest reward balance (v1 mount)").description("Same handler as reward-state-v2/reward-balance/latest, registered on the reward-state mount; tide-disco shared this handler across both merklized-state mounts.")
+                op.summary("Get latest reward balance (v1 mount)")
+                    .description(
+                        "Same handler as reward-state-v2/reward-balance/latest, registered on the \
+                         reward-state mount; tide-disco shared this handler across both \
+                         merklized-state mounts.",
+                    )
             }),
         )
         .api_route(
             routes::v1::REWARD_V1_LATEST_ACCOUNT_PROOF_ROUTE,
             get_with(get_latest_reward_account_proof, |op| {
-                op.summary("Get latest reward account proof (v1 mount)").description("Same handler as reward-state-v2/proof/latest, registered on the reward-state mount; tide-disco shared this handler across both merklized-state mounts.")
+                op.summary("Get latest reward account proof (v1 mount)")
+                    .description(
+                        "Same handler as reward-state-v2/proof/latest, registered on the \
+                         reward-state mount; tide-disco shared this handler across both \
+                         merklized-state mounts.",
+                    )
             }),
         )
         .api_route(
             routes::v1::REWARD_V1_AMOUNTS_ROUTE,
             get_with(get_reward_amounts, |op| {
-                op.summary("List reward amounts (v1 mount)").description("Same handler as reward-state-v2/reward-amounts, registered on the reward-state mount; tide-disco shared this handler across both merklized-state mounts.")
+                op.summary("List reward amounts (v1 mount)").description(
+                    "Same handler as reward-state-v2/reward-amounts, registered on the \
+                     reward-state mount; tide-disco shared this handler across both \
+                     merklized-state mounts.",
+                )
             }),
         )
         .api_route(
             routes::v1::REWARD_V1_MERKLE_TREE_V2_ROUTE,
             get_with(get_reward_merkle_tree_v2, |op| {
-                op.summary("Get RewardMerkleTreeV2 snapshot (v1 mount)").description("Same handler as reward-state-v2/reward-merkle-tree-v2, registered on the reward-state mount; tide-disco shared this handler across both merklized-state mounts.")
+                op.summary("Get RewardMerkleTreeV2 snapshot (v1 mount)")
+                    .description(
+                        "Same handler as reward-state-v2/reward-merkle-tree-v2, registered on the \
+                         reward-state mount; tide-disco shared this handler across both \
+                         merklized-state mounts.",
+                    )
             }),
         )
         .api_route(
             routes::v1::REWARD_STATE_PATH_BY_HEIGHT_ROUTE,
             get_with(get_reward_state_path_v1_by_height, |op| {
-                op.summary("Get reward-state Merkle path by height").description("Retrieve the Merkle path for the membership proof of a leaf in the reward-state (V1) tree, by block height and key.")
+                op.summary("Get reward-state Merkle path by height")
+                    .description(
+                        "Retrieve the Merkle path for the membership proof of a leaf in the \
+                         reward-state (V1) tree, by block height and key.",
+                    )
             }),
         )
         .api_route(
             routes::v1::REWARD_STATE_PATH_BY_COMMIT_ROUTE,
             get_with(get_reward_state_path_v1_by_commit, |op| {
-                op.summary("Get reward-state Merkle path by commitment").description("Retrieve the Merkle path for the membership proof of a leaf in the reward-state (V1) tree, by tree commitment and key.")
+                op.summary("Get reward-state Merkle path by commitment")
+                    .description(
+                        "Retrieve the Merkle path for the membership proof of a leaf in the \
+                         reward-state (V1) tree, by tree commitment and key.",
+                    )
             }),
         )
         .api_route(
             routes::v1::REWARD_STATE_V2_PATH_BY_HEIGHT_ROUTE,
             get_with(get_reward_state_path_v2_by_height, |op| {
-                op.summary("Get reward-state-v2 Merkle path by height").description("Retrieve the Merkle path for the membership proof of a leaf in the reward-state-v2 tree, by block height and key.")
+                op.summary("Get reward-state-v2 Merkle path by height")
+                    .description(
+                        "Retrieve the Merkle path for the membership proof of a leaf in the \
+                         reward-state-v2 tree, by block height and key.",
+                    )
             }),
         )
         .api_route(
             routes::v1::REWARD_STATE_V2_PATH_BY_COMMIT_ROUTE,
             get_with(get_reward_state_path_v2_by_commit, |op| {
-                op.summary("Get reward-state-v2 Merkle path by commitment").description("Retrieve the Merkle path for the membership proof of a leaf in the reward-state-v2 tree, by tree commitment and key.")
+                op.summary("Get reward-state-v2 Merkle path by commitment")
+                    .description(
+                        "Retrieve the Merkle path for the membership proof of a leaf in the \
+                         reward-state-v2 tree, by tree commitment and key.",
+                    )
             }),
         )
         .with_state(state)
@@ -793,6 +839,36 @@ pub(crate) fn router_availability(state: AvailabilityState) -> ApiRouter {
                 .map_err(classify_availability_error)
         };
 
+    let get_leaf_ranges =
+        |State(state): State<AvailabilityState>, headers: HeaderMap, body: Bytes| async move {
+            let ranges: Vec<Range<u64>> = decode_body(&headers, &body)?;
+            let leaves = state
+                .get_leaf_ranges(ranges)
+                .await
+                .map_err(classify_availability_error)?;
+            Ok::<_, ApiError>(encode_response(&headers, leaves))
+        };
+
+    let get_block_ranges =
+        |State(state): State<AvailabilityState>, headers: HeaderMap, body: Bytes| async move {
+            let ranges: Vec<Range<u64>> = decode_body(&headers, &body)?;
+            let blocks = state
+                .get_block_ranges(ranges)
+                .await
+                .map_err(classify_availability_error)?;
+            Ok::<_, ApiError>(encode_response(&headers, blocks))
+        };
+
+    let get_vid_common_ranges =
+        |State(state): State<AvailabilityState>, headers: HeaderMap, body: Bytes| async move {
+            let ranges: Vec<Range<u64>> = decode_body(&headers, &body)?;
+            let common = state
+                .get_vid_common_ranges(ranges)
+                .await
+                .map_err(classify_availability_error)?;
+            Ok::<_, ApiError>(encode_response(&headers, common))
+        };
+
     let get_transaction_by_position =
         |State(state): State<AvailabilityState>, Path((height, index)): Path<(u64, u64)>| async move {
             state
@@ -873,7 +949,7 @@ pub(crate) fn router_availability(state: AvailabilityState) -> ApiRouter {
         let format = ContentType::negotiate(&headers);
         ws.on_upgrade(move |socket| async move {
             match state.stream_leaves(height).await {
-                Ok(stream) => drive_ws_stream::<WireVersion, _>(socket, stream, format).await,
+                Ok(stream) => drive_ws_stream(socket, stream, format).await,
                 Err(e) => tracing::warn!("stream_leaves: {e}"),
             }
         })
@@ -886,7 +962,7 @@ pub(crate) fn router_availability(state: AvailabilityState) -> ApiRouter {
         let format = ContentType::negotiate(&headers);
         ws.on_upgrade(move |socket| async move {
             match state.stream_headers(height).await {
-                Ok(stream) => drive_ws_stream::<WireVersion, _>(socket, stream, format).await,
+                Ok(stream) => drive_ws_stream(socket, stream, format).await,
                 Err(e) => tracing::warn!("stream_headers: {e}"),
             }
         })
@@ -899,7 +975,7 @@ pub(crate) fn router_availability(state: AvailabilityState) -> ApiRouter {
         let format = ContentType::negotiate(&headers);
         ws.on_upgrade(move |socket| async move {
             match state.stream_blocks(height).await {
-                Ok(stream) => drive_ws_stream::<WireVersion, _>(socket, stream, format).await,
+                Ok(stream) => drive_ws_stream(socket, stream, format).await,
                 Err(e) => tracing::warn!("stream_blocks: {e}"),
             }
         })
@@ -912,7 +988,7 @@ pub(crate) fn router_availability(state: AvailabilityState) -> ApiRouter {
         let format = ContentType::negotiate(&headers);
         ws.on_upgrade(move |socket| async move {
             match state.stream_payloads(height).await {
-                Ok(stream) => drive_ws_stream::<WireVersion, _>(socket, stream, format).await,
+                Ok(stream) => drive_ws_stream(socket, stream, format).await,
                 Err(e) => tracing::warn!("stream_payloads: {e}"),
             }
         })
@@ -925,7 +1001,7 @@ pub(crate) fn router_availability(state: AvailabilityState) -> ApiRouter {
         let format = ContentType::negotiate(&headers);
         ws.on_upgrade(move |socket| async move {
             match state.stream_vid_common(height).await {
-                Ok(stream) => drive_ws_stream::<WireVersion, _>(socket, stream, format).await,
+                Ok(stream) => drive_ws_stream(socket, stream, format).await,
                 Err(e) => tracing::warn!("stream_vid_common: {e}"),
             }
         })
@@ -938,7 +1014,7 @@ pub(crate) fn router_availability(state: AvailabilityState) -> ApiRouter {
         let format = ContentType::negotiate(&headers);
         ws.on_upgrade(move |socket| async move {
             match state.stream_transactions(height, None).await {
-                Ok(stream) => drive_ws_stream::<WireVersion, _>(socket, stream, format).await,
+                Ok(stream) => drive_ws_stream(socket, stream, format).await,
                 Err(e) => tracing::warn!("stream_transactions: {e}"),
             }
         })
@@ -952,7 +1028,7 @@ pub(crate) fn router_availability(state: AvailabilityState) -> ApiRouter {
             let format = ContentType::negotiate(&headers);
             ws.on_upgrade(move |socket| async move {
                 match state.stream_transactions(height, Some(namespace)).await {
-                    Ok(stream) => drive_ws_stream::<WireVersion, _>(socket, stream, format).await,
+                    Ok(stream) => drive_ws_stream(socket, stream, format).await,
                     Err(e) => tracing::warn!("stream_transactions_ns: {e}"),
                 }
             })
@@ -966,7 +1042,7 @@ pub(crate) fn router_availability(state: AvailabilityState) -> ApiRouter {
             let format = ContentType::negotiate(&headers);
             ws.on_upgrade(move |socket| async move {
                 match state.stream_namespace_proofs(height, namespace).await {
-                    Ok(stream) => drive_ws_stream::<WireVersion, _>(socket, stream, format).await,
+                    Ok(stream) => drive_ws_stream(socket, stream, format).await,
                     Err(e) => tracing::warn!("stream_namespace_proofs: {e}"),
                 }
             })
@@ -1192,6 +1268,45 @@ pub(crate) fn router_availability(state: AvailabilityState) -> ApiRouter {
                     "Get VID common objects by block position, from the given `from` up to \
                      `until`.",
                 )
+            }),
+        )
+        .api_route(
+            routes::v1::LEAF_RANGES_ROUTE,
+            post_with(get_leaf_ranges, |op| {
+                op.summary("Get leaves for a set of height ranges")
+                    .description(
+                        "Get leaves for the height ranges in the request body, which must be \
+                         ascending and disjoint but need not be contiguous. Answers in full or \
+                         not at all, like the range endpoints: heights this node lacks are \
+                         fetched from peers, and a 404 means at least one was not available in \
+                         time.",
+                    )
+            }),
+        )
+        .api_route(
+            routes::v1::BLOCK_RANGES_ROUTE,
+            post_with(get_block_ranges, |op| {
+                op.summary("Get blocks for a set of height ranges")
+                    .description(
+                        "Get blocks for the height ranges in the request body, which must be \
+                         ascending and disjoint but need not be contiguous. Answers in full or \
+                         not at all, like the range endpoints: heights this node lacks are \
+                         fetched from peers, and a 404 means at least one was not available in \
+                         time.",
+                    )
+            }),
+        )
+        .api_route(
+            routes::v1::VID_COMMON_RANGES_ROUTE,
+            post_with(get_vid_common_ranges, |op| {
+                op.summary("Get VID common data for a set of height ranges")
+                    .description(
+                        "Get VID common data for the height ranges in the request body, which \
+                         must be ascending and disjoint but need not be contiguous. Answers in \
+                         full or not at all, like the range endpoints: heights this node lacks \
+                         are fetched from peers, and a 404 means at least one was not available \
+                         in time.",
+                    )
             }),
         )
         .api_route(
@@ -1540,7 +1655,11 @@ pub(crate) fn router_status(state: StatusState) -> ApiRouter {
     };
 
     let status_keys = |State(state): State<StatusState>| async move {
-        state.keys().await.map(ApiJson).map_err(ApiError::Internal)
+        state
+            .keys()
+            .await
+            .map(ApiJson)
+            .map_err(classify_availability_error)
     };
 
     ApiRouter::new()
@@ -2437,14 +2556,14 @@ pub(crate) fn router_catchup(state: CatchupState) -> ApiRouter {
         .api_route(
             routes::v1::CATCHUP_REWARD_ACCOUNTS_V2_ROUTE,
             post_with(catchup_reward_accounts_v2, |op| {
-                op.summary("Catch up reward accounts (bulk, V2) — deprecated")
+                op.summary("Catch up reward accounts (bulk, V2) (deprecated)")
                     .description("Deprecated: this endpoint always returns 404 Not Found.")
             }),
         )
         .api_route(
             routes::v1::CATCHUP_REWARD_AMOUNTS_ROUTE,
             get_with(catchup_reward_amounts, |op| {
-                op.summary("List reward amounts — deprecated")
+                op.summary("List reward amounts (deprecated)")
                     .description("Deprecated: this endpoint always returns 404 Not Found.")
             }),
         )
@@ -2468,7 +2587,7 @@ pub(crate) fn router_catchup(state: CatchupState) -> ApiRouter {
 }
 
 pub(crate) fn router_submit(state: SubmitState) -> ApiRouter {
-    // Submit handler — body is decoded as VBS (binary) or JSON based on Content-Type, matching
+    // Submit handler: body is decoded as VBS (binary) or JSON based on Content-Type, matching
     // tide-disco's `body_auto`.
     let submit_submit = |State(state): State<SubmitState>, headers: HeaderMap, body: Bytes| async move {
         let hash = state.submit(&headers, &body).await?;
@@ -2505,48 +2624,6 @@ pub(crate) fn router_state_signature(state: StateSignatureState) -> ApiRouter {
                     "Get this node's signature for the light client state at the given block \
                      height.",
                 )
-            }),
-        )
-        .with_state(state)
-}
-
-pub(crate) fn router_hotshot_events(state: HotShotEventsState) -> ApiRouter {
-    // HotShot events handlers
-    let hotshot_events_startup = |State(state): State<HotShotEventsState>| async move {
-        state
-            .startup_info()
-            .await
-            .map(ApiJson)
-            .map_err(ApiError::Internal)
-    };
-
-    let hotshot_events_stream = |State(state): State<HotShotEventsState>,
-                                 headers: HeaderMap,
-                                 ws: WebSocketUpgrade| async move {
-        let format = ContentType::negotiate(&headers);
-        match state.events().await {
-            Ok(stream) => ws.on_upgrade(move |socket| async move {
-                drive_ws_stream::<WireVersion, _>(socket, stream, format).await
-            }),
-            Err(err) => ApiError::Internal(err).into_response(),
-        }
-    };
-
-    ApiRouter::new()
-        .api_route(
-            routes::v1::HOTSHOT_EVENTS_STARTUP_ROUTE,
-            get_with(hotshot_events_startup, |op| {
-                op.summary("Get startup info").description(
-                    "Get startup info: known nodes with stake and their public keys, and the \
-                     count of non-staked nodes.",
-                )
-            }),
-        )
-        .api_route(
-            routes::v1::HOTSHOT_EVENTS_STREAM_ROUTE,
-            get_with(hotshot_events_stream, |op| {
-                op.summary("Stream HotShot events (websocket)")
-                    .description("Websocket endpoint: get legacy HotShot events starting now.")
             }),
         )
         .with_state(state)
@@ -2677,6 +2754,16 @@ pub(crate) fn router_light_client(state: LightClientState) -> ApiRouter {
             .map(ApiJson)
             .map_err(classify_availability_error)
     };
+
+    let lc_payload_ranges =
+        |State(state): State<LightClientState>, headers: HeaderMap, body: Bytes| async move {
+            let ranges: Vec<Range<u64>> = decode_body(&headers, &body)?;
+            let proofs = state
+                .get_payload_proof_ranges(ranges)
+                .await
+                .map_err(classify_availability_error)?;
+            Ok::<_, ApiError>(encode_response(&headers, proofs))
+        };
 
     let lc_namespace = |State(state): State<LightClientState>,
                         Path((height, namespace)): Path<(u64, u64)>| async move {
@@ -2831,6 +2918,18 @@ pub(crate) fn router_light_client(state: LightClientState) -> ApiRouter {
                 op.summary("Get payload proofs in range").description(
                     "Fetch a list of payload proofs for each block in the given range.",
                 )
+            }),
+        )
+        .api_route(
+            routes::v1::LC_PAYLOAD_RANGES_ROUTE,
+            post_with(lc_payload_ranges, |op| {
+                op.summary("Get payload proofs for a set of height ranges")
+                    .description(
+                        "Fetch payload proofs for the height ranges in the request body, which \
+                         must be ascending and disjoint. Answers in full or not at all, like the \
+                         range endpoint: heights this node lacks are fetched from peers, and a \
+                         404 means at least one was not available in time.",
+                    )
             }),
         )
         .api_route(
@@ -3359,7 +3458,6 @@ where
         + v1::CatchupApi
         + v1::SubmitApi
         + v1::StateSignatureApi
-        + v1::HotShotEventsApi
         + v1::LightClientApi
         + v1::ExplorerApi
         + v1::TokenApi
@@ -3381,7 +3479,6 @@ where
         .merge(router_catchup(state.clone()))
         .merge(router_submit(state.clone()))
         .merge(router_state_signature(state.clone()))
-        .merge(router_hotshot_events(state.clone()))
         .merge(router_light_client(state.clone()))
         .merge(router_explorer(state.clone()))
         .merge(router_token(state.clone()))
@@ -3392,11 +3489,10 @@ where
 
 /// Give framework-level rejections on the v2 routes the same error envelope as handler errors.
 ///
-/// The generated handlers extract with `Query<T>`, and axum answers a rejected query string
-/// itself, with a `text/plain` body that never reaches `tonic_rest::RestError`. protoJSON
-/// decoding rejects unknown fields, so that is the most likely client mistake on these routes,
-/// and `API.md` promises one error shape for all of them. Rebuilding the rejection as a
-/// [`tonic::Status`] reuses tonic-rest's envelope instead of hand-rolling a second copy.
+/// The generated handlers extract with `Query<T>` or, on a POST, `Json<T>`, and axum answers a
+/// rejected query string or body itself, in `text/plain`, before `tonic_rest::RestError` is ever
+/// involved. protoJSON rejects unknown fields, which makes this the most common client error on
+/// these routes. Rebuilding the rejection as a [`tonic::Status`] reuses tonic-rest's envelope.
 pub(crate) async fn v2_error_envelope(req: Request, next: axum::middleware::Next) -> Response {
     /// Rejection bodies are single-line messages; this only needs to be larger than one.
     const MAX_REJECTION_BODY: usize = 8 * 1024;
@@ -3404,9 +3500,14 @@ pub(crate) async fn v2_error_envelope(req: Request, next: axum::middleware::Next
     let response = next.run(req).await;
 
     // Only the statuses whose gRPC code maps back to the same HTTP status, so the rewrite cannot
-    // change what the client sees beyond the body shape.
+    // change what the client sees beyond the body shape. The body extractor's 413, 415 and 422
+    // are the exception: the Google error model has no code for any of them, so they become the
+    // 400 every other malformed request gets.
     let code = match response.status() {
-        StatusCode::BAD_REQUEST => tonic::Code::InvalidArgument,
+        StatusCode::BAD_REQUEST
+        | StatusCode::PAYLOAD_TOO_LARGE
+        | StatusCode::UNSUPPORTED_MEDIA_TYPE
+        | StatusCode::UNPROCESSABLE_ENTITY => tonic::Code::InvalidArgument,
         StatusCode::NOT_FOUND => tonic::Code::NotFound,
         _ => return response,
     };
@@ -3430,17 +3531,31 @@ pub(crate) async fn v2_error_envelope(req: Request, next: axum::middleware::Next
     tonic_rest::RestError::from(tonic::Status::new(code, message)).into_response()
 }
 
+/// A POST reads its whole request from the body, so the generated handler never looks at the
+/// query string. Refusing one keeps the rule that a misspelled parameter is a 400, not ignored.
+pub(crate) async fn v2_refuse_post_query(req: Request, next: axum::middleware::Next) -> Response {
+    if req.method() == axum::http::Method::POST && req.uri().query().is_some() {
+        return tonic_rest::RestError::from(tonic::Status::invalid_argument(
+            "a POST takes its request as a JSON body, not query parameters",
+        ))
+        .into_response();
+    }
+    next.run(req).await
+}
+
+/// The v2 OpenAPI document, generated by the build script from the protos.
+pub(crate) const V2_OPENAPI: &str =
+    include_str!(concat!(env!("OUT_DIR"), "/espresso.api.v2.openapi.json"));
+
 /// Serve the v2 API documentation: the build-time OpenAPI document and the two UIs that render
 /// it. Unlike [`finish_v1_docs`], nothing here inspects the router, so a route that is generated
 /// but never mounted would still appear in the document; `v2_documented_routes_are_mounted`
 /// asserts that never ships.
 pub fn router_v2_docs() -> Router {
-    const SPEC: &str = include_str!("generated/espresso.api.v2.openapi.json");
-
     Router::new()
         .route(
             routes::v2::OPENAPI_SPEC_ROUTE,
-            get(|| async { ([(header::CONTENT_TYPE, "application/json")], SPEC) }),
+            get(|| async { ([(header::CONTENT_TYPE, "application/json")], V2_OPENAPI) }),
         )
         .route(
             routes::v2::SWAGGER_ROUTE,
@@ -3456,6 +3571,24 @@ pub fn router_v2_docs() -> Router {
                 .with_title("Espresso Node API v2")
                 .axum_handler()),
         )
+}
+
+/// A gated module's v2 paths when its flag is off. `serve_axum` merges [`router_v2_docs`] last and
+/// axum keeps the last merged router's fallback, so an unregistered v2 path would get axum's empty
+/// 404 instead of the [`v2_error_envelope`] one.
+pub(crate) fn router_module_disabled(module: &'static str, paths: &[&str]) -> Router {
+    let mut router = Router::new();
+    for path in paths {
+        router = router.route(
+            path,
+            any(move || async move {
+                tonic_rest::RestError::from(tonic::Status::not_found(format!(
+                    "{module} module disabled"
+                )))
+            }),
+        );
+    }
+    router
 }
 
 /// Build the OpenAPI spec for the mounted routes and attach the docs routes; every serve mode
@@ -3485,8 +3618,14 @@ pub fn finish_v1_docs(router: ApiRouter) -> Router {
         }
     }
 
+    // Not an Extension layer: Router::layer clones it into every route.
+    let spec = Bytes::from(serde_json::to_vec(&api).expect("OpenAPI document serializes"));
+
     router
-        .route(routes::v1::OPENAPI_SPEC_ROUTE, get(serve_openapi_spec_v1))
+        .route(
+            routes::v1::OPENAPI_SPEC_ROUTE,
+            get(move || async move { ([(header::CONTENT_TYPE, "application/json")], spec) }),
+        )
         .route(
             routes::v1::SWAGGER_ROUTE,
             get(|| async { swagger_html(routes::v1::OPENAPI_SPEC_ROUTE) }),
@@ -3501,7 +3640,6 @@ pub fn finish_v1_docs(router: ApiRouter) -> Router {
                 .with_title("Espresso Node API v1")
                 .axum_handler()),
         )
-        .layer(Extension(OpenApiV1(api)))
 }
 
 /// Declare a path parameter for every `{name}` template segment of every operation.
@@ -3631,6 +3769,7 @@ mod tests {
     use std::collections::BTreeMap;
 
     use futures::stream::BoxStream;
+    use http_wire::WireVersion;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use vbs::{BinarySerializer, Serializer};
 
@@ -3751,7 +3890,8 @@ mod tests {
 
     /// Implements every v1 API trait with `unimplemented!()` bodies, purely so `create_router_v1`
     /// can be instantiated in tests that only exercise the static docs routes (root redirect,
-    /// swagger UI, OpenAPI spec) and never call into a handler.
+    /// swagger UI, OpenAPI spec) and never call into a handler. The one exception is `keys`,
+    /// which answers like a node without validator keys.
     #[derive(Clone)]
     struct MockState;
 
@@ -3952,6 +4092,24 @@ mod tests {
         ) -> anyhow::Result<Vec<Self::VidCommon>> {
             unimplemented!()
         }
+        async fn get_leaf_ranges(
+            &self,
+            _ranges: Vec<Range<u64>>,
+        ) -> anyhow::Result<Vec<Self::Leaf>> {
+            unimplemented!()
+        }
+        async fn get_block_ranges(
+            &self,
+            _ranges: Vec<Range<u64>>,
+        ) -> anyhow::Result<Vec<Self::Block>> {
+            unimplemented!()
+        }
+        async fn get_vid_common_ranges(
+            &self,
+            _ranges: Vec<Range<u64>>,
+        ) -> anyhow::Result<Vec<Self::VidCommon>> {
+            unimplemented!()
+        }
         async fn get_transaction_by_position(
             &self,
             _height: u64,
@@ -4089,7 +4247,10 @@ mod tests {
             unimplemented!()
         }
         async fn keys(&self) -> anyhow::Result<Self::Keys> {
-            unimplemented!()
+            Err(
+                crate::error::AvailabilityError::NotFound("this node has no validator keys".into())
+                    .into(),
+            )
         }
     }
 
@@ -4310,19 +4471,6 @@ mod tests {
     }
 
     #[async_trait::async_trait]
-    impl v1::HotShotEventsApi for MockState {
-        type Event = ();
-        type StartupInfo = ();
-
-        async fn startup_info(&self) -> anyhow::Result<Self::StartupInfo> {
-            unimplemented!()
-        }
-        async fn events(&self) -> anyhow::Result<BoxStream<'static, Self::Event>> {
-            unimplemented!()
-        }
-    }
-
-    #[async_trait::async_trait]
     impl v1::LightClientApi for MockState {
         type LeafProof = ();
         type HeaderProof = ();
@@ -4357,6 +4505,12 @@ mod tests {
             &self,
             _start: u64,
             _end: u64,
+        ) -> anyhow::Result<Vec<Self::PayloadProof>> {
+            unimplemented!()
+        }
+        async fn get_payload_proof_ranges(
+            &self,
+            _ranges: Vec<Range<u64>>,
         ) -> anyhow::Result<Vec<Self::PayloadProof>> {
             unimplemented!()
         }
@@ -4676,6 +4830,17 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn status_keys_without_validator_keys_is_not_found() {
+        let router = create_router_v1(MockState);
+        let req = Request::builder()
+            .uri(routes::v1::STATUS_KEYS_ROUTE)
+            .body(axum::body::Body::empty())
+            .unwrap();
+        let resp = tower::ServiceExt::oneshot(router, req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
     async fn v1_swagger_ui_serves_html() {
         let router = create_router_v1(MockState);
         let req = Request::builder()
@@ -4694,6 +4859,30 @@ mod tests {
         assert!(content_type.contains("text/html"));
         let body = body_string(resp).await;
         assert!(body.contains(routes::v1::OPENAPI_SPEC_ROUTE));
+    }
+
+    /// The spec is served as JSON and is stable across requests.
+    #[tokio::test]
+    async fn v1_openapi_spec_served_as_json() {
+        let router = create_router_v1(MockState);
+        let get_spec = || async {
+            let req = Request::builder()
+                .uri(routes::v1::OPENAPI_SPEC_ROUTE)
+                .body(axum::body::Body::empty())
+                .unwrap();
+            let resp = tower::ServiceExt::oneshot(router.clone(), req)
+                .await
+                .unwrap();
+            assert_eq!(
+                resp.headers().get(header::CONTENT_TYPE).unwrap(),
+                "application/json"
+            );
+            axum::body::to_bytes(resp.into_body(), usize::MAX)
+                .await
+                .unwrap()
+        };
+        let (first, second) = (get_spec().await, get_spec().await);
+        assert_eq!(first, second);
     }
 
     #[tokio::test]
@@ -4740,15 +4929,81 @@ mod tests {
         // Every documented route is one `serve_axum` mounts, so a generated client cannot ship a
         // method that always 404s. Adding an endpoint has to update this list.
         let expected: std::collections::BTreeSet<&str> = [
+            "/v2/config/env",
+            "/v2/config/hotshot",
+            "/v2/config/runtime",
+            "/v2/database/migration-status",
+            "/v2/database/table-sizes",
+            "/v2/node/all-validators",
+            "/v2/node/block-height",
+            "/v2/node/block-reward",
+            "/v2/node/header-window",
+            "/v2/node/limits",
+            "/v2/node/participation/proposal",
+            "/v2/node/participation/vote",
+            "/v2/node/payload-size",
+            "/v2/node/stake-table",
+            "/v2/node/sync-status",
+            "/v2/node/transaction-count",
+            "/v2/node/validators",
+            "/v2/node/vid-share",
             "/v2/status/block-height",
+            "/v2/status/keys",
             "/v2/status/success-rate",
             "/v2/status/time-since-last-decide",
-            "/v2/status/keys",
-            "/v2/token/total-minted-supply",
             "/v2/token/circulating-supply",
             "/v2/token/circulating-supply-ethereum",
             "/v2/token/total-issued-supply",
+            "/v2/token/total-minted-supply",
             "/v2/token/total-reward-distributed",
+            "/v2/merklized-state/block/path",
+            "/v2/merklized-state/fee/path",
+            "/v2/merklized-state/reward/amounts",
+            "/v2/merklized-state/reward/balance",
+            "/v2/merklized-state/reward/claim-input",
+            "/v2/merklized-state/reward/proof",
+            "/v2/merklized-state/reward/tree",
+            "/v2/merklized-state/fee/balance",
+            "/v2/merklized-state/height",
+            "/v2/availability/limits",
+            "/v2/availability/header",
+            "/v2/availability/header-range",
+            "/v2/availability/leaf",
+            "/v2/availability/leaf-range",
+            "/v2/availability/leaf-ranges",
+            "/v2/availability/cert2",
+            "/v2/availability/block",
+            "/v2/availability/block-range",
+            "/v2/availability/block-ranges",
+            "/v2/availability/payload",
+            "/v2/availability/payload-range",
+            "/v2/availability/vid-common",
+            "/v2/availability/vid-common-range",
+            "/v2/availability/vid-common-ranges",
+            "/v2/availability/transaction",
+            "/v2/availability/transaction-proof",
+            "/v2/availability/block-summary",
+            "/v2/availability/block-summary-range",
+            "/v2/availability/namespace-proof",
+            "/v2/availability/namespace-proof-range",
+            "/v2/availability/incorrect-encoding-proof",
+            "/v2/availability/state-cert",
+            "/v2/availability/state-cert-v2",
+            "/v2/availability/stream/leaves",
+            "/v2/availability/stream/headers",
+            "/v2/availability/stream/blocks",
+            "/v2/availability/stream/payloads",
+            "/v2/availability/stream/vid-common",
+            "/v2/availability/stream/transactions",
+            "/v2/availability/stream/namespace-proofs",
+            "/v2/state-signature/block",
+            "/v2/submit/transaction",
+            "/v2/explorer/block",
+            "/v2/explorer/blocks",
+            "/v2/explorer/transaction",
+            "/v2/explorer/transactions",
+            "/v2/explorer/summary",
+            "/v2/explorer/search",
         ]
         .into_iter()
         .collect();
@@ -4836,27 +5091,776 @@ mod tests {
         }
     }
 
+    #[tonic::async_trait]
+    impl crate::proto::node_service_server::NodeService for MockV2State {
+        async fn get_transaction_count(
+            &self,
+            _request: tonic::Request<crate::proto::GetTransactionCountRequest>,
+        ) -> Result<tonic::Response<crate::proto::TransactionCountResponse>, tonic::Status>
+        {
+            Err(tonic::Status::internal("mock"))
+        }
+
+        async fn get_payload_size(
+            &self,
+            _request: tonic::Request<crate::proto::GetPayloadSizeRequest>,
+        ) -> Result<tonic::Response<crate::proto::PayloadSizeResponse>, tonic::Status> {
+            Err(tonic::Status::internal("mock"))
+        }
+
+        async fn get_sync_status(
+            &self,
+            _request: tonic::Request<crate::proto::GetSyncStatusRequest>,
+        ) -> Result<tonic::Response<crate::proto::SyncStatusResponse>, tonic::Status> {
+            Err(tonic::Status::internal("mock"))
+        }
+
+        async fn get_block_reward(
+            &self,
+            _request: tonic::Request<crate::proto::GetBlockRewardRequest>,
+        ) -> Result<tonic::Response<crate::proto::BlockRewardResponse>, tonic::Status> {
+            Err(tonic::Status::internal("mock"))
+        }
+
+        async fn get_vid_share(
+            &self,
+            _request: tonic::Request<crate::proto::GetVidShareRequest>,
+        ) -> Result<tonic::Response<crate::proto::VidShareResponse>, tonic::Status> {
+            Err(tonic::Status::internal("mock"))
+        }
+
+        async fn get_header_window(
+            &self,
+            _request: tonic::Request<crate::proto::GetHeaderWindowRequest>,
+        ) -> Result<tonic::Response<crate::proto::HeaderWindowResponse>, tonic::Status> {
+            Err(tonic::Status::internal("mock"))
+        }
+
+        async fn get_node_block_height(
+            &self,
+            _request: tonic::Request<crate::proto::GetNodeBlockHeightRequest>,
+        ) -> Result<tonic::Response<crate::proto::NodeBlockHeightResponse>, tonic::Status> {
+            Err(tonic::Status::internal("mock"))
+        }
+
+        async fn get_node_limits(
+            &self,
+            _request: tonic::Request<crate::proto::GetNodeLimitsRequest>,
+        ) -> Result<tonic::Response<crate::proto::NodeLimitsResponse>, tonic::Status> {
+            Err(tonic::Status::internal("mock"))
+        }
+
+        async fn get_stake_table(
+            &self,
+            _request: tonic::Request<crate::proto::GetStakeTableRequest>,
+        ) -> Result<tonic::Response<crate::proto::StakeTableResponse>, tonic::Status> {
+            Err(tonic::Status::internal("mock"))
+        }
+
+        async fn get_validators(
+            &self,
+            _request: tonic::Request<crate::proto::GetValidatorsRequest>,
+        ) -> Result<tonic::Response<crate::proto::ValidatorsResponse>, tonic::Status> {
+            Err(tonic::Status::internal("mock"))
+        }
+
+        async fn get_all_validators(
+            &self,
+            _request: tonic::Request<crate::proto::GetAllValidatorsRequest>,
+        ) -> Result<tonic::Response<crate::proto::ValidatorsResponse>, tonic::Status> {
+            Err(tonic::Status::internal("mock"))
+        }
+
+        async fn get_proposal_participation(
+            &self,
+            _request: tonic::Request<crate::proto::GetProposalParticipationRequest>,
+        ) -> Result<tonic::Response<crate::proto::ParticipationResponse>, tonic::Status> {
+            Err(tonic::Status::internal("mock"))
+        }
+
+        async fn get_vote_participation(
+            &self,
+            _request: tonic::Request<crate::proto::GetVoteParticipationRequest>,
+        ) -> Result<tonic::Response<crate::proto::ParticipationResponse>, tonic::Status> {
+            Err(tonic::Status::internal("mock"))
+        }
+    }
+
+    #[tonic::async_trait]
+    impl crate::proto::config_service_server::ConfigService for MockV2State {
+        async fn get_hotshot_config(
+            &self,
+            _request: tonic::Request<crate::proto::GetHotshotConfigRequest>,
+        ) -> Result<tonic::Response<crate::proto::HotshotConfigResponse>, tonic::Status> {
+            Err(tonic::Status::internal("mock"))
+        }
+
+        async fn get_env(
+            &self,
+            _request: tonic::Request<crate::proto::GetEnvRequest>,
+        ) -> Result<tonic::Response<crate::proto::EnvResponse>, tonic::Status> {
+            Err(tonic::Status::internal("mock"))
+        }
+
+        async fn get_runtime_config(
+            &self,
+            _request: tonic::Request<crate::proto::GetRuntimeConfigRequest>,
+        ) -> Result<tonic::Response<crate::proto::RuntimeConfigResponse>, tonic::Status> {
+            Err(tonic::Status::internal("mock"))
+        }
+    }
+
+    #[tonic::async_trait]
+    impl crate::proto::availability_service_server::AvailabilityService for MockV2State {
+        async fn get_limits(
+            &self,
+            _request: tonic::Request<crate::proto::GetLimitsRequest>,
+        ) -> Result<tonic::Response<crate::proto::LimitsResponse>, tonic::Status> {
+            Err(tonic::Status::internal("mock"))
+        }
+
+        async fn get_header(
+            &self,
+            _request: tonic::Request<crate::proto::GetHeaderRequest>,
+        ) -> Result<tonic::Response<crate::proto::HeaderResponse>, tonic::Status> {
+            Err(tonic::Status::internal("mock"))
+        }
+
+        async fn get_header_range(
+            &self,
+            _request: tonic::Request<crate::proto::GetHeaderRangeRequest>,
+        ) -> Result<tonic::Response<crate::proto::HeaderRangeResponse>, tonic::Status> {
+            Err(tonic::Status::internal("mock"))
+        }
+
+        async fn get_leaf(
+            &self,
+            _request: tonic::Request<crate::proto::GetLeafRequest>,
+        ) -> Result<tonic::Response<crate::proto::LeafResponse>, tonic::Status> {
+            Err(tonic::Status::internal("mock"))
+        }
+
+        async fn get_leaf_range(
+            &self,
+            _request: tonic::Request<crate::proto::GetLeafRangeRequest>,
+        ) -> Result<tonic::Response<crate::proto::LeafRangeResponse>, tonic::Status> {
+            Err(tonic::Status::internal("mock"))
+        }
+
+        async fn get_leaf_ranges(
+            &self,
+            _request: tonic::Request<crate::proto::GetLeafRangesRequest>,
+        ) -> Result<tonic::Response<crate::proto::LeafRangeResponse>, tonic::Status> {
+            Err(tonic::Status::internal("mock"))
+        }
+
+        async fn get_cert2(
+            &self,
+            _request: tonic::Request<crate::proto::GetCert2Request>,
+        ) -> Result<tonic::Response<crate::proto::Cert2Response>, tonic::Status> {
+            Err(tonic::Status::internal("mock"))
+        }
+
+        async fn get_block(
+            &self,
+            _request: tonic::Request<crate::proto::GetBlockRequest>,
+        ) -> Result<tonic::Response<crate::proto::BlockResponse>, tonic::Status> {
+            Err(tonic::Status::internal("mock"))
+        }
+
+        async fn get_block_range(
+            &self,
+            _request: tonic::Request<crate::proto::GetBlockRangeRequest>,
+        ) -> Result<tonic::Response<crate::proto::BlockRangeResponse>, tonic::Status> {
+            Err(tonic::Status::internal("mock"))
+        }
+
+        async fn get_block_ranges(
+            &self,
+            _request: tonic::Request<crate::proto::GetBlockRangesRequest>,
+        ) -> Result<tonic::Response<crate::proto::BlockRangeResponse>, tonic::Status> {
+            Err(tonic::Status::internal("mock"))
+        }
+
+        async fn get_payload(
+            &self,
+            _request: tonic::Request<crate::proto::GetPayloadRequest>,
+        ) -> Result<tonic::Response<crate::proto::PayloadResponse>, tonic::Status> {
+            Err(tonic::Status::internal("mock"))
+        }
+
+        async fn get_payload_range(
+            &self,
+            _request: tonic::Request<crate::proto::GetPayloadRangeRequest>,
+        ) -> Result<tonic::Response<crate::proto::PayloadRangeResponse>, tonic::Status> {
+            Err(tonic::Status::internal("mock"))
+        }
+
+        async fn get_vid_common(
+            &self,
+            _request: tonic::Request<crate::proto::GetVidCommonRequest>,
+        ) -> Result<tonic::Response<crate::proto::VidCommonResponse>, tonic::Status> {
+            Err(tonic::Status::internal("mock"))
+        }
+
+        async fn get_vid_common_range(
+            &self,
+            _request: tonic::Request<crate::proto::GetVidCommonRangeRequest>,
+        ) -> Result<tonic::Response<crate::proto::VidCommonRangeResponse>, tonic::Status> {
+            Err(tonic::Status::internal("mock"))
+        }
+
+        async fn get_vid_common_ranges(
+            &self,
+            _request: tonic::Request<crate::proto::GetVidCommonRangesRequest>,
+        ) -> Result<tonic::Response<crate::proto::VidCommonRangeResponse>, tonic::Status> {
+            Err(tonic::Status::internal("mock"))
+        }
+
+        async fn get_transaction(
+            &self,
+            _request: tonic::Request<crate::proto::GetTransactionRequest>,
+        ) -> Result<tonic::Response<crate::proto::TransactionResponse>, tonic::Status> {
+            Err(tonic::Status::internal("mock"))
+        }
+
+        async fn get_transaction_proof(
+            &self,
+            _request: tonic::Request<crate::proto::GetTransactionProofRequest>,
+        ) -> Result<tonic::Response<crate::proto::TransactionWithProofResponse>, tonic::Status>
+        {
+            Err(tonic::Status::internal("mock"))
+        }
+
+        async fn get_block_summary(
+            &self,
+            _request: tonic::Request<crate::proto::GetBlockSummaryRequest>,
+        ) -> Result<tonic::Response<crate::proto::BlockSummaryResponse>, tonic::Status> {
+            Err(tonic::Status::internal("mock"))
+        }
+
+        async fn get_block_summary_range(
+            &self,
+            _request: tonic::Request<crate::proto::GetBlockSummaryRangeRequest>,
+        ) -> Result<tonic::Response<crate::proto::BlockSummaryRangeResponse>, tonic::Status>
+        {
+            Err(tonic::Status::internal("mock"))
+        }
+
+        async fn get_namespace_proof(
+            &self,
+            _request: tonic::Request<crate::proto::GetNamespaceProofRequest>,
+        ) -> Result<tonic::Response<crate::proto::NamespaceProofResponse>, tonic::Status> {
+            Err(tonic::Status::internal("mock"))
+        }
+
+        async fn get_namespace_proof_range(
+            &self,
+            _request: tonic::Request<crate::proto::GetNamespaceProofRangeRequest>,
+        ) -> Result<tonic::Response<crate::proto::NamespaceProofRangeResponse>, tonic::Status>
+        {
+            Err(tonic::Status::internal("mock"))
+        }
+
+        async fn get_incorrect_encoding_proof(
+            &self,
+            _request: tonic::Request<crate::proto::GetIncorrectEncodingProofRequest>,
+        ) -> Result<tonic::Response<crate::proto::IncorrectEncodingProofResponse>, tonic::Status>
+        {
+            Err(tonic::Status::internal("mock"))
+        }
+
+        async fn get_state_cert(
+            &self,
+            _request: tonic::Request<crate::proto::GetStateCertRequest>,
+        ) -> Result<tonic::Response<crate::proto::StateCertV1Response>, tonic::Status> {
+            Err(tonic::Status::internal("mock"))
+        }
+
+        async fn get_state_cert_v2(
+            &self,
+            _request: tonic::Request<crate::proto::GetStateCertV2Request>,
+        ) -> Result<tonic::Response<crate::proto::StateCertV2Response>, tonic::Status> {
+            Err(tonic::Status::internal("mock"))
+        }
+
+        type StreamLeavesStream =
+            BoxStream<'static, Result<crate::proto::LeafResponse, tonic::Status>>;
+
+        async fn stream_leaves(
+            &self,
+            _request: tonic::Request<crate::proto::StreamLeavesRequest>,
+        ) -> Result<tonic::Response<Self::StreamLeavesStream>, tonic::Status> {
+            Err(tonic::Status::internal("mock"))
+        }
+
+        type StreamHeadersStream =
+            BoxStream<'static, Result<crate::proto::HeaderResponse, tonic::Status>>;
+
+        async fn stream_headers(
+            &self,
+            _request: tonic::Request<crate::proto::StreamHeadersRequest>,
+        ) -> Result<tonic::Response<Self::StreamHeadersStream>, tonic::Status> {
+            Err(tonic::Status::internal("mock"))
+        }
+
+        type StreamBlocksStream =
+            BoxStream<'static, Result<crate::proto::BlockResponse, tonic::Status>>;
+
+        async fn stream_blocks(
+            &self,
+            _request: tonic::Request<crate::proto::StreamBlocksRequest>,
+        ) -> Result<tonic::Response<Self::StreamBlocksStream>, tonic::Status> {
+            Err(tonic::Status::internal("mock"))
+        }
+
+        type StreamPayloadsStream =
+            BoxStream<'static, Result<crate::proto::PayloadResponse, tonic::Status>>;
+
+        async fn stream_payloads(
+            &self,
+            _request: tonic::Request<crate::proto::StreamPayloadsRequest>,
+        ) -> Result<tonic::Response<Self::StreamPayloadsStream>, tonic::Status> {
+            Err(tonic::Status::internal("mock"))
+        }
+
+        type StreamVidCommonStream =
+            BoxStream<'static, Result<crate::proto::VidCommonResponse, tonic::Status>>;
+
+        async fn stream_vid_common(
+            &self,
+            _request: tonic::Request<crate::proto::StreamVidCommonRequest>,
+        ) -> Result<tonic::Response<Self::StreamVidCommonStream>, tonic::Status> {
+            Err(tonic::Status::internal("mock"))
+        }
+
+        type StreamTransactionsStream =
+            BoxStream<'static, Result<crate::proto::TransactionResponse, tonic::Status>>;
+
+        async fn stream_transactions(
+            &self,
+            _request: tonic::Request<crate::proto::StreamTransactionsRequest>,
+        ) -> Result<tonic::Response<Self::StreamTransactionsStream>, tonic::Status> {
+            Err(tonic::Status::internal("mock"))
+        }
+
+        type StreamNamespaceProofsStream =
+            BoxStream<'static, Result<crate::proto::NamespaceProofResponse, tonic::Status>>;
+
+        async fn stream_namespace_proofs(
+            &self,
+            _request: tonic::Request<crate::proto::StreamNamespaceProofsRequest>,
+        ) -> Result<tonic::Response<Self::StreamNamespaceProofsStream>, tonic::Status> {
+            Err(tonic::Status::internal("mock"))
+        }
+    }
+
+    #[tonic::async_trait]
+    impl crate::proto::database_service_server::DatabaseService for MockV2State {
+        async fn get_table_sizes(
+            &self,
+            _request: tonic::Request<crate::proto::GetTableSizesRequest>,
+        ) -> Result<tonic::Response<crate::proto::TableSizesResponse>, tonic::Status> {
+            Err(tonic::Status::internal("mock"))
+        }
+
+        async fn get_migration_status(
+            &self,
+            _request: tonic::Request<crate::proto::GetMigrationStatusRequest>,
+        ) -> Result<tonic::Response<crate::proto::MigrationStatusResponse>, tonic::Status> {
+            Err(tonic::Status::internal("mock"))
+        }
+    }
+
+    #[tonic::async_trait]
+    impl crate::proto::merklized_state_service_server::MerklizedStateService for MockV2State {
+        async fn get_block_state_path(
+            &self,
+            _request: tonic::Request<crate::proto::GetBlockStatePathRequest>,
+        ) -> Result<tonic::Response<crate::proto::MerklePathResponse>, tonic::Status> {
+            Err(tonic::Status::internal("mock"))
+        }
+
+        async fn get_fee_state_path(
+            &self,
+            _request: tonic::Request<crate::proto::GetFeeStatePathRequest>,
+        ) -> Result<tonic::Response<crate::proto::MerklePathResponse>, tonic::Status> {
+            Err(tonic::Status::internal("mock"))
+        }
+
+        async fn get_latest_fee_balance(
+            &self,
+            _request: tonic::Request<crate::proto::GetLatestFeeBalanceRequest>,
+        ) -> Result<tonic::Response<crate::proto::FeeBalanceResponse>, tonic::Status> {
+            Err(tonic::Status::internal("mock"))
+        }
+
+        async fn get_state_height(
+            &self,
+            _request: tonic::Request<crate::proto::GetStateHeightRequest>,
+        ) -> Result<tonic::Response<crate::proto::StateHeightResponse>, tonic::Status> {
+            Err(tonic::Status::internal("mock"))
+        }
+    }
+
+    #[tonic::async_trait]
+    impl crate::proto::reward_state_service_server::RewardStateService for MockV2State {
+        async fn get_reward_balance(
+            &self,
+            _request: tonic::Request<crate::proto::GetRewardBalanceRequest>,
+        ) -> Result<tonic::Response<crate::proto::RewardBalanceResponse>, tonic::Status> {
+            Err(tonic::Status::internal("mock"))
+        }
+
+        async fn get_reward_account_proof(
+            &self,
+            _request: tonic::Request<crate::proto::GetRewardAccountProofRequest>,
+        ) -> Result<tonic::Response<crate::proto::RewardAccountProofResponse>, tonic::Status>
+        {
+            Err(tonic::Status::internal("mock"))
+        }
+
+        async fn get_reward_claim_input(
+            &self,
+            _request: tonic::Request<crate::proto::GetRewardClaimInputRequest>,
+        ) -> Result<tonic::Response<crate::proto::RewardClaimInputResponse>, tonic::Status>
+        {
+            Err(tonic::Status::internal("mock"))
+        }
+
+        async fn get_reward_amounts(
+            &self,
+            _request: tonic::Request<crate::proto::GetRewardAmountsRequest>,
+        ) -> Result<tonic::Response<crate::proto::RewardAmountsResponse>, tonic::Status> {
+            Err(tonic::Status::internal("mock"))
+        }
+
+        async fn get_reward_merkle_tree_v2(
+            &self,
+            _request: tonic::Request<crate::proto::GetRewardMerkleTreeV2Request>,
+        ) -> Result<tonic::Response<crate::proto::RewardMerkleTreeV2Response>, tonic::Status>
+        {
+            Err(tonic::Status::internal("mock"))
+        }
+    }
+
+    #[tonic::async_trait]
+    impl crate::proto::state_signature_service_server::StateSignatureService for MockV2State {
+        async fn get_state_signature(
+            &self,
+            _request: tonic::Request<crate::proto::GetStateSignatureRequest>,
+        ) -> Result<tonic::Response<crate::proto::StateSignatureResponse>, tonic::Status> {
+            Err(tonic::Status::internal("mock"))
+        }
+    }
+
+    #[tonic::async_trait]
+    impl crate::proto::explorer_service_server::ExplorerService for MockV2State {
+        async fn get_explorer_block_detail(
+            &self,
+            _request: tonic::Request<crate::proto::GetExplorerBlockDetailRequest>,
+        ) -> Result<tonic::Response<crate::proto::ExplorerBlockDetailResponse>, tonic::Status>
+        {
+            Err(tonic::Status::internal("mock"))
+        }
+
+        async fn get_explorer_block_summaries(
+            &self,
+            _request: tonic::Request<crate::proto::GetExplorerBlockSummariesRequest>,
+        ) -> Result<tonic::Response<crate::proto::ExplorerBlockSummariesResponse>, tonic::Status>
+        {
+            Err(tonic::Status::internal("mock"))
+        }
+
+        async fn get_explorer_transaction_detail(
+            &self,
+            _request: tonic::Request<crate::proto::GetExplorerTransactionDetailRequest>,
+        ) -> Result<tonic::Response<crate::proto::ExplorerTransactionDetailResponse>, tonic::Status>
+        {
+            Err(tonic::Status::internal("mock"))
+        }
+
+        async fn get_explorer_transaction_summaries(
+            &self,
+            _request: tonic::Request<crate::proto::GetExplorerTransactionSummariesRequest>,
+        ) -> Result<
+            tonic::Response<crate::proto::ExplorerTransactionSummariesResponse>,
+            tonic::Status,
+        > {
+            Err(tonic::Status::internal("mock"))
+        }
+
+        async fn get_explorer_summary(
+            &self,
+            _request: tonic::Request<crate::proto::GetExplorerSummaryRequest>,
+        ) -> Result<tonic::Response<crate::proto::ExplorerSummaryResponse>, tonic::Status> {
+            Err(tonic::Status::internal("mock"))
+        }
+
+        async fn get_explorer_search(
+            &self,
+            _request: tonic::Request<crate::proto::GetExplorerSearchRequest>,
+        ) -> Result<tonic::Response<crate::proto::ExplorerSearchResponse>, tonic::Status> {
+            Err(tonic::Status::internal("mock"))
+        }
+    }
+
+    #[tonic::async_trait]
+    impl crate::proto::submit_service_server::SubmitService for MockV2State {
+        async fn submit_transaction(
+            &self,
+            _request: tonic::Request<crate::proto::SubmitTransactionRequest>,
+        ) -> Result<tonic::Response<crate::proto::SubmitTransactionResponse>, tonic::Status>
+        {
+            Err(tonic::Status::internal("mock"))
+        }
+    }
+
     /// Every path in the OpenAPI document must be a route [`crate::router_v2`] mounts, so a
     /// generated client cannot ship a method that always 404s.
     #[tokio::test]
     async fn v2_documented_routes_are_mounted() {
-        let spec: serde_json::Value =
-            serde_json::from_str(include_str!("generated/espresso.api.v2.openapi.json"))
-                .expect("valid JSON");
-        let router = crate::router_v2(Arc::new(MockV2State));
-        for path in spec["paths"].as_object().expect("spec has paths").keys() {
+        let spec: serde_json::Value = serde_json::from_str(super::V2_OPENAPI).expect("valid JSON");
+        let router = crate::router_v2(
+            Arc::new(MockV2State),
+            crate::OptionalModules {
+                config: true,
+                submit: true,
+                explorer: true,
+                ..Default::default()
+            },
+        );
+        for (path, item) in spec["paths"].as_object().expect("spec has paths") {
+            for verb in item.as_object().expect("path item has operations").keys() {
+                let req = Request::builder()
+                    .method(verb.to_uppercase().as_str())
+                    .uri(path)
+                    .body(axum::body::Body::empty())
+                    .unwrap();
+                let resp = tower::ServiceExt::oneshot(router.clone(), req)
+                    .await
+                    .unwrap();
+                // A 405 would mean the path is mounted under another verb than the documented one.
+                assert!(
+                    ![StatusCode::NOT_FOUND, StatusCode::METHOD_NOT_ALLOWED]
+                        .contains(&resp.status()),
+                    "{verb} {path} is documented but not mounted: {}",
+                    resp.status()
+                );
+            }
+        }
+    }
+
+    /// A subscription is served as server-sent events, and its documentation has to say so: a
+    /// generated client reading it as `application/json` would try to parse the stream as one
+    /// body. Everything else stays JSON.
+    #[test]
+    fn v2_streams_are_documented_as_event_streams() {
+        use prost::Message as _;
+
+        let descriptors = prost_types::FileDescriptorSet::decode(crate::FILE_DESCRIPTOR_SET)
+            .expect("valid descriptor set");
+        let streaming: std::collections::BTreeSet<&str> = descriptors
+            .file
+            .iter()
+            .flat_map(|file| &file.service)
+            .flat_map(|service| &service.method)
+            .filter(|method| method.server_streaming())
+            .map(|method| method.name())
+            .collect();
+        assert!(!streaming.is_empty());
+
+        let spec: serde_json::Value = serde_json::from_str(super::V2_OPENAPI).expect("valid JSON");
+        let mut documented = std::collections::BTreeSet::new();
+        for (path, item) in spec["paths"].as_object().expect("spec has paths") {
+            for operation in item.as_object().expect("path item has operations").values() {
+                let id = operation["operationId"].as_str().expect("operation id");
+                let content = &operation["responses"]["200"]["content"];
+                let is_stream = streaming.contains(id);
+                if is_stream {
+                    documented.insert(id);
+                }
+                assert_eq!(
+                    content.get("text/event-stream").is_some(),
+                    is_stream,
+                    "{path}"
+                );
+                assert_eq!(
+                    content.get("application/json").is_some(),
+                    !is_stream,
+                    "{path}"
+                );
+            }
+        }
+        assert_eq!(documented, streaming, "every streaming rpc is documented");
+    }
+
+    /// A `map` field is a repeated synthetic entry message in the descriptor, which the generator
+    /// would otherwise publish as an array of a schema that does not exist.
+    #[test]
+    fn v2_maps_are_documented_as_objects() {
+        let spec: serde_json::Value = serde_json::from_str(super::V2_OPENAPI).expect("valid JSON");
+        let schemas = spec["components"]["schemas"]
+            .as_object()
+            .expect("spec has schemas");
+        let namespaces = &schemas["BlockSummaryResponse"]["properties"]["namespaces"];
+        assert_eq!(namespaces["type"], "object");
+        assert_eq!(
+            namespaces["additionalProperties"]["$ref"],
+            "#/components/schemas/NamespaceInfo"
+        );
+        assert!(schemas.contains_key("NamespaceInfo"));
+        // protoc names the synthetic entry after the field, so this is what leaks if the
+        // generator ever registers one as a schema of its own.
+        assert!(
+            !schemas.contains_key("NamespacesEntry"),
+            "a map entry leaked into the published schemas"
+        );
+    }
+
+    /// The docs router is merged in as `serve_axum` does: that merge swaps `router_v2`'s layered
+    /// fallback for a plain one, so `router_v2` alone passes even with the paths unregistered.
+    #[tokio::test]
+    async fn disabled_modules_answer_in_the_envelope() {
+        let spec: serde_json::Value = serde_json::from_str(super::V2_OPENAPI).expect("valid JSON");
+        let paths = spec["paths"].as_object().expect("spec has paths");
+        let router = crate::router_v2(Arc::new(MockV2State), crate::OptionalModules::default())
+            .merge(router_v2_docs());
+        for (prefix, registered) in [
+            ("/v2/config/", routes::v2::CONFIG_ROUTES),
+            ("/v2/submit/", routes::v2::SUBMIT_ROUTES),
+            ("/v2/explorer/", routes::v2::EXPLORER_ROUTES),
+        ] {
+            let mut documented: Vec<&str> = paths
+                .keys()
+                .map(String::as_str)
+                .filter(|path| path.starts_with(prefix))
+                .collect();
+            documented.sort_unstable();
+            let mut registered = registered.to_vec();
+            registered.sort_unstable();
+            assert_eq!(registered, documented);
+            for path in documented {
+                let method = paths[path]
+                    .as_object()
+                    .unwrap()
+                    .keys()
+                    .next()
+                    .unwrap()
+                    .to_uppercase();
+                assert_disabled_in_envelope(&router, &method, path).await;
+            }
+        }
+    }
+
+    async fn assert_disabled_in_envelope(router: &Router, method: &str, path: &str) {
+        let req = Request::builder()
+            .method(method)
+            .uri(path)
+            .body(axum::body::Body::empty())
+            .unwrap();
+        let resp = tower::ServiceExt::oneshot(router.clone(), req)
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::NOT_FOUND, "{method} {path}");
+        let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let envelope: serde_json::Value = serde_json::from_slice(&body)
+            .unwrap_or_else(|err| panic!("{path}: {err}: {:?}", String::from_utf8_lossy(&body)));
+        assert_eq!(envelope["error"]["code"], 404, "{path}");
+        assert_eq!(envelope["error"]["status"], "NOT_FOUND", "{path}");
+    }
+
+    /// A bad query parameter is refused by the extractor and wrapped by the envelope layer,
+    /// neither of which is handler code, so a dependency bump could change either without any
+    /// other test noticing.
+    #[tokio::test]
+    async fn v2_rejects_malformed_query_parameters() {
+        let router = crate::router_v2(Arc::new(MockV2State), crate::OptionalModules::default());
+        // v2 paths come from the proto annotations, not a constants module.
+        let count = "/v2/node/transaction-count";
+        for query in [
+            "from=abc",
+            "from=-1",
+            "from=",
+            "from=1.0",
+            // A leading `+` is accepted, so it is not a rejection case; written raw it decoded to
+            // a space and passed here for the wrong reason.
+            // One past u64, and a repeat of a field that is not repeated.
+            "from=18446744073709551616",
+            "from=1&from=2",
+            // Unknown fields are refused, so a misspelling is not silently a different query.
+            "From=7",
+            "bogus=1",
+        ] {
             let req = Request::builder()
-                .uri(path)
+                .uri(format!("{count}?{query}"))
                 .body(axum::body::Body::empty())
                 .unwrap();
             let resp = tower::ServiceExt::oneshot(router.clone(), req)
                 .await
                 .unwrap();
-            assert_ne!(
-                resp.status(),
-                StatusCode::NOT_FOUND,
-                "{path} is documented but not mounted"
+            assert_eq!(resp.status(), StatusCode::BAD_REQUEST, "{query}");
+
+            let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+                .await
+                .unwrap();
+            let envelope: serde_json::Value = serde_json::from_slice(&body).unwrap();
+            assert_eq!(envelope["error"]["code"], 400, "{query}");
+            assert_eq!(envelope["error"]["status"], "INVALID_ARGUMENT", "{query}");
+            assert!(
+                envelope["error"]["message"]
+                    .as_str()
+                    .is_some_and(|m| !m.is_empty()),
+                "{query}: empty message"
             );
+        }
+
+        // An rpc whose request has no fields still refuses one.
+        let req = Request::builder()
+            .uri("/v2/node/sync-status?from=1")
+            .body(axum::body::Body::empty())
+            .unwrap();
+        let resp = tower::ServiceExt::oneshot(router, req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    }
+
+    /// A POST body is refused by the `Json` extractor, whose 413, 415 and 422 the envelope layer
+    /// turns into the same 400 a bad query parameter gets. A query string is refused too, since the
+    /// handler would ignore it.
+    #[tokio::test]
+    async fn v2_rejects_malformed_request_bodies() {
+        let router = crate::router_v2(Arc::new(MockV2State), crate::OptionalModules::default());
+        let ranges = "/v2/availability/leaf-ranges";
+        let with_query = "/v2/availability/leaf-ranges?bogus=1";
+        // Past axum's default body limit, which the extractor answers with 413.
+        let oversized = format!(r#"{{"ranges": [{}]}}"#, " ".repeat(3 << 20));
+        for (uri, content_type, body) in [
+            (ranges, "application/json", oversized.as_str()),
+            (ranges, "application/json", "not json"),
+            (ranges, "application/json", r#"{"ranges": 1}"#),
+            // Unknown fields are refused in a body as in a query string.
+            (ranges, "application/json", r#"{"bogus": []}"#),
+            (ranges, "text/plain", r#"{"ranges": []}"#),
+            (with_query, "application/json", r#"{"ranges": []}"#),
+        ] {
+            let req = Request::builder()
+                .method("POST")
+                .uri(uri)
+                .header(header::CONTENT_TYPE, content_type)
+                .body(axum::body::Body::from(body.to_owned()))
+                .unwrap();
+            let resp = tower::ServiceExt::oneshot(router.clone(), req)
+                .await
+                .unwrap();
+            let case = body.get(..40).unwrap_or(body);
+            assert_eq!(resp.status(), StatusCode::BAD_REQUEST, "{uri} {case}");
+            let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+                .await
+                .unwrap();
+            let envelope: serde_json::Value = serde_json::from_slice(&body).unwrap();
+            assert_eq!(envelope["error"]["status"], "INVALID_ARGUMENT");
         }
     }
 
