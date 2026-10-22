@@ -92,8 +92,11 @@ pub mod light_client;
 pub mod options;
 /// The query service over a SQL database, with one module per backend.
 pub mod sql {
+    mod dispatch;
     pub mod postgres;
     pub mod sqlite;
+
+    pub use dispatch::Sql;
 }
 pub mod state;
 pub mod unlock_schedule;

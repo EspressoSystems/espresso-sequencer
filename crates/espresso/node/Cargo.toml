@@ -68,6 +68,7 @@ hotshot-libp2p-networking = { workspace = true }
 hotshot-new-protocol = { workspace = true }
 hotshot-orchestrator = { workspace = true }
 hotshot-query-service = { workspace = true }
+hotshot-query-service-types = { workspace = true }
 hotshot-state-prover = { workspace = true }
 hotshot-testing = { workspace = true, optional = true }
 hotshot-types = { workspace = true }

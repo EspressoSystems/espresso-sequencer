@@ -15,7 +15,7 @@ use hotshot_query_service::{
 };
 use hotshot_types::new_protocol::CoordinatorEvent;
 
-use super::{StorageState, context::ApiContext, data_source::SequencerDataSource};
+use super::{StorageState, context::ApiContext, data_source::QueryDataSource};
 use crate::{EventConsumer, SeqTypes};
 
 #[async_trait]
@@ -73,7 +73,7 @@ where
 impl<C, D> EventConsumer for ApiEventConsumer<C, D>
 where
     C: ApiContext,
-    D: SequencerDataSource + Debug + Send + Sync + 'static,
+    D: QueryDataSource + Debug + Send + Sync + 'static,
 {
     async fn handle_event(&self, event: &CoordinatorEvent<SeqTypes>) -> anyhow::Result<()> {
         if let Err(height) = self.inner.update(event).await {
@@ -87,7 +87,7 @@ where
 impl<C, D> DecideSink for ApiEventConsumer<C, D>
 where
     C: ApiContext,
-    D: SequencerDataSource + UpdateAvailabilityData<SeqTypes> + Debug + Send + Sync + 'static,
+    D: QueryDataSource + UpdateAvailabilityData<SeqTypes> + Debug + Send + Sync + 'static,
 {
     async fn append(&self, info: BlockInfo<SeqTypes>) -> anyhow::Result<()> {
         self.inner.append(info).await

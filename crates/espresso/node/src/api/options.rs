@@ -19,14 +19,19 @@ use url::Url;
 use super::{
     ApiState, StorageState,
     context::ApiContext,
-    data_source::{DataSourceOptions, PruningDataSource, SequencerDataSource, provider},
-    fs, sql,
+    data_source::{
+        DataSourceOptions, NodeStateDataSource as _, PruningDataSource, QueryDataSource,
+        SequencerDataSource, provider,
+    },
+    fs,
+    sql::{self, Sql},
     state::NodeApiStateImpl,
     update::{ApiEventConsumer, ApiSink},
 };
 use crate::{
     catchup::CatchupStorage, context::TaskList, options::PublicNodeConfig, persistence,
     request_response::data_source::Storage as RequestResponseStorage,
+    state::update_state_storage_loop,
 };
 
 #[derive(Clone, Debug)]
@@ -165,12 +170,8 @@ impl Options {
             Option<RequestResponseStorage>,
         ) = if let Some(query_opt) = self.query.take() {
             if let Some(opt) = self.storage_sql.take() {
-                if opt.embedded_db {
-                    sql::sqlite::init_query_module(&self, query_opt, opt, state, &mut tasks).await?
-                } else {
-                    sql::postgres::init_query_module(&self, query_opt, opt, state, &mut tasks)
-                        .await?
-                }
+                self.init_with_query_module_sql(query_opt, opt, state, &mut tasks)
+                    .await?
             } else if let Some(opt) = self.storage_fs.take() {
                 self.init_with_query_module_fs(query_opt, opt, state, &mut tasks)
                     .await?
@@ -253,6 +254,87 @@ impl Options {
             .ok()
             .context("API server exited without receiving context")?;
         Ok(ctx.with_task_list(tasks))
+    }
+
+    async fn init_with_query_module_sql<C: ApiContext>(
+        &self,
+        query_opt: Query,
+        mod_opt: persistence::sql::Options,
+        state: ApiState<C>,
+        tasks: &mut TaskList,
+    ) -> anyhow::Result<(
+        Box<dyn Metrics>,
+        Box<dyn ApiSink>,
+        Option<RequestResponseStorage>,
+    )> {
+        let ranges_concurrency = mod_opt.ranges_concurrency;
+        let (ds, light_client, storage) = if mod_opt.embedded_db {
+            let (ds, light_client, storage) =
+                sql::sqlite::open(query_opt, mod_opt, &state, tasks).await?;
+            (
+                Sql::Sqlite(ds),
+                light_client,
+                RequestResponseStorage::from(storage),
+            )
+        } else {
+            let (ds, light_client, storage) =
+                sql::postgres::open(query_opt, mod_opt, &state, tasks).await?;
+            (
+                Sql::Postgres(ds),
+                light_client,
+                RequestResponseStorage::from(storage),
+            )
+        };
+        tasks.spawn("process_metrics", ProcessMetrics::new(ds.metrics()).run());
+        let (metrics, ds) = init_query_data_source(ds, state.clone());
+
+        let get_node_state = {
+            let state = state.clone();
+            async move { state.node_state().await }
+        };
+        tasks.spawn(
+            "merklized state storage update loop",
+            update_state_storage_loop(ds.clone(), get_node_state, light_client),
+        );
+
+        let port = self.http.port;
+        let env_vars = get_public_env_vars().unwrap_or_default();
+        let node_cfg = self.public_node_config.as_deref().cloned();
+        let modules = espresso_api::OptionalModules {
+            submit: self.submit.is_some(),
+            config: self.config.is_some(),
+            explorer: self.explorer.is_some(),
+            light_client: self.light_client.is_some(),
+            ..Default::default()
+        };
+        let max_connections = self.http.max_connections;
+        // Both transports serve the same state; cloning shares the env vars and node config
+        // rather than copying the genesis they embed.
+        let mut api_state = NodeApiStateImpl::new(ds.clone())
+            .with_env_vars(env_vars)
+            .with_public_node_config(node_cfg);
+        if let Some(ranges_concurrency) = ranges_concurrency {
+            api_state = api_state.with_ranges_concurrency(ranges_concurrency);
+        }
+        let tonic_state = api_state.clone();
+        tasks.spawn("API server", async move {
+            if let Err(e) =
+                espresso_api::serve_axum(port, api_state, modules, max_connections).await
+            {
+                tracing::error!("Axum server error: {}", e);
+            }
+            anyhow::Ok(())
+        });
+
+        if let Some(tonic_port) = self.http.tonic_port {
+            tasks.spawn("Tonic gRPC server", async move {
+                if let Err(e) = espresso_api::serve_tonic(tonic_port, tonic_state, modules).await {
+                    tracing::error!("Tonic gRPC server error: {}", e);
+                }
+            });
+        }
+
+        Ok((metrics, Box::new(ApiEventConsumer::from(ds)), Some(storage)))
     }
 
     async fn init_with_query_module_fs<C: ApiContext>(
@@ -440,7 +522,7 @@ pub(super) fn init_query_data_source<C: ApiContext, D>(
     state: ApiState<C>,
 ) -> (Box<dyn Metrics>, Arc<StorageState<C, D>>)
 where
-    D: SequencerDataSource + CatchupStorage + PruningDataSource + Send + Sync + 'static,
+    D: QueryDataSource + CatchupStorage + PruningDataSource + Send + Sync + 'static,
 {
     let metrics = ds.populate_metrics();
     telemetry::set_registry(Arc::new(ds.metrics().registry().clone()));
