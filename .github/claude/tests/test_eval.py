@@ -74,3 +74,14 @@ def test_section_lists_wrong_and_unjudged(tmp_path):
     assert ev.result_line(7, tmp_path) == (
         "7: exit=0 f findings=1 wrong=1 unjudged=1 error=None"
     )
+
+
+def test_findings_skip_checked_bullets():
+    summary = (
+        "- **blocking**: a (x.rs:1)\n"
+        "- **nit**: b (y.rs:2)\n"
+        "Checked:\n"
+        "- **Callers:** all of them."
+    )
+    rec = cg.Record("review", "opus", [], summary, "<sub>f</sub>", None)
+    assert ev.findings(rec) == ["- **blocking**: a (x.rs:1)", "- **nit**: b (y.rs:2)"]

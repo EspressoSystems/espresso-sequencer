@@ -17,6 +17,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -257,10 +258,11 @@ def footer(record: cg.Record) -> str:
     return text.removeprefix("<sub>").removesuffix("</sub>")
 
 
+FINDING = re.compile(r"- \*\*(blocking|should fix|concern|nit)\*\*:")
+
+
 def findings(record: cg.Record) -> list[str]:
-    return [
-        line for line in (record.summary or "").splitlines() if line.startswith("- **")
-    ]
+    return [line for line in (record.summary or "").splitlines() if FINDING.match(line)]
 
 
 def wrong(record: cg.Record) -> list[cg.Candidate]:
