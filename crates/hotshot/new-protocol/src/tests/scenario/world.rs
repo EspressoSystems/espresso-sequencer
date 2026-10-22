@@ -21,7 +21,6 @@ use std::{
 use bitvec::bitvec;
 use committable::{Commitment, Committable};
 use futures::future::BoxFuture;
-use hotshot::types::{BLSPrivKey, BLSPubKey};
 use hotshot_example_types::{
     block_types::{TestBlockHeader, TestBlockPayload, TestMetadata, TestTransaction},
     node_types::{TEST_VERSIONS, TestTypes},
@@ -34,6 +33,7 @@ use hotshot_types::{
     },
     epoch_membership::EpochMembershipCoordinator,
     message::{Proposal as SignedProposal, UpgradeLock},
+    signature_key::{BLSPrivKey, BLSPubKey},
     simple_certificate::{TimeoutCertificate3, TimeoutEvidence},
     simple_vote::{
         LockView, QuorumData2, SimpleVote, TimeoutData3, VersionedVoteData, Vote2Data, Voteable,

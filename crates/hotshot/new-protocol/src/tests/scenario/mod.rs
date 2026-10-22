@@ -235,7 +235,7 @@ async fn valid_proposal(
 /// The inputs the Rust node takes for one of the scenario's.
 async fn consensus_input(
     world: &mut World,
-    me: &hotshot::types::BLSPubKey,
+    me: &hotshot_types::signature_key::BLSPubKey,
     input: &Input,
 ) -> Option<Vec<ConsensusInput<hotshot_example_types::node_types::TestTypes>>> {
     let inputs = match *input {
