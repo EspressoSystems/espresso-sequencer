@@ -159,8 +159,8 @@ opening an issue to discuss the APIs you need.
 # Security
 
 The smart contracts in [`contracts/`](contracts/) have been externally
-[audited](https://github.com/EspressoSystems/espresso-audits). The node software, including HotShot consensus, has not
-been externally audited.
+[audited](https://github.com/EspressoSystems/espresso-audits). The node software, including HotShot consensus, has been
+internally reviewed (see [`audits/`](audits/)) but not externally audited.
 
 To report a vulnerability, see our
 [security policy](https://github.com/EspressoSystems/espresso-network/security/policy).
