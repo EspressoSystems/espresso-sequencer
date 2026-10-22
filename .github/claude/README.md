@@ -2,17 +2,17 @@
 
 ## Files
 
-| File                    | Purpose                                                                                                                                                                                                  |
-| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `claude_gh.py`          | `claude-gh` CLI. Jobs `review`, `mention`, `code-review`; steps `start` (post status comment), `run` (Claude records actions in `tmp/actions.json`, posts nothing), `apply` (post the recorded actions). |
-| `review.md`             | Runbook for the `review` job.                                                                                                                                                                            |
-| `review-backport.md`    | Appended to `review.md` on backport PRs (branch `backport-<n>-to-*`).                                                                                                                                    |
-| `mention.md`            | Prompt for `@claude` mentions.                                                                                                                                                                           |
-| `code-review.md`        | Appended to the system prompt of the `/code-review` comment command.                                                                                                                                     |
-| `backport-resolve.md`   | Prompt for resolving backport conflicts (`.github/workflows/backport.yml`).                                                                                                                              |
-| `maintain-agents-md.md` | Prompt for the weekly AGENTS.md audit (`.github/workflows/claude-agents-md.yml`).                                                                                                                        |
-| `eval/`                 | Offline evaluation of the `review` job on PRs with known bugs.                                                                                                                                           |
-| `tests/`                | Unit tests for `claude_gh.py` and the eval's read-only GitHub. No network.                                                                                                                               |
+| File                    | Purpose                                                                           |
+| ----------------------- | --------------------------------------------------------------------------------- |
+| `claude_gh.py`          | The `claude-gh` CLI the workflows call.                                           |
+| `review.md`             | Runbook for the `review` job.                                                     |
+| `review-backport.md`    | Appended to `review.md` on backport PRs (branch `backport-<n>-to-*`).             |
+| `mention.md`            | Prompt for `@claude` mentions.                                                    |
+| `code-review.md`        | Appended to the system prompt of the `/code-review` comment command.              |
+| `backport-resolve.md`   | Prompt for resolving backport conflicts (`.github/workflows/backport.yml`).       |
+| `maintain-agents-md.md` | Prompt for the weekly AGENTS.md audit (`.github/workflows/claude-agents-md.yml`). |
+| `eval/`                 | Offline evaluation of the `review` job on PRs with known bugs.                    |
+| `tests/`                | Unit tests for `claude_gh.py` and the eval's read-only GitHub. No network.        |
 
 Commands: `just claude::fmt`, `just claude::lint`, `just claude::check`, `just claude::test`.
 
