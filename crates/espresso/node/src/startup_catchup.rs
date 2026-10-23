@@ -124,11 +124,10 @@ pub(crate) async fn bootstrap_epoch_window<C: Client, Fut>(
 where
     Fut: Future<Output = anyhow::Result<LightClientStateSol>>,
 {
-    if epoch_height == 0 {
-        // Pre-epoch chain: epochs aren't enabled yet, the non-epoch
-        // committee path is what gets used.
-        return Ok(EpochNumber::genesis());
-    }
+    ensure!(
+        epoch_height > 0,
+        "epochs are required: epoch_height must be positive"
+    );
 
     let started = Instant::now();
     let bootstrap = Bootstrap {
@@ -793,7 +792,7 @@ mod tests {
     #[case::start_clamped(100, 100 * 5, Some(3..=6))]
     #[case::start_unclamped(100, 100 * 6, Some(3..=7))]
     #[case::window_only(100, 100 * 2, Some(3..=3))]
-    #[case::pre_pos(100, 50, None)]
+    #[case::before_first_epoch_root(100, 50, None)]
     #[case::genesis(100, 0, None)]
     fn light_client_epochs_cases(
         #[case] blocks_per_epoch: u64,
@@ -844,7 +843,7 @@ mod tests {
     #[case::finalized_at_root_boundary(75, &[], &[78], Some(&[5, 6, 7, 8, 9][..]), 9, None)]
     #[case::no_anchor(0, &[3, 4], &[88], None, 4, Some((9, 9)))]
     #[case::no_anchor_fresh(0, &[], &[88], None, 2, Some((9, 9)))]
-    #[case::pre_pos_anchor(10, &[], &[88], None, 2, Some((9, 9)))]
+    #[case::anchor_before_first_epoch_root(10, &[], &[88], None, 2, Some((9, 9)))]
     #[case::prover_lag_cap(77, &[], &[10_000], Some(&[5, 6, 7, 8, 9][..]), 9, Some((10, 1000)))]
     #[case::no_anchor_no_cap(0, &[], &[10_000], None, 2, Some((1000, 1000)))]
     #[case::cap_below_start(77, &[5, 6, 7, 8, 9, 10, 11], &[10_000], None, 11, Some((10, 1000)))]
@@ -1807,26 +1806,6 @@ mod tests {
         assert_eq!(reads.load(Ordering::Relaxed), 2);
         assert_eq!(current, EpochNumber::new(N));
         assert!(has_table(&coordinator, N + 1));
-    }
-
-    /// A chain before its first epoch ends has no epochs to catch up on.
-    #[test_log::test(tokio::test)]
-    async fn pre_epoch_chain_returns_genesis() {
-        let (client, anchor) = chain().await;
-        let coordinator = fresh_coordinator(&client).await;
-
-        let current = bootstrap_epoch_window(
-            &coordinator,
-            0,
-            || async { Ok(anchor.clone()) },
-            &peer_list(&[client]),
-            &PARAMS,
-            None,
-        )
-        .await
-        .unwrap();
-
-        assert_eq!(current, EpochNumber::genesis());
     }
 
     /// A peer that reports a huge chain cannot make peer catchup require more than the slack past
