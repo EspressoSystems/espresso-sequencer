@@ -58,14 +58,13 @@ SAFE_STOP_WINDOW = (2, 10)
 #     wait-for-v4)
 #   - infra that doesn't use an espresso-network image (postgres, L1 anvil,
 #     block-explorer)
-#   - the CDN (broker-*, marshal-0, cdn-whitelist, cdn-open, keydb), which only
+#   - the CDN (broker-*, marshal-0, cdn-whitelist, keydb), which only
 #     the base tag's compose runs: no image for it is published any more, and
 #     the upgraded nodes ignore it
 NOUPGRADE_SERVICES = (
     "block-explorer",
     "broker-0",
     "broker-1",
-    "cdn-open",
     "cdn-whitelist",
     "marshal-0",
     "demo-l1-network",
@@ -91,7 +90,6 @@ PERSIST_OVERLAY = REPO_ROOT / "binary-upgrade-tests" / "compose.persist-storage.
 NODE_5_FS_OVERLAY = REPO_ROOT / "binary-upgrade-tests" / "compose.node-5-fs.yaml"
 NODE_5_PG_OVERLAY = REPO_ROOT / "binary-upgrade-tests" / "compose.node-5-pg.yaml"
 LC_GATING_OVERLAY = REPO_ROOT / "binary-upgrade-tests" / "compose.lc-gating.yaml"
-CDN_OPEN_OVERLAY = REPO_ROOT / "binary-upgrade-tests" / "compose.cdn-open.yaml"
 STAKE_NODE_5_OVERLAY = REPO_ROOT / "binary-upgrade-tests" / "compose.stake-node-5.yaml"
 
 
@@ -301,11 +299,11 @@ class Compose:
             "-f", str(self.base_dir / "docker-compose.yaml"),
             "-f", str(PERSIST_OVERLAY),
         ]  # fmt: skip
-        base_compose = (self.base_dir / "docker-compose.yaml").read_text()
-        if "wait-for-lc-epoch" not in base_compose:
+        if (
+            "wait-for-lc-epoch"
+            not in (self.base_dir / "docker-compose.yaml").read_text()
+        ):
             args += ["-f", str(LC_GATING_OVERLAY)]
-        if "cdn-whitelist" in base_compose:
-            args += ["-f", str(CDN_OPEN_OVERLAY)]
         for overlay in self.extra_overlays:
             args += ["-f", str(overlay)]
         return args
