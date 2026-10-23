@@ -37,6 +37,11 @@ SHA = "abcdef123456"
 HEADER = "### Review of #7 at abcdef1"
 BASE = "0123base"
 SERVER = create_sdk_mcp_server("gh", tools=[])
+SAME_REPO_PR = {
+    "head": {"repo": {"full_name": "o/r"}},
+    "base": {"repo": {"full_name": "o/r"}},
+    "user": {"login": "alice"},
+}
 
 
 @dataclass
@@ -51,6 +56,7 @@ class FakeGitHub:
     live_diffs: int = 0
     compares: list[tuple[str, str]] = field(default_factory=list)
     edit_max: int | None = None  # edits longer than this raise
+    pr: dict = field(default_factory=lambda: dict(SAME_REPO_PR))
 
     async def pr_diff(self, pr: int) -> str:
         self.live_diffs += 1
@@ -71,6 +77,9 @@ class FakeGitHub:
     async def head_sha(self, pr: int) -> str:
         self.head_fetches += 1
         return "fetched"
+
+    async def pr_payload(self, pr: int) -> dict:
+        return self.pr
 
     async def inline_comment(
         self, pr: int, path: str, line: int, body: str, sha: str
@@ -732,17 +741,20 @@ def test_parse_args():
     assert args.status_id == 5 and args.record == Path("r")
 
 
-def test_parse_args_shas_only_and_always_for_code_review():
+def test_parse_args_shas_both_or_neither_required_for_code_review():
     argv = ["run", "code-review", "--head-sha", "h", "--base-sha", "b"]
     args = cg.parse_args(argv)
     assert (args.head_sha, args.base_sha) == ("h", "b")
     for bad in (
         ["run", "code-review"],
         ["run", "code-review", "--head-sha", "h"],
-        ["run", "review", "--head-sha", "h", "--base-sha", "b"],
+        ["run", "review", "--head-sha", "h"],
+        ["run", "mention", "--head-sha", "h", "--base-sha", "b"],
     ):
         with pytest.raises(SystemExit):
             cg.parse_args(bad)
+    args = cg.parse_args(["run", "review", "--head-sha", "h", "--base-sha", "b"])
+    assert (args.head_sha, args.base_sha) == ("h", "b")
 
 
 def test_parse_thread():
@@ -1134,6 +1146,40 @@ def test_start_review_names_head_and_code_review_is_generic():
     ]
 
 
+def test_start_review_from_comment_has_no_head():
+    gh = FakeGitHub()
+    asyncio.run(cg.start(gh, "review", "issue_comment", REVIEW_COMMENT_EVENT, RUN))
+    assert gh.posted == [("comment", (7, "Reviewing… [run](http://run)"))]
+
+
+def test_start_rejected_review_comment_posts_nothing():
+    gh = FakeGitHub(pr={**SAME_REPO_PR, "head": {"repo": None}})
+    with pytest.raises(SystemExit, match="same-repo"):
+        asyncio.run(cg.start(gh, "review", "issue_comment", REVIEW_COMMENT_EVENT, RUN))
+    assert gh.posted == []
+
+
+@pytest.mark.parametrize(
+    "body,pr,error",
+    [
+        ("/review", {}, None),
+        ("/review\r\n", {}, None),
+        ("/review\nmore text", {}, None),
+        ("  /review  ", {}, None),
+        ("/review foo", {}, "bare"),
+        ("/Review", {}, "bare"),
+        ("/reviewed", {}, "bare"),
+        ("", {}, "bare"),
+        ("/review", {"head": {"repo": {"full_name": "x/r"}}}, "same-repo"),
+        ("/review", {"head": {"repo": None}}, "same-repo"),
+        ("/review", {"user": {"login": "dependabot[bot]"}}, "same-repo"),
+    ],
+)
+def test_review_comment_error(body, pr, error):
+    msg = cg.review_comment_error(body, {**SAME_REPO_PR, **pr})
+    assert msg is None if error is None else error in str(msg)
+
+
 def test_start_prints_only_the_comment_id(capsys):
     event = ISSUE_COMMENT_EVENT
     gh = FakeGitHub()
@@ -1258,6 +1304,7 @@ CODE_REVIEW_EVENT = {
     "repository": {"full_name": "o/r"},
     "issue": {"number": 7, "pull_request": {}},
 }
+REVIEW_COMMENT_EVENT = {**CODE_REVIEW_EVENT, "comment": {"body": "/review"}}
 WRITES_AND_NOTES = {"inline_comment", "reply", "comment", "resolve_thread"} | NOTES
 
 
@@ -1421,6 +1468,13 @@ def test_amain_start(tmp_path, capsys, job_name, name, event, posted):
             CODE_REVIEW_EVENT,
             [(BASE, SHA)],
             False,
+        ),
+        (
+            ["run", "review", "--head-sha", SHA, "--base-sha", BASE],
+            "issue_comment",
+            CODE_REVIEW_EVENT,
+            [(BASE, SHA)],
+            True,
         ),
         (["run", "mention"], "issue_comment", ISSUE_COMMENT_EVENT, [], False),
     ],

@@ -6,7 +6,7 @@ r"""Run Claude on a GitHub PR or issue with a fixed set of tools, in three workf
         --head-sha <sha> --base-sha <sha>
     claude_gh.py apply review --status-id 1 --run-result success --record tmp/actions/actions.json
 
-Jobs: review (PR opened), mention (@claude mention, answers in the thread), code-review.
+Jobs: review (PR opened, or `/review` comment), mention (@claude mention, answers in the thread), code-review.
 
 `run` gives the model Read/Grep/Glob (plus Agent on code-review) and an in-process MCP
 server `gh`. There is no Bash. Reads go to the PR or issue bound at startup. Writes are only
@@ -216,6 +216,7 @@ class GitHub(Protocol):
     async def pr_view(self, pr: int) -> str: ...
     async def issue_view(self, number: int) -> str: ...
     async def head_sha(self, pr: int) -> str: ...
+    async def pr_payload(self, pr: int) -> dict: ...
     async def inline_comment(
         self, pr: int, path: str, line: int, body: str, sha: str
     ) -> None: ...
@@ -343,6 +344,21 @@ def github_error(e: Exception) -> str:
     ]
     parts = [str(resp.status_code), body.get("message", ""), *details]
     return " ".join(p for p in parts if p)[:300]
+
+
+def review_comment_error(body: str, pr: Mapping) -> str | None:
+    words = (body.splitlines() or [""])[0].split()
+    if words != ["/review"]:
+        return f"expected a bare /review, got: {' '.join(words)}"
+    head = pr["head"]["repo"]
+    # Same scope as the PR-open review: the review job may resolve threads.
+    if (
+        head is None
+        or head["full_name"] != pr["base"]["repo"]["full_name"]
+        or "dependabot" in pr["user"]["login"]
+    ):
+        return "/review runs on same-repo, non-Dependabot PRs only; use /code-review"
+    return None
 
 
 def check_body(body: str, secrets: Mapping[str, str]) -> None:
@@ -761,6 +777,12 @@ class GitHubKit:
         )
         return resp.parsed_data.head.sha
 
+    async def pr_payload(self, pr: int) -> dict:
+        resp = await self.gh.arequest(
+            "GET", f"/repos/{self.owner}/{self.name}/pulls/{pr}"
+        )
+        return resp.json()
+
     async def inline_comment(
         self, pr: int, path: str, line: int, body: str, sha: str
     ) -> None:
@@ -839,7 +861,17 @@ async def start(
 ) -> Posted:
     n = target(event).number
     if job == "review":
-        text = f"Reviewing {event['pull_request']['head']['sha'][:7]}… [run]({run_url})"
+        if "pull_request" not in event:
+            err = review_comment_error(event["comment"]["body"], await gh.pr_payload(n))
+            if err:
+                raise SystemExit(f"::error::{err}")
+        # A /review comment event has no pull_request: head not known yet.
+        sha = (
+            f" {event['pull_request']['head']['sha'][:7]}"
+            if "pull_request" in event
+            else ""
+        )
+        text = f"Reviewing{sha}… [run]({run_url})"
     else:
         text = f"Working on it… [run]({run_url})"
     root = mention_from_event(event_name, event).reply_to if job == "mention" else None
@@ -1103,8 +1135,10 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
             p.add_argument("--model", default="opus")
             p.add_argument("--effort", default="high", choices=get_args(EffortLevel))
             p.add_argument("--workdir", type=Path, help="Claude's cwd")
-            p.add_argument("--head-sha", help="code-review: PR head checked out")
-            p.add_argument("--base-sha", help="code-review: PR base")
+            p.add_argument(
+                "--head-sha", help="PR head checked out; review: else the event's"
+            )
+            p.add_argument("--base-sha", help="PR base; review: else the event's")
         if command == "apply":
             p.add_argument("--status-id", type=int, required=True)
             p.add_argument("--run-result", required=True)
@@ -1112,9 +1146,14 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     args = parser.parse_args(argv)
     if args.command == "run":
         given = (args.head_sha is not None, args.base_sha is not None)
-        if given != (args.job == "code-review",) * 2:
+        if (
+            given[0] != given[1]
+            or (args.job == "code-review" and not given[0])
+            or (args.job == "mention" and given[0])
+        ):
             parser.error(
-                "--head-sha and --base-sha: required for code-review, only there"
+                "--head-sha and --base-sha: both or neither; required for code-review,"
+                " not allowed for mention"
             )
     return args
 
@@ -1153,17 +1192,16 @@ async def amain(
             gh, args.job, target(event), raw, status, run_url, args.run_result
         )
     head_sha = diff = None
-    if args.job == "review":
-        pr = event["pull_request"]
-        head_sha = pr["head"]["sha"]
-        diff = await fetch_diff(gh, pr["base"]["sha"], head_sha)
-        if diff is not None:
-            claude_tmp = work_tmp(args, tmp)
-            claude_tmp.mkdir(parents=True, exist_ok=True)
-            (claude_tmp / "pr.diff").write_text(diff)
-    elif args.job == "code-review":
-        head_sha = args.head_sha
-        diff = await fetch_diff(gh, args.base_sha, head_sha)
+    if args.job != "mention":
+        head_sha, base_sha = args.head_sha, args.base_sha
+        if head_sha is None:
+            pr = event["pull_request"]
+            head_sha, base_sha = pr["head"]["sha"], pr["base"]["sha"]
+        diff = await fetch_diff(gh, base_sha, head_sha)
+    if args.job == "review" and diff is not None:
+        claude_tmp = work_tmp(args, tmp)
+        claude_tmp.mkdir(parents=True, exist_ok=True)
+        (claude_tmp / "pr.diff").write_text(diff)
     secrets = load_secrets(env)
     job = build_job(args, gh, secrets, name, event, head_sha, diff, tmp)
     return await run(job, runner)
