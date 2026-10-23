@@ -494,11 +494,7 @@ mod test {
     use committable::Committable;
     use futures::{future::join, stream::StreamExt};
     use hotshot_example_types::node_types::TEST_VERSIONS;
-    use hotshot_types::{
-        data::{VidCommon, ViewNumber},
-        vid::advz::{ADVZCommon, advz_scheme},
-    };
-    use jf_advz::VidScheme;
+    use hotshot_types::data::{VidCommon, ViewNumber};
     use tokio::{task::JoinHandle, time::timeout};
 
     use super::*;
@@ -524,7 +520,7 @@ mod test {
         },
         node::data_source::NodeDataSource,
         testing::{
-            chain::ChainNode,
+            chain::{ChainNode, genesis_vid},
             consensus::MockDataSource,
             mocks::{MockPayload, MockTransaction, MockTypes, mock_transaction},
             sleep,
@@ -566,7 +562,6 @@ mod test {
         )
         .await;
         leaf.block_header_mut().block_number = number;
-        leaf.block_header_mut().version = versions::NEW_PROTOCOL_VERSION;
         let mut qc = QuorumCertificate2::<MockTypes>::genesis(
             &Default::default(),
             &Default::default(),
@@ -638,22 +633,19 @@ mod test {
     async fn seed_chain<P: AvailabilityProvider<MockTypes> + Clone>(
         ds: &SqlDataSource<MockTypes, P>,
         height: u64,
-    ) -> (Vec<LeafQueryData<MockTypes>>, ADVZCommon) {
+    ) -> (Vec<LeafQueryData<MockTypes>>, VidCommon) {
         let mut leaves = Vec::new();
         for n in 0..=height {
             leaves.push(v6_leaf(n).await);
         }
-        let common = advz_scheme(2).disperse([]).unwrap().common;
+        let (common, _) = genesis_vid(leaves[0].header());
         let mut tx = ds.write().await.unwrap();
         for leaf in &leaves {
             tx.insert_leaf(leaf).await.unwrap();
             let block =
                 BlockQueryData::<MockTypes>::new(leaf.header().clone(), MockPayload::genesis());
             tx.insert_block(&block).await.unwrap();
-            let vid = VidCommonQueryData::<MockTypes>::new(
-                leaf.header().clone(),
-                VidCommon::V0(common.clone()),
-            );
+            let vid = VidCommonQueryData::<MockTypes>::new(leaf.header().clone(), common.clone());
             tx.insert_vid(&vid, None).await.unwrap();
         }
         tx.commit().await.unwrap();
@@ -1945,7 +1937,7 @@ mod test {
         }
 
         // A decide batch: the older leaf without a cert2, the newest with its own.
-        let common = VidCommon::V0(advz_scheme(2).disperse([]).unwrap().common);
+        let (common, _) = genesis_vid(leaves[1].header());
         let block_info = |leaf: &LeafQueryData<MockTypes>| {
             let header = leaf.header().clone();
             BlockInfo::new(
@@ -2017,10 +2009,8 @@ mod test {
                 let block =
                     BlockQueryData::<MockTypes>::new(l.header().clone(), MockPayload::genesis());
                 tx.insert_block(&block).await.unwrap();
-                let common = VidCommonQueryData::<MockTypes>::new(
-                    l.header().clone(),
-                    VidCommon::V0(common.clone()),
-                );
+                let common =
+                    VidCommonQueryData::<MockTypes>::new(l.header().clone(), common.clone());
                 tx.insert_vid(&common, None).await.unwrap();
             }
             tx.commit().await.unwrap();
@@ -2084,10 +2074,8 @@ mod test {
                 let block =
                     BlockQueryData::<MockTypes>::new(l.header().clone(), MockPayload::genesis());
                 tx.insert_block(&block).await.unwrap();
-                let common = VidCommonQueryData::<MockTypes>::new(
-                    l.header().clone(),
-                    VidCommon::V0(common.clone()),
-                );
+                let common =
+                    VidCommonQueryData::<MockTypes>::new(l.header().clone(), common.clone());
                 tx.insert_vid(&common, None).await.unwrap();
             }
             tx.commit().await.unwrap();
@@ -2204,10 +2192,8 @@ mod test {
                 let block =
                     BlockQueryData::<MockTypes>::new(leaf.header().clone(), MockPayload::genesis());
                 tx.insert_block(&block).await.unwrap();
-                let vid = VidCommonQueryData::<MockTypes>::new(
-                    leaf.header().clone(),
-                    VidCommon::V0(common.clone()),
-                );
+                let vid =
+                    VidCommonQueryData::<MockTypes>::new(leaf.header().clone(), common.clone());
                 tx.insert_vid(&vid, None).await.unwrap();
             }
             tx.commit().await.unwrap();
@@ -2269,10 +2255,8 @@ mod test {
                 let block =
                     BlockQueryData::<MockTypes>::new(l.header().clone(), MockPayload::genesis());
                 tx.insert_block(&block).await.unwrap();
-                let common = VidCommonQueryData::<MockTypes>::new(
-                    l.header().clone(),
-                    VidCommon::V0(common.clone()),
-                );
+                let common =
+                    VidCommonQueryData::<MockTypes>::new(l.header().clone(), common.clone());
                 tx.insert_vid(&common, None).await.unwrap();
             }
             tx.commit().await.unwrap();
@@ -2356,10 +2340,8 @@ mod test {
                         MockPayload::genesis(),
                     );
                     tx.insert_block(&block).await.unwrap();
-                    let common = VidCommonQueryData::<MockTypes>::new(
-                        l.header().clone(),
-                        VidCommon::V0(common.clone()),
-                    );
+                    let common =
+                        VidCommonQueryData::<MockTypes>::new(l.header().clone(), common.clone());
                     tx.insert_vid(&common, None).await.unwrap();
                 }
             }

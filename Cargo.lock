@@ -4581,6 +4581,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "espresso-deploy"
+version = "0.1.0"
+dependencies = [
+ "alloy",
+ "anyhow",
+ "clap 4.6.1",
+ "espresso-contract-deployer",
+ "espresso-types",
+ "espresso-utils",
+ "hotshot-types",
+ "http-client 0.1.0",
+ "tokio",
+ "tracing",
+ "url",
+ "vbs",
+]
+
+[[package]]
 name = "espresso-dev-node"
 version = "0.1.0"
 dependencies = [
@@ -4604,6 +4622,7 @@ dependencies = [
  "itertools 0.14.0",
  "jf-merkle-tree-compat",
  "rand 0.8.6",
+ "rstest",
  "serde",
  "serde_json",
  "staking-cli",
@@ -4684,18 +4703,15 @@ dependencies = [
  "espresso-contract-deployer",
  "espresso-keyset",
  "espresso-macros",
- "espresso-node",
  "espresso-telemetry",
  "espresso-types",
  "espresso-utils",
  "futures",
- "generic-tests",
  "hotshot-contract-adapter",
  "hotshot-example-types",
  "hotshot-new-protocol",
  "hotshot-orchestrator",
  "hotshot-query-service",
- "hotshot-state-prover",
  "hotshot-types",
  "http-client 0.1.0",
  "http-wire",
@@ -5437,17 +5453,6 @@ checksum = "c2e55f16dcf0e9c00efbe2e655ffe45fc98e7066b52bc92f8a79e64060a79351"
 dependencies = [
  "rustversion",
  "typenum",
-]
-
-[[package]]
-name = "generic-tests"
-version = "0.1.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d9ff6d6584f4f6fa911d5e07856abf1a48dc5599b3734f2eaea130f2c3baa989"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.118",
 ]
 
 [[package]]

@@ -13,6 +13,7 @@
 use std::{collections::HashMap, fmt::Debug, future::Future, str::FromStr};
 
 use futures::stream::TryStreamExt;
+use hotshot_types::traits::node_implementation::NodeType;
 use sqlx::{
     ConnectOptions, Database, Row as _,
     pool::{Pool, PoolOptions},
@@ -22,7 +23,14 @@ use super::{
     Db, Migration, QueryBuilder, Transaction, Write,
     queries::state::{Node, build_hash_batch_insert},
 };
-use crate::QueryResult;
+use crate::{QueryResult, merklized_state::MerklizedState};
+
+/// The database a [`Backend`] runs on.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DbKind {
+    Postgres,
+    Sqlite,
+}
 
 /// The database a copy of the SQL storage runs on.
 ///
@@ -52,20 +60,20 @@ use crate::QueryResult;
 ///     for<'a> i64: Type<DB> + Encode<'a, DB>,
 /// {}
 /// ```
+///
+/// Code matches on [`KIND`](Self::KIND) where both arms compile for either database, and calls a
+/// method of this trait where an arm would only compile for one. Each backend implements it in its
+/// own module.
 pub trait Backend: Database {
     type ConnectOptions: ConnectOptions<Connection = <Self as Database>::Connection>
         + Clone
         + Debug
         + FromStr<Err = sqlx::Error>;
 
-    /// Whether the database is an embedded SQLite file rather than a Postgres server.
-    const EMBEDDED: bool;
+    const KIND: DbKind;
 
     /// The SQL function returning the greater of its arguments.
     const MAX_FN: &'static str;
-
-    /// The SQL column type for binary data.
-    const BINARY_TYPE: &'static str;
 
     /// The connection options [`Config::default`](super::Config) starts from.
     fn default_connect_options() -> Self::ConnectOptions;
@@ -121,12 +129,16 @@ pub(crate) trait StateQueries: Backend {
         }
     }
 
-    fn upsert_nodes(
-        name: &str,
+    fn upsert_nodes<Types, State, const ARITY: usize>(
         nodes: Vec<Node>,
         tx: &mut Transaction<Write>,
-    ) -> impl Future<Output = anyhow::Result<()>> + Send {
+    ) -> impl Future<Output = anyhow::Result<()>> + Send
+    where
+        Types: NodeType,
+        State: MerklizedState<Types, ARITY>,
+    {
         async move {
+            let name = State::state_type();
             for node_chunk in nodes.chunks(20) {
                 let rows: Vec<_> = node_chunk
                     .iter()
@@ -185,14 +197,19 @@ pub(crate) trait StateQueries: Backend {
 
     /// Build a query selecting, for each of `paths`, the newest node at that path created at or
     /// before `created`, ordered from the leaf to the root.
-    fn get_path_query<'q>(
-        table: &'static str,
+    fn get_path_query<'q, Types, State, const ARITY: usize>(
         paths: Vec<serde_json::Value>,
         created: i64,
-    ) -> QueryResult<(QueryBuilder<'q>, String)> {
+    ) -> QueryResult<(QueryBuilder<'q>, String)>
+    where
+        Types: NodeType,
+        State: MerklizedState<Types, ARITY>,
+    {
+        let table = State::state_type();
         let mut query = QueryBuilder::default();
         let created_param = query.bind(created)?;
-        // Each subquery is a point lookup by the composite (path, created) primary key.
+        // SQLite has no native array binding, so we keep the UNION form. Each subquery is a point
+        // lookup by the composite (path, created) primary key.
         let mut sub_queries = Vec::with_capacity(paths.len());
         for path in paths {
             let node_path = query.bind(path)?;

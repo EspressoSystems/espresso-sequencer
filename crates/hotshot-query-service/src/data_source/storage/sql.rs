@@ -299,6 +299,8 @@ impl Config {
         self
     }
 
+    /// Set the minimum number of connections of the query pool. SQLite has one pool, so this does
+    /// nothing there.
     pub fn query_min_connections(mut self, min: u32) -> Self {
         self.pool_opt_query = self.pool_opt_query.min_connections(min);
         self
@@ -313,6 +315,8 @@ impl Config {
         self
     }
 
+    /// Set the maximum number of connections of the query pool. SQLite has one pool, so this does
+    /// nothing there.
     pub fn query_max_connections(mut self, max: u32) -> Self {
         self.pool_opt_query = self.pool_opt_query.max_connections(max);
         self
@@ -476,7 +480,9 @@ impl SqlStorage {
         let pruned_heights = PrunedHeightMetrics::new(&*metrics.subgroup("pruner".into()));
 
         let pool = match connection_type {
-            StorageConnectionType::Query if !Db::EMBEDDED => config.pool_opt_query.clone(),
+            StorageConnectionType::Query if Db::KIND == DbKind::Postgres => {
+                config.pool_opt_query.clone()
+            },
             StorageConnectionType::Query | StorageConnectionType::Sequencer => {
                 config.pool_opt.clone()
             },
@@ -486,7 +492,7 @@ impl SqlStorage {
         let serializable_retry_config = config.serializable_retry_config;
 
         // Only reuse the same pool if we're using sqlite
-        if Db::EMBEDDED || connection_type == StorageConnectionType::Sequencer {
+        if Db::KIND == DbKind::Sqlite || connection_type == StorageConnectionType::Sequencer {
             // re-use the same pool if present and return early
             if let Some(pool) = config.pool {
                 return Ok(Self {
@@ -502,7 +508,7 @@ impl SqlStorage {
             tracing::info!("not reusing existing pool for query connection");
         }
 
-        let schema = config.schema.clone();
+        let schema = config.schema;
         let pool = Db::session_hooks(pool, schema.clone());
 
         if config.reset {
@@ -514,7 +520,7 @@ impl SqlStorage {
         // Create or connect to the schema for this query service.
         let mut conn = pool.acquire().await?;
 
-        if !Db::EMBEDDED {
+        if Db::KIND == DbKind::Postgres {
             // Disable statement timeout for migrations, as they can take a long time
             query("SET statement_timeout = 0")
                 .execute(conn.as_mut())
@@ -927,12 +933,13 @@ impl SqlStorage {
     async fn get_disk_usage(&self) -> anyhow::Result<u64> {
         let mut tx = self.read().await?;
 
-        let query = if Db::EMBEDDED {
-            "
+        let query = match Db::KIND {
+            DbKind::Sqlite => {
+                "
             SELECT( (SELECT page_count FROM pragma_page_count) * (SELECT * FROM pragma_page_size)) \
-             AS total_bytes"
-        } else {
-            "SELECT pg_database_size(current_database())"
+                 AS total_bytes"
+            },
+            DbKind::Postgres => "SELECT pg_database_size(current_database())",
         };
 
         let row = tx.fetch_one(query).await.context("getting disk usage")?;
@@ -943,7 +950,7 @@ impl SqlStorage {
 
     /// No-op on Postgres: no incremental vacuum, and a full one is too expensive to schedule.
     async fn vacuum(&self, pages: u64) -> anyhow::Result<()> {
-        if !Db::EMBEDDED {
+        if Db::KIND == DbKind::Postgres {
             return Ok(());
         }
         let mut conn = self.pool().acquire().await?;
@@ -1115,7 +1122,7 @@ pub mod testing {
     use refinery::Migration;
 
     pub use super::super::tmp_db::TmpDb;
-    use super::{Backend as _, Db};
+    use super::{Backend as _, Db, DbKind};
 
     /// The migrations a [`TmpDb`] applies on top of the default schema.
     pub(crate) fn test_migrations() -> Vec<Migration> {
@@ -1130,20 +1137,19 @@ pub mod testing {
 
     impl TestMerkleTreeMigration {
         fn create(name: &str) -> String {
-            let (bit_vec, binary, hash_pk, root_stored_column) = if Db::EMBEDDED {
-                (
+            let (bit_vec, binary, hash_pk, root_stored_column) = match Db::KIND {
+                DbKind::Sqlite => (
                     "TEXT",
                     "BLOB",
                     "INTEGER PRIMARY KEY AUTOINCREMENT",
                     " (json_extract(data, '$.test_merkle_tree_root'))",
-                )
-            } else {
-                (
+                ),
+                DbKind::Postgres => (
                     "BIT(8)",
                     "BYTEA",
                     "BIGSERIAL PRIMARY KEY",
                     "(data->>'test_merkle_tree_root')",
-                )
+                ),
             };
 
             format!(
@@ -1268,10 +1274,9 @@ mod test {
     }
 
     async fn vacuum(storage: &SqlStorage) {
-        let query = if Db::EMBEDDED {
-            "PRAGMA incremental_vacuum(16000)"
-        } else {
-            "VACUUM"
+        let query = match Db::KIND {
+            DbKind::Sqlite => "PRAGMA incremental_vacuum(16000)",
+            DbKind::Postgres => "VACUUM",
         };
         storage
             .pool
