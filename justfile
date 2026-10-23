@@ -1,4 +1,5 @@
 mod py "scripts/py.just"
+mod claude ".github/claude/claude.just"
 mod binary-upgrade-tests "binary-upgrade-tests/justfile"
 mod soak "crates/process-metrics/justfile"
 mod bench "scripts/network-bench/justfile"
