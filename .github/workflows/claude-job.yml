@@ -70,8 +70,9 @@ jobs:
   run:
     needs: start
     # Only run is cancelled: apply (if: always()) still marks a cancelled run's status comment.
+    # Other jobs get one group per run: GitHub cancels a group's pending job when another queues.
     concurrency:
-      group: claude-${{ inputs.job }}-${{ github.event.pull_request.number || github.event.issue.number || github.run_id }}
+      group: claude-${{ inputs.job }}-${{ inputs.job == 'review' && github.event.pull_request.number || github.run_id }}
       cancel-in-progress: ${{ inputs.job == 'review' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
