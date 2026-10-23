@@ -197,7 +197,6 @@ def prepare(pr: int, data: dict[str, Any], pr_out: Path) -> Path:
     tmp.mkdir(exist_ok=True)
     for name in STALE:
         (tmp / name).unlink(missing_ok=True)
-    shutil.rmtree(tmp / "pr-prefetch", ignore_errors=True)
     (tmp / "pr-review-comments.json").write_text(json.dumps(EMPTY_COMMENTS))
     return wt
 
