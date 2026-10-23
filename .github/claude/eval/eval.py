@@ -1,10 +1,11 @@
 """Replay the Claude PR review on PRs with known bugs; write a report to score by hand.
 
-    just claude::eval [PR ...] [--model opus] [--prepare-only] [--out DIR]
+    just claude::eval [PR ...] [--model opus] [--jobs 10] [--prepare-only] [--out DIR]
 
 Per PR: check out the head in a worktree under tmp/claude-eval/wt/<pr>, write a minimal
 pull_request event and an empty comments file, and run the `review` job in-process with
-`claude_gh.amain`. Results go to <out>/<pr>/ and <out>/report.md.
+`claude_gh.amain`. Worktrees are prepared one after another, then up to `--jobs` reviews
+run concurrently. Results go to <out>/<pr>/ and <out>/report.md.
 
 Never writes to GitHub: only `run` is called, with a GitHub whose writes raise.
 
@@ -14,6 +15,7 @@ CLAUDE_CONFIG_DIR, CLAUDE_CLI_PATH (all optional).
 
 import argparse
 import asyncio
+import contextvars
 import json
 import logging
 import os
@@ -38,6 +40,9 @@ ROOT = REPO / "tmp" / "claude-eval"
 WORKTREES = ROOT / "wt"
 # Shape of scripts/fetch-pr-team-comments. Empty so later discussion of the bug cannot leak in.
 EMPTY_COMMENTS = {"comments": [], "reviewThreads": []}
+CURRENT_PR: contextvars.ContextVar[int | None] = contextvars.ContextVar(
+    "current_pr", default=None
+)
 STALE = ("actions.json", "actions.json.part", "is-backport", "pr.diff")
 
 
@@ -48,26 +53,37 @@ def main() -> None:
     out.mkdir(parents=True)  # FileExistsError: never overwrite an earlier run
     logging.getLogger().setLevel(logging.INFO)
     prs = args.pr or list(cases)
-    asyncio.run(evaluate(prs, args.model, args.prepare_only, out))
+    asyncio.run(evaluate(prs, args.model, args.prepare_only, args.jobs, out))
     if not args.prepare_only:
         report = "\n".join(section(pr, cases[pr], out / str(pr)) for pr in prs)
         (out / "report.md").write_text(f"# Review eval, model {args.model}\n\n{report}")
         print(f"report: {out / 'report.md'}")
 
 
-async def evaluate(prs: list[int], model: str, prepare_only: bool, out: Path) -> None:
+async def evaluate(
+    prs: list[int], model: str, prepare_only: bool, jobs: int, out: Path
+) -> None:
     token = github_token()
     kit = cg.GitHubKit(FULL_NAME, token)
     gh = ReadOnlyGitHub(kit)
+    worktrees = {}
     for i, pr in enumerate(prs, 1):
-        step = "preparing" if prepare_only else f"reviewing with {model}"
-        print(f"[{i}/{len(prs)}] {pr}: {step}", flush=True)
-        wt = prepare(pr, await fetch_pull(kit, pr), out / str(pr))
-        if prepare_only:
-            print(f"{pr}: prepared {wt}", flush=True)
-            continue
-        await review(gh, token, model, wt, out / str(pr))
-        print(result_line(pr, out / str(pr)), flush=True)
+        print(f"[{i}/{len(prs)}] {pr}: preparing", flush=True)
+        worktrees[pr] = prepare(pr, await fetch_pull(kit, pr), out / str(pr))
+    if prepare_only:
+        return
+    slots = asyncio.Semaphore(jobs)
+
+    async def run(pr: int, wt: Path) -> None:
+        async with slots:
+            print(f"{pr}: reviewing with {model}", flush=True)
+            CURRENT_PR.set(pr)
+            await review(gh, token, model, wt, out / str(pr), pr)
+            print(result_line(pr, out / str(pr)), flush=True)
+
+    async with asyncio.TaskGroup() as tg:
+        for pr, wt in worktrees.items():
+            tg.create_task(run(pr, wt))
 
 
 def load_cases() -> dict[int, dict[str, Any]]:
@@ -80,6 +96,7 @@ def parse_args(cases: dict[int, dict[str, Any]]) -> argparse.Namespace:
     )
     ap.add_argument("pr", nargs="*", type=int, help="default: every case")
     ap.add_argument("--model", default="opus")
+    ap.add_argument("--jobs", type=positive, default=10, help="concurrent reviews")
     ap.add_argument("--prepare-only", action="store_true", help="no Claude run")
     ap.add_argument(
         "--out", type=Path, help="default: tmp/claude-eval/<UTC time>-<model>"
@@ -88,6 +105,12 @@ def parse_args(cases: dict[int, dict[str, Any]]) -> argparse.Namespace:
     if unknown := [pr for pr in args.pr if pr not in cases]:
         ap.error(f"not in {CASES.name}: {unknown}")
     return args
+
+
+def positive(value: str) -> int:
+    if (n := int(value)) < 1:
+        raise argparse.ArgumentTypeError(f"must be at least 1, got {n}")
+    return n
 
 
 def github_token() -> str | None:
@@ -211,7 +234,12 @@ def event(pr: int, data: dict[str, Any]) -> dict[str, Any]:
 
 
 async def review(
-    gh: ReadOnlyGitHub, token: str | None, model: str, wt: Path, pr_out: Path
+    gh: ReadOnlyGitHub,
+    token: str | None,
+    model: str,
+    wt: Path,
+    pr_out: Path,
+    pr: int,
 ) -> None:
     """Run the review job with Claude's cwd in `wt`; copy log, exit code and record."""
     args = cg.parse_args(["run", "review", "--model", model, "--workdir", str(wt)])
@@ -228,6 +256,7 @@ async def review(
     ):  # unset: the CLI uses the local login
         env["ANTHROPIC_API_KEY"] = key
     handler = logging.FileHandler(pr_out / "log.txt")
+    handler.addFilter(lambda _: CURRENT_PR.get() == pr)
     handler.setFormatter(
         logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
     )

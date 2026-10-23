@@ -50,6 +50,7 @@ just claude::eval                       # all cases, opus
 just claude::eval --model fable 4670    # one case, another model
 just claude::eval --prepare-only 4456   # worktree and event only, no Claude run, no cost
 just claude::eval --out tmp/claude-eval/my-run 4456
+just claude::eval --jobs 3              # at most 3 concurrent reviews (default 10)
 ```
 
 ### Results
