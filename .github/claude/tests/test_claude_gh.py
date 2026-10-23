@@ -728,17 +728,20 @@ def test_parse_args():
     assert args.status_id == 5 and args.record == Path("r")
 
 
-def test_parse_args_shas_only_and_always_for_code_review():
+def test_parse_args_shas_both_or_neither_required_for_code_review():
     argv = ["run", "code-review", "--head-sha", "h", "--base-sha", "b"]
     args = cg.parse_args(argv)
     assert (args.head_sha, args.base_sha) == ("h", "b")
     for bad in (
         ["run", "code-review"],
         ["run", "code-review", "--head-sha", "h"],
-        ["run", "review", "--head-sha", "h", "--base-sha", "b"],
+        ["run", "review", "--head-sha", "h"],
+        ["run", "mention", "--head-sha", "h", "--base-sha", "b"],
     ):
         with pytest.raises(SystemExit):
             cg.parse_args(bad)
+    args = cg.parse_args(["run", "review", "--head-sha", "h", "--base-sha", "b"])
+    assert (args.head_sha, args.base_sha) == ("h", "b")
 
 
 def test_parse_thread():
@@ -1130,6 +1133,12 @@ def test_start_review_names_head_and_code_review_is_generic():
     ]
 
 
+def test_start_review_from_comment_has_no_head():
+    gh = FakeGitHub()
+    asyncio.run(cg.start(gh, "review", "issue_comment", CODE_REVIEW_EVENT, RUN))
+    assert gh.posted == [("comment", (7, "Reviewing… [run](http://run)"))]
+
+
 def test_start_prints_only_the_comment_id(capsys):
     event = ISSUE_COMMENT_EVENT
     gh = FakeGitHub()
@@ -1415,6 +1424,13 @@ def test_amain_start(tmp_path, capsys, job_name, name, event, posted):
             CODE_REVIEW_EVENT,
             [(BASE, SHA)],
             False,
+        ),
+        (
+            ["run", "review", "--head-sha", SHA, "--base-sha", BASE],
+            "issue_comment",
+            CODE_REVIEW_EVENT,
+            [(BASE, SHA)],
+            True,
         ),
         (["run", "mention"], "issue_comment", ISSUE_COMMENT_EVENT, [], False),
     ],

@@ -18,13 +18,14 @@ Commands: `just claude::fmt`, `just claude::lint`, `just claude::check`, `just c
 
 ## PR review in CI
 
-`.github/workflows/claude-review.yml` runs on non-draft, non-fork PRs when opened, reopened or marked ready. It calls
-`claude-job.yml`, which also serves `claude.yml` (`@claude` mentions and `/code-review`): `start` posts a status comment
-with the write token. `run` fetches team review comments into `tmp/pr-review-comments.json` (plus original-PR context
-for backports) and runs `claude_gh.py run review` with a read token and `ANTHROPIC_API_KEY`; Claude reads the diff and
-checkout and records inline comments, candidates with verdicts, and a summary. `apply` posts the record with the write
-token and edits the status comment with the summary and cost footer. All three jobs run `.github/claude` from one
-commit: the merge commit for reviews, the default branch head for `claude.yml`.
+`.github/workflows/claude-review.yml` runs on non-draft, non-fork PRs when opened, reopened or marked ready; an OWNER or
+MEMBER `/review` comment on a PR re-runs it on the current head via `claude.yml`. It calls `claude-job.yml`, which also
+serves `claude.yml` (`@claude` mentions, `/review` and `/code-review`): `start` posts a status comment with the write
+token. `run` fetches team review comments into `tmp/pr-review-comments.json` (plus original-PR context for backports)
+and runs `claude_gh.py run review` with a read token and `ANTHROPIC_API_KEY`; Claude reads the diff and checkout and
+records inline comments, candidates with verdicts, and a summary. `apply` posts the record with the write token and
+edits the status comment with the summary and cost footer. All three jobs run `.github/claude` from one commit: the
+merge commit for PR-open reviews, the default branch head for `claude.yml` (including `/review`).
 
 ## Evaluating review changes
 
