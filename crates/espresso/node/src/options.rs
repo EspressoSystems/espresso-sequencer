@@ -32,7 +32,7 @@ use crate::{
     keyset::KeySetOptions,
     persistence,
     proposal_fetcher::ProposalFetcherConfig,
-    startup_catchup::BootstrapParams,
+    startup_catchup::StartupCatchupParams,
 };
 
 // This options struct is a bit unconventional. The sequencer has multiple optional modules which
@@ -230,8 +230,8 @@ pub struct Options {
 }
 
 impl Options {
-    pub fn bootstrap_params(&self) -> BootstrapParams {
-        BootstrapParams {
+    pub fn bootstrap_params(&self) -> StartupCatchupParams {
+        StartupCatchupParams {
             step_timeout: self.bootstrap_epoch_catchup_timeout,
             deadline: self.bootstrap_deadline,
         }

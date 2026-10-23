@@ -3685,7 +3685,7 @@ mod test {
         legacy_chain::LegacyChain,
         persistence,
         persistence::no_storage,
-        startup_catchup::BootstrapParams,
+        startup_catchup::StartupCatchupParams,
         testing::{
             TestConfig, TestConfigBuilder, decided_leaves, wait_for_decide_on_handle,
             wait_for_epochs,
@@ -5742,7 +5742,7 @@ mod test {
                 local_timeout: Duration::from_secs(5),
                 http_delay: Duration::ZERO,
             },
-            bootstrap: BootstrapParams {
+            bootstrap: StartupCatchupParams {
                 step_timeout: Duration::from_secs(30),
                 deadline: Duration::from_secs(900),
             },
@@ -6578,7 +6578,7 @@ mod test {
     }
 
     /// A validator that restarts on an empty database catches up its stake tables from the L1
-    /// light client anchor instead of from peers epoch by epoch, and goes on to propose again.
+    /// light client finalized header instead of from peers epoch by epoch, and goes on to propose again.
     ///
     /// Six nodes run the new protocol. Once the network is past epoch twelve, the light client
     /// mock is pointed at a recent decided block, node 5 is stopped, and it restarts on an empty
@@ -6649,10 +6649,10 @@ mod test {
 
         // Point the light client at a decided block the API can still serve.
         let tip: u64 = api_client.get("status/block-height").send().await?;
-        let anchor_height = tip - 1;
-        let anchor_epoch = epoch_from_block_number(anchor_height, EPOCH_HEIGHT);
+        let finalized_height = tip - 1;
+        let finalized_epoch = epoch_from_block_number(finalized_height, EPOCH_HEIGHT);
         let header: Header = api_client
-            .get(&format!("availability/header/{anchor_height}"))
+            .get(&format!("availability/header/{finalized_height}"))
             .send()
             .await?;
         let state = header.get_light_client_state(ViewNumber::genesis())?;
@@ -6668,7 +6668,7 @@ mod test {
             .setFinalizedState(
                 LightClientStateSol {
                     viewNum: 0,
-                    blockHeight: anchor_height,
+                    blockHeight: finalized_height,
                     blockCommRoot: field_to_u256(state.block_comm_root),
                 }
                 .into(),
@@ -6685,7 +6685,7 @@ mod test {
                 .wait_for_finalized_block(receipt.block_number.context("no block number")?),
         )
         .await
-        .context("the anchor never became L1 finalized")?;
+        .context("the finalized header never became L1 finalized")?;
 
         let height_before_restart = tip;
         let mut node = network.peers.pop().context("no validator to restart")?;
@@ -6734,20 +6734,20 @@ mod test {
             .await;
 
         let exported = metrics.export()?;
-        let window_epoch: u64 = exported
+        let current_epoch: u64 = exported
             .lines()
             .find_map(|line| line.strip_prefix("consensus_bootstrap_window_epoch "))
-            .context("window epoch gauge not exported")?
+            .context("current epoch gauge not exported")?
             .parse()?;
-        // The current epoch is the anchor's, with nothing below it caught up from peers.
+        // The current epoch is the finalized header's, with nothing below it caught up from peers.
         let membership = node.node_state().coordinator.membership().clone();
-        for epoch in (anchor_epoch - 3)..=(anchor_epoch + 1) {
+        for epoch in (finalized_epoch - 3)..=(finalized_epoch + 1) {
             assert!(
                 membership.snapshot(EpochNumber::new(epoch)).is_some(),
                 "stake table for epoch {epoch} was not caught up from the light client"
             );
         }
-        for epoch in [anchor_epoch, anchor_epoch + 1] {
+        for epoch in [finalized_epoch, finalized_epoch + 1] {
             assert!(
                 membership
                     .epoch_block_reward(EpochNumber::new(epoch))
@@ -6756,11 +6756,13 @@ mod test {
             );
         }
         assert!(
-            exported.contains(&format!("consensus_bootstrap_anchor_epoch {anchor_epoch}")),
+            exported.contains(&format!(
+                "consensus_bootstrap_anchor_epoch {finalized_epoch}"
+            )),
             "{exported}"
         );
-        // Peer catchup above the anchor may advance the current epoch past it.
-        assert!(window_epoch >= anchor_epoch, "{exported}");
+        // Peer catchup above the finalized header may advance the current epoch past it.
+        assert!(current_epoch >= finalized_epoch, "{exported}");
 
         node.start_consensus().await;
 

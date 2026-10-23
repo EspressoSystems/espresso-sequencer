@@ -67,7 +67,8 @@ use crate::{
         recipient_source::RecipientSource,
     },
     startup_catchup::{
-        BootstrapMetrics, BootstrapParams, catch_up_cliquenet_stake_tables, query_clients,
+        StartupCatchupMetrics, StartupCatchupParams, catch_up_cliquenet_stake_tables,
+        state_peer_clients,
     },
     state_signature::{self, DecidedLeaf, StateSignatureMemStorage, StateSigner},
 };
@@ -140,7 +141,7 @@ where
         stake_table_capacity: usize,
         event_consumer: impl PersistenceEventConsumer + 'static,
         proposal_fetcher_cfg: ProposalFetcherConfig,
-        bootstrap_params: BootstrapParams,
+        bootstrap_params: StartupCatchupParams,
         state_peers: Vec<Url>,
         empty_block_delay: Duration,
         block_sizes: BTreeMap<Version, u64>,
@@ -183,14 +184,14 @@ where
 
         let mut coordinator_network = coordinator_network(upgrade_lock.clone()).await?;
 
-        let peers = query_clients(&state_peers);
+        let state_peer_clients = state_peer_clients(&state_peers);
         let current_epoch = catch_up_cliquenet_stake_tables(
             &membership_coordinator,
             epoch_height,
             || instance_state.finalized_light_client_state(),
-            &peers,
+            &state_peer_clients,
             &bootstrap_params,
-            Some(&BootstrapMetrics::new(metrics)),
+            Some(&StartupCatchupMetrics::new(metrics)),
         )
         .await
         .context("startup stake-table catchup failed")?;

@@ -43,7 +43,7 @@ use test_utils::reserve_tcp_port;
 use tokio::time::sleep;
 
 use crate::{
-    BootstrapParams, CatchupParams, Genesis, L1Params, SequencerApiVersion,
+    CatchupParams, Genesis, L1Params, SequencerApiVersion, StartupCatchupParams,
     api::{
         Options,
         data_source::testing::TestableSequencerDataSource,
@@ -319,7 +319,7 @@ fn replay_params(own_url: url::Url) -> FollowerParams {
             local_timeout: Duration::from_secs(5),
             http_delay: Duration::ZERO,
         },
-        bootstrap: BootstrapParams {
+        bootstrap: StartupCatchupParams {
             step_timeout: Duration::from_secs(30),
             deadline: Duration::from_secs(30),
         },

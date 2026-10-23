@@ -82,7 +82,7 @@ pub use options::Options;
 use proposal_fetcher::ProposalFetcherConfig;
 pub use run::main;
 use serde::{Deserialize, Serialize};
-pub use startup_catchup::BootstrapParams;
+pub use startup_catchup::StartupCatchupParams;
 use tracing::info;
 use url::Url;
 use vbs::version::StaticVersion;
@@ -128,7 +128,7 @@ pub struct NetworkParams {
     pub config_peers: Option<Vec<Url>>,
     pub catchup: CatchupParams,
     /// Startup stake-table catchup (`catch_up_cliquenet_stake_tables`).
-    pub bootstrap: BootstrapParams,
+    pub bootstrap: StartupCatchupParams,
     /// The address to advertise as our public API's URL
     pub public_api_url: Option<Url>,
     /// Cliquenet network address.
@@ -1654,7 +1654,7 @@ pub mod testing {
                 stake_table_capacity,
                 event_consumer,
                 Default::default(),
-                BootstrapParams {
+                StartupCatchupParams {
                     step_timeout: Duration::from_secs(2),
                     deadline: Duration::from_secs(15),
                 },
