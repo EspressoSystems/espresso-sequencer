@@ -50,7 +50,7 @@ Review whether tests are adequate, not whether they pass.
      covers this round trip; check it by reading the write and read paths. Every storage backend gets the change.
    - Upgrades: behavior gated on the right protocol version; both sides of a transition handled.
    - Boundaries: first/last item of an epoch or range, state before a feature activates, empty or genesis state.
-   - Operator action needed: an operator note is present.
+   - Operator action needed: a `doc/operator-notes/*.md` fragment is present.
    - Secrets: can anything secret (keys, tokens, passwords, credentials in URLs) leave the process or reach a less
      trusted reader through this change? Follow error rendering and struct dumps, not only explicit fields.
 8. Design at the type level: would better types make this defect or this runtime check impossible?
