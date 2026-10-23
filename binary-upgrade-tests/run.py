@@ -60,7 +60,8 @@ SAFE_STOP_WINDOW = (2, 10)
 #     block-explorer)
 #   - the CDN (broker-*, marshal-0, cdn-whitelist, keydb), which only
 #     the base tag's compose runs: no image for it is published any more, and
-#     the upgraded nodes ignore it
+#     the upgraded nodes ignore it. Delete these entries once the base tag is a
+#     release cut after the CDN was removed from docker-compose.yaml.
 NOUPGRADE_SERVICES = (
     "block-explorer",
     "broker-0",
