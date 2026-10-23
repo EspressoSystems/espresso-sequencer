@@ -1280,7 +1280,9 @@ def build(
 
 def test_build_review_job(tmp_path):
     j = build(tmp_path, ["review"], REVIEW_EVENT, SHA, DIFF)
-    assert j.prompt == cg.review_prompt(PR, SHA, doc("review.md"))
+    assert j.prompt == cg.review_prompt(
+        PR, SHA, doc("review-standard.md") + "\n\n" + doc("review.md")
+    )
     assert j.append is None and j.cwd is None
     assert (j.builtin, j.settings) == (["Read", "Grep", "Glob"], ["user"])
     assert set(tools_by_name(j.tools)) == {"pr_diff", "pr_view"} | WRITES_AND_NOTES
@@ -1291,7 +1293,7 @@ def test_build_review_job(tmp_path):
 def test_build_review_job_backport(tmp_path):
     (tmp_path / "is-backport").write_text("41")
     j = build(tmp_path, ["review"], REVIEW_EVENT, SHA, DIFF)
-    body = doc("review.md") + "\n\n" + doc("review-backport.md")
+    body = doc("review-backport.md") + "\n\n" + doc("review.md")
     assert j.prompt == cg.review_prompt(PR, SHA, body)
     assert (j.append, j.builtin) == (None, ["Read", "Grep", "Glob"])
 
@@ -1302,7 +1304,7 @@ def test_build_review_job_backport_reads_workdir_tmp(tmp_path):
     (work / "tmp" / "is-backport").write_text("41")
     argv = ["review", "--workdir", str(work)]
     j = build(tmp_path, argv, REVIEW_EVENT, SHA, DIFF)
-    body = doc("review.md") + "\n\n" + doc("review-backport.md")
+    body = doc("review-backport.md") + "\n\n" + doc("review.md")
     assert j.prompt == cg.review_prompt(PR, SHA, body)
     assert j.record_path == tmp_path / "actions.json"
 

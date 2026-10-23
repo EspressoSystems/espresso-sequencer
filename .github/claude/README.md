@@ -5,8 +5,9 @@
 | File                    | Purpose                                                                           |
 | ----------------------- | --------------------------------------------------------------------------------- |
 | `claude_gh.py`          | The CLI the workflows call.                                                       |
-| `review.md`             | Runbook for the `review` job.                                                     |
-| `review-backport.md`    | Appended to `review.md` on backport PRs (branch `backport-<n>-to-*`).             |
+| `review.md`             | Shared part of the `review` job: inputs, prior threads, findings, output.         |
+| `review-standard.md`    | Review procedure, placed before `review.md` on regular PRs.                       |
+| `review-backport.md`    | Placed before `review.md` instead on backport PRs (branch `backport-<n>-to-*`).   |
 | `mention.md`            | Prompt for `@claude` mentions.                                                    |
 | `code-review.md`        | Appended to the system prompt of the `/code-review` comment command.              |
 | `backport-resolve.md`   | Prompt for resolving backport conflicts (`.github/workflows/backport.yml`).       |
@@ -29,7 +30,7 @@ commit: the merge commit for reviews, the default branch head for `claude.yml`.
 ## Evaluating review changes
 
 `eval/eval.py` replays the `review` job on the PRs in `eval/cases.toml`, using the working tree's `claude_gh.py` and
-`review.md`.
+`review*.md`.
 
 - Never posts or modifies anything on GitHub: only the `run` step executes, against a GitHub whose write methods raise.
 - Needs no local state: all files go under `tmp/claude-eval/`, worktrees under `tmp/claude-eval/wt/<pr>`.
