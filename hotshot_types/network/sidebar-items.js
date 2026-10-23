@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["BuilderType","NetworkConfigError","NetworkConfigSource"],"struct":["CombinedNetworkConfig","Libp2pConfig","NetworkConfig","NetworkConfigFile","PeerConfigKeys","PublicKeysFile","RandomBuilderConfig"]};
+window.SIDEBAR_ITEMS = {"enum":["BuilderType","NetworkConfigError","NetworkConfigSource"],"struct":["NetworkConfig","NetworkConfigFile","PeerConfigKeys","PublicKeysFile","RandomBuilderConfig"]};

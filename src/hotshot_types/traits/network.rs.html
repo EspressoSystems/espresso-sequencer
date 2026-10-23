@@ -170,7 +170,7 @@
 <a href=#170 id=170 data-nosnippet>170</a>
 <a href=#171 id=171 data-nosnippet>171</a><span class="doccomment">/// represents a networking implmentration
 <a href=#172 id=172 data-nosnippet>172</a>/// exposes low level API for interacting with a network
-<a href=#173 id=173 data-nosnippet>173</a>/// intended to be implemented for libp2p, the centralized server,
+<a href=#173 id=173 data-nosnippet>173</a>/// intended to be implemented for a message transport,
 <a href=#174 id=174 data-nosnippet>174</a>/// and memory network
 <a href=#175 id=175 data-nosnippet>175</a></span><span class="attr">#[async_trait]
 <a href=#176 id=176 data-nosnippet>176</a></span><span class="kw">pub trait </span>ConnectedNetwork&lt;K: SignatureKey + <span class="lifetime">'static</span>&gt;: Clone + Send + Sync + <span class="lifetime">'static </span>{
@@ -293,7 +293,7 @@
 <a href=#293 id=293 data-nosnippet>293</a>    </span>Da,
 <a href=#294 id=294 data-nosnippet>294</a>}
 <a href=#295 id=295 data-nosnippet>295</a>
-<a href=#296 id=296 data-nosnippet>296</a><span class="doccomment">/// Libp2p topics require a string, so we need to convert our enum to a string
+<a href=#296 id=296 data-nosnippet>296</a><span class="doccomment">/// Topics travel as strings, so we need to convert our enum to a string
 <a href=#297 id=297 data-nosnippet>297</a></span><span class="kw">impl </span>Display <span class="kw">for </span>Topic {
 <a href=#298 id=298 data-nosnippet>298</a>    <span class="kw">fn </span>fmt(<span class="kw-2">&amp;</span><span class="self">self</span>, f: <span class="kw-2">&amp;mut </span>std::fmt::Formatter&lt;<span class="lifetime">'_</span>&gt;) -&gt; std::fmt::Result {
 <a href=#299 id=299 data-nosnippet>299</a>        <span class="kw">match </span><span class="self">self </span>{
