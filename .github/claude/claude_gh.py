@@ -1045,9 +1045,13 @@ def build_job(
     if args.job == "review":
         assert head_sha is not None
         tgt = target(event)
-        doc = (CLAUDE_DIR / "review.md").read_text()
-        if (work_tmp(args, tmp) / "is-backport").exists():
-            doc += "\n\n" + (CLAUDE_DIR / "review-backport.md").read_text()
+        backport = (work_tmp(args, tmp) / "is-backport").exists()
+        focus = "review-backport.md" if backport else "review-standard.md"
+        doc = (
+            (CLAUDE_DIR / focus).read_text()
+            + "\n\n"
+            + (CLAUDE_DIR / "review.md").read_text()
+        )
         prompt = review_prompt(tgt, head_sha, doc)
     elif args.job == "mention":
         mention = mention_from_event(event_name, event)
