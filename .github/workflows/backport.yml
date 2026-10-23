@@ -184,7 +184,12 @@ jobs:
           prompt_body=$(git show "$GITHUB_SHA:.github/claude/backport-resolve.md")
           prompt=$(printf 'Mergiraf left conflict markers in these backport PRs (number:branch):\n%s\n\n%s' \
             "$NEEDS_CLAUDE" "$prompt_body")
+          # ~/.cargo is mounted read-only, so Claude gets a scratch CARGO_HOME. It is not
+          # the verify step's: verify never trusts a registry cache Claude wrote.
+          export CARGO_HOME="$RUNNER_TEMP/claude-cargo-home"
+          mkdir -p "$CARGO_HOME"
           ci-sandbox --ro ~/.local/bin --ro ~/.local/share/claude --ro ~/.cargo --ro ~/.rustup \
+            --rw "$CARGO_HOME" --env CARGO_HOME \
             --env ANTHROPIC_API_KEY --env CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC -- \
             claude -p "$prompt" --model claude-opus-4-8 --dangerously-skip-permissions
 
@@ -224,7 +229,7 @@ jobs:
               fail "$pr" "Claude produced no new commits over origin/$branch."
             elif ! sb git checkout --detach "$sha"; then
               fail "$pr" "git checkout $sha failed."
-            elif ! sb timeout 30m cargo check --locked --tests --examples; then
+            elif ! sb timeout 45m cargo check --locked --tests --examples; then
               fail "$pr" "\`cargo check --locked --tests --examples\` failed or timed out after resolution."
             elif ! sb sh -c 'git update-ref "refs/resolved/$1" "$2" && git bundle create - "$3..refs/resolved/$1"' \
                 sh "$pr" "$sha" "$base" > "$out/$pr.bundle"; then

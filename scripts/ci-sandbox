@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Run an untrusted command in a bubblewrap sandbox. No process outlives it
 # (pid namespace + die-with-parent), /proc is fresh, and the env is cleared.
+# Values stay in the environment: bwrap argv is visible in /proc and exec telemetry.
 set -euo pipefail
 
 usage() {
@@ -12,7 +13,7 @@ EOF
 
 net=(--share-net)
 binds=()
-envs=()
+keep=(PATH HOME)
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -28,7 +29,7 @@ while [[ $# -gt 0 ]]; do
     --env)
       [[ $# -ge 2 ]] || usage
       [[ -n "${!2+x}" ]] || { echo "env var $2 is not set" >&2; exit 1; }
-      envs+=(--setenv "$2" "${!2}")
+      keep+=("$2")
       shift 2
       ;;
     --) shift && break ;;
@@ -36,6 +37,14 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 [[ $# -gt 0 ]] || usage
+
+# Capture before the unset loop below removes PWD.
+cwd="${PWD}"
+home="${HOME}"
+readarray -t exported < <(compgen -e)
+for name in "${exported[@]}"; do
+  [[ " ${keep[*]} " == *" ${name} "* ]] || unset -v "${name}" 2> /dev/null || true
+done
 
 # /run holds the docker and dbus sockets, either of which reaches the host.
 # Bind back only what name resolution (Ubuntu) and PATH (NixOS) need.
@@ -45,9 +54,8 @@ for dir in /run/systemd/resolve /run/current-system /run/wrappers; do
 done
 
 exec bwrap \
-  --ro-bind / / --dev /dev --proc /proc --tmpfs /tmp --tmpfs "${HOME}" \
+  --ro-bind / / --dev /dev --proc /proc --tmpfs /tmp --tmpfs "${home}" \
   --tmpfs /run "${run[@]}" \
-  "${binds[@]}" --bind "${PWD}" "${PWD}" --chdir "${PWD}" \
-  --unshare-all --unshare-user --disable-userns "${net[@]}" --die-with-parent --new-session --clearenv \
-  --setenv PATH "${PATH}" --setenv HOME "${HOME}" "${envs[@]}" \
+  "${binds[@]}" --bind "${cwd}" "${cwd}" --chdir "${cwd}" \
+  --unshare-all --unshare-user --disable-userns "${net[@]}" --die-with-parent --new-session \
   -- "$@"

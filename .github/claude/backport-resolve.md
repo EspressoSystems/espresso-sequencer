@@ -11,7 +11,6 @@ For each PR, do the following:
 
 Rules:
 
-- Do not run `cargo`; the workflow compiles. `just fmt` is allowed.
 - Do not push and do not use the `gh` CLI; the workflow verifies compilation and pushes.
 - Do not commit the `claude-summaries/` files.
 - Only create new commits authored by the current git identity (the bot). Do not use `--amend`, `--author=`,

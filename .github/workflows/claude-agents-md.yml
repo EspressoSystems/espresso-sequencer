@@ -34,6 +34,7 @@ jobs:
       contents: read
     outputs:
       propose: ${{ steps.patch.outputs.propose }}
+      sha: ${{ steps.audited.outputs.sha }}
     steps:
       - uses: step-security/harden-runner@v2
         with:
@@ -63,6 +64,11 @@ jobs:
           fetch-depth: 0
           filter: blob:none
           persist-credentials: false
+
+      # The commit the patch is a diff against; propose checks out the same one.
+      - name: Record the audited commit
+        id: audited
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       # Installs ci-sandbox outside the worktree, which is untrusted once Claude ran.
       - uses: ./.github/actions/ci-sandbox
@@ -166,7 +172,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ github.head_ref || github.ref_name }}
+          ref: ${{ needs.audit.outputs.sha }}
           fetch-depth: 0
           filter: blob:none
           persist-credentials: false
@@ -181,19 +187,7 @@ jobs:
           set -euo pipefail
           in="$RUNNER_TEMP/in"
           # The patch is audit output: text edits to AGENTS.md and doc/ files only.
-          numstat=$(git apply --numstat "$in/changes.patch")
-          paths=$(cut -f3- <<< "$numstat")
-          if [ -z "$paths" ] || grep -vE '^(AGENTS\.md|doc/.+)$' <<< "$paths" || grep -F '..' <<< "$paths"; then
-            echo "::error::patch is empty or touches paths outside AGENTS.md and doc/"
-            exit 1
-          fi
-          # Binary hunks show `-` counts. The summary may only create or delete regular
-          # files (mode 100644): any other line is a rename, copy, mode change or special file.
-          summary=$(git apply --summary "$in/changes.patch")
-          if grep -qP '^-\t' <<< "$numstat" || grep -vE '^ (create|delete) mode 100644 ' <<< "$summary"; then
-            echo "::error::patch has binary hunks, renames, copies, mode changes or non-regular files"
-            exit 1
-          fi
+          scripts/check-doc-patch "$in/changes.patch"
           git apply "$in/changes.patch"
           mkdir -p ./tmp
           # Fence the model-written report so `Fixes #N` and @mentions stay inert. The
@@ -213,6 +207,8 @@ jobs:
         uses: peter-evans/create-pull-request@v8
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+          # The checkout is detached at the audited commit.
+          base: ${{ github.head_ref || github.ref_name }}
           # One branch per base, so a PR run does not clobber the scheduled PR.
           # Re-running force-pushes and updates the open PR in place.
           branch: bot/agents-md/${{ github.head_ref || github.ref_name }}
