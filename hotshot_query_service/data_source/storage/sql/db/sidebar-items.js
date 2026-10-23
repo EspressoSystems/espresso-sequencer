@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["syntax_helpers"],"type":["Db"]};
+window.SIDEBAR_ITEMS = {"enum":["DbKind"],"trait":["Backend","StateQueries"],"type":["Db"]};
