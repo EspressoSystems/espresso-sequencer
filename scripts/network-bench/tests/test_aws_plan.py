@@ -1180,6 +1180,71 @@ def test_plan_writes_the_protocol_version_into_the_run_genesis(fleet_dir):
     assert 'upgrade_version = "0.8"' in genesis
 
 
+def test_slow_nodes_flags_default_off():
+    cfg = node_env_config()
+    assert (cfg.slow_nodes, cfg.slow_cores) == (0, None)
+    cfg = node_env_config("--slow-nodes", "2", "--slow-cores", "4")
+    assert (cfg.slow_nodes, cfg.slow_cores) == (2, 4)
+
+
+@pytest.mark.parametrize(
+    ("kw", "match"),
+    [
+        ({"slow_nodes": 2}, "--slow-nodes needs --slow-cores"),
+        ({"slow_cores": 4}, "--slow-cores needs --slow-nodes"),
+        ({"slow_nodes": 5, "slow_cores": 4}, "at most the 4 validator-only nodes: 5"),
+    ],
+)
+def test_slow_nodes_refused(kw: dict, match: str):
+    with pytest.raises(awsb.Refused, match=match):
+        awsb.plan_hosts(small_cfg(5, **kw))
+
+
+def test_slow_nodes_are_the_last_nodes():
+    cfg = small_cfg(5, slow_nodes=2, slow_cores=4)
+    assert awsb.slow_node_names(cfg) == ["node3", "node4"]
+    assert awsb.slow_node_names(small_cfg(5)) == []
+
+
+def test_slow_cores_pin_espresso_node_in_start_and_recreate_sh():
+    spec = host("node4", "validator")
+    for script in (
+        awsb.render_start_sh(spec, fake_images(), 32768, cores=4),
+        awsb.render_recreate_sh(spec, fake_images(), cores=4),
+    ):
+        create = script[script.index("docker create --name espresso-node") :]
+        assert "--cpuset-cpus 0-3 " in create
+        assert create.index("--cpuset-cpus") < create.index("@sha256")
+    assert "cpuset" not in awsb.render_start_sh(spec, fake_images(), 32768)
+
+
+def test_slow_nodes_differ_in_the_config_hash_only_when_set():
+    hosts = awsb.plan_hosts(small_cfg(5))
+
+    def digest(**kw) -> str:
+        return awsb.run_config_hash(small_cfg(5, **kw), hosts, {}, b"genesis")
+
+    assert digest() == digest(slow_nodes=0)
+    assert digest() != digest(slow_nodes=2, slow_cores=4)
+    assert digest(slow_nodes=2, slow_cores=4) != digest(slow_nodes=2, slow_cores=8)
+    assert digest(slow_nodes=1, slow_cores=4) != digest(slow_nodes=2, slow_cores=4)
+
+
+def test_manifest_config_without_slow_nodes_loads_as_off():
+    saved = awsb.config_to_json(small_cfg())
+    del saved["slow_nodes"], saved["slow_cores"]
+    cfg = awsb.config_from_manifest(saved)
+    assert (cfg.slow_nodes, cfg.slow_cores) == (0, None)
+
+
+def test_node_summary_names_the_slow_nodes():
+    summary = awsb.format_node_summary(small_cfg(5, slow_nodes=2, slow_cores=4))
+    assert summary[-1] == "slow nodes: node3, node4 on 4 cores (docker --cpuset-cpus)"
+    assert not any(
+        line.startswith("slow") for line in awsb.format_node_summary(small_cfg(5))
+    )
+
+
 def test_genesis_raises_if_template_shape_changes():
     with pytest.raises(ValueError):
         awsb.render_genesis(
@@ -1490,10 +1555,6 @@ def test_advertise_addresses_use_private_ip_and_dns():
     assert (
         env["ESPRESSO_NODE_CLIQUENET_ADVERTISE_ADDRESS"]
         == f"10.0.0.4:{awsb.CLIQUENET_PORT}"
-    )
-    assert (
-        env["ESPRESSO_NODE_LIBP2P_ADVERTISE_ADDRESS"]
-        == f"ip-10-0-0-4.eu-west-1.compute.internal:{awsb.LIBP2P_PORT}"
     )
 
 

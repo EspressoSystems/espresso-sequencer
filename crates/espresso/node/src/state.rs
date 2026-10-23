@@ -29,7 +29,7 @@ use versions::{DRB_AND_HEADER_UPGRADE_VERSION, EPOCH_REWARD_VERSION, EPOCH_VERSI
 
 use crate::{
     NodeState, SeqTypes,
-    api::{LightClientProvider, RewardMerkleTreeDataSource, context::ApiContext},
+    api::{LightClientProvider, RewardMerkleTreeDataSource},
     catchup::{CatchupStorage, SingleAttemptCatchup},
     persistence::ChainConfigPersistence,
 };
@@ -379,16 +379,15 @@ pub(crate) enum EmptyStateStart {
 }
 
 #[tracing::instrument(skip_all)]
-pub(crate) async fn update_state_storage_loop<T, C>(
+pub(crate) async fn update_state_storage_loop<T>(
     storage: Arc<T>,
     instance: impl Future<Output = NodeState>,
-    provider: Arc<LightClientProvider<C>>,
+    provider: Arc<LightClientProvider>,
     empty_state_start: EmptyStateStart,
 ) -> anyhow::Result<()>
 where
     T: SequencerStateDataSource,
     for<'a> T::Transaction<'a>: SequencerStateUpdate,
-    C: ApiContext,
 {
     let mut instance = instance.await;
     // Use a separate rewards calculator for the state loop so it doesn't
@@ -564,15 +563,14 @@ where
 ///
 /// Returns `None`, which leaves the loop to replay from genesis, when there is no boundary yet, or
 /// when it predates epoch rewards and so has no reward tree stored at it.
-async fn seed_boundary_snapshot<T, C>(
+async fn seed_boundary_snapshot<T>(
     storage: &Arc<T>,
     instance: &NodeState,
-    provider: &LightClientProvider<C>,
+    provider: &LightClientProvider,
 ) -> Option<u64>
 where
     T: SequencerStateDataSource,
     for<'a> T::Transaction<'a>: SequencerStateUpdate,
-    C: ApiContext,
 {
     let epoch_height = instance.epoch_height.filter(|height| *height > 0)?;
     let pruned = retry_until_ok("loading the data pruned height", || {
@@ -744,16 +742,15 @@ where
 /// those the data pruner has already deleted: the availability layer never fetches a leaf at or
 /// below the data pruned height, so the stream would wait for one forever. Those come from peers,
 /// in runs. Returns when the stream ends, or when a leaf from peers does not extend the parent.
-async fn follow_leaves<T, C>(
+async fn follow_leaves<T>(
     storage: &Arc<T>,
     instance: &NodeState,
-    provider: &LightClientProvider<C>,
+    provider: &LightClientProvider,
     mut parent_leaf: Leaf2,
     mut parent_state: ValidatedState,
 ) where
     T: SequencerStateDataSource,
     for<'a> T::Transaction<'a>: SequencerStateUpdate,
-    C: ApiContext,
 {
     // Peers serve at most this many leaves per range request.
     let limit = availability::Options::default().small_object_range_limit as u64;
@@ -830,10 +827,9 @@ where
 }
 
 /// The leaf at `height`, from local storage, or from peers once the data pruner has deleted it.
-async fn leaf_at<T, C>(storage: &Arc<T>, provider: &LightClientProvider<C>, height: u64) -> Leaf2
+async fn leaf_at<T>(storage: &Arc<T>, provider: &LightClientProvider, height: u64) -> Leaf2
 where
     T: SequencerStateDataSource,
-    C: ApiContext,
 {
     loop {
         if let Some(pruned) = pruned_past(&**storage, height).await {
@@ -863,21 +859,18 @@ where
 /// The leaves at `heights`, which the data pruned height says are gone, from the query module's
 /// peers through its light client, retrying until they arrive. The light client verifies leaves
 /// of every protocol version, and one proof covers the run: it proves the last leaf final and
-/// chains the rest to it. The leaves are not stored in this database, since the loop needs them
-/// once and the pruner would only delete them again.
-async fn fetch_pruned_leaves<C>(
-    provider: &LightClientProvider<C>,
-    heights: Range<u64>,
-) -> Vec<Leaf2>
-where
-    C: ApiContext,
-{
+/// chains the rest to it. The loop needs each leaf once, so the leaves are stored neither in this
+/// database, where the pruner would only delete them again, nor in the light client's cache.
+async fn fetch_pruned_leaves(provider: &LightClientProvider, heights: Range<u64>) -> Vec<Leaf2> {
     let start = heights.start as usize;
     let end = heights.end as usize;
     let mut delay = Duration::from_secs(1);
     loop {
         if let Some(light_client) = provider.light_client().await {
-            match light_client.fetch_leaves_in_range(start, end).await {
+            match light_client
+                .fetch_leaves_in_range_uncached(start, end)
+                .await
+            {
                 Ok(leaves) => return leaves.into_iter().map(|leaf| leaf.leaf().clone()).collect(),
                 Err(err) => tracing::warn!(
                     ?heights,

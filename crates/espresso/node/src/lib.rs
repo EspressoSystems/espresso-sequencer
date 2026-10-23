@@ -13,7 +13,6 @@ pub mod genesis;
 #[cfg(any(test, feature = "testing"))]
 pub mod legacy_chain;
 pub use espresso_keyset as keyset;
-pub mod network;
 pub mod options;
 pub mod persistence;
 pub mod run;
@@ -32,8 +31,8 @@ use context::SequencerContext;
 use derivative::Derivative;
 use dyn_clone::clone_box;
 use espresso_types::{
-    BackoffParams, EpochCommittees, EpochRewardsCalculator, L1ClientOptions, NodeState, PubKey,
-    SeqTypes, ValidatedState,
+    BackoffParams, EpochCommittees, EpochRewardsCalculator, L1ClientOptions, NodeState, SeqTypes,
+    ValidatedState,
     traits::{EventConsumer, MembershipPersistence},
     v0::traits::SequencerPersistence,
     v0_1::{ChainId, DECAF_CHAIN_ID, MAINNET_CHAIN_ID},
@@ -59,7 +58,6 @@ pub(crate) fn default_telemetry_endpoint(chain_id: ChainId) -> Option<&'static s
 pub use espresso_types::RECENT_STAKE_TABLES_LIMIT;
 use genesis::L1Finalized;
 pub use genesis::{Genesis, GenesisSource};
-use hotshot::traits::implementations::MemoryNetwork;
 use hotshot_new_protocol::network::{Cliquenet, message_limit};
 use hotshot_orchestrator::client::{OrchestratorClient, get_complete_config};
 use hotshot_types::{
@@ -113,9 +111,6 @@ impl<P: SequencerPersistence> Clone for Node<P> {
 pub type SequencerApiVersion = StaticVersion<0, 1>;
 
 impl<P: SequencerPersistence> NodeImplementation<SeqTypes> for Node<P> {
-    // Never constructed: `NodeImplementation` still names a network for the legacy consensus
-    // crates.
-    type Network = MemoryNetwork<PubKey>;
     type Storage = Arc<P>;
 }
 
@@ -360,10 +355,9 @@ where
 
             let registration = orchestrator_registration(&validator_config)?;
 
-            let config =
-                get_complete_config(&orchestrator_client, registration.clone(), None, None)
-                    .await?
-                    .0;
+            let config = get_complete_config(&orchestrator_client, registration.clone())
+                .await?
+                .0;
 
             tracing::warn!(
                 node_id = config.node_index,

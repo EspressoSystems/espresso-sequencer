@@ -11,8 +11,6 @@ use async_trait::async_trait;
 use committable::Commitment;
 use futures::{FutureExt, TryFutureExt};
 #[cfg(feature = "node")]
-use hotshot_libp2p_networking::network::behaviours::dht::store::persistent::DhtPersistentStorage;
-#[cfg(feature = "node")]
 use hotshot_new_protocol::storage::NewProtocolStorage;
 #[cfg(feature = "node")]
 use hotshot_types::simple_certificate::{Certificate1, Certificate2};
@@ -585,10 +583,29 @@ pub trait MembershipPersistence: Send + Sync + 'static {
     ) -> anyhow::Result<Vec<RegisteredValidator<PubKey>>>;
 }
 
+/// State certificates by epoch, apart from [`SequencerPersistence`] so that the API can hold them as
+/// a trait object.
+#[cfg(feature = "node")]
+#[async_trait]
+pub trait StateCertPersistence: Send + Sync + 'static {
+    /// Get a state certificate for an epoch.
+    async fn get_state_cert_by_epoch(
+        &self,
+        epoch: u64,
+    ) -> anyhow::Result<Option<LightClientStateUpdateCertificateV2<SeqTypes>>>;
+
+    /// Insert a state certificate for a given epoch.
+    async fn insert_state_cert(
+        &self,
+        epoch: u64,
+        cert: LightClientStateUpdateCertificateV2<SeqTypes>,
+    ) -> anyhow::Result<()>;
+}
+
 #[cfg(feature = "node")]
 #[async_trait]
 pub trait SequencerPersistence:
-    Sized + Send + Sync + Clone + 'static + DhtPersistentStorage + MembershipPersistence
+    Sized + Send + Sync + Clone + 'static + MembershipPersistence + StateCertPersistence
 {
     /// Use this storage as a state catchup backend, if supported.
     fn into_catchup_provider(
@@ -638,19 +655,6 @@ pub trait SequencerPersistence:
     async fn load_state_cert(
         &self,
     ) -> anyhow::Result<Option<LightClientStateUpdateCertificateV2<SeqTypes>>>;
-
-    /// Get a state certificate for an epoch.
-    async fn get_state_cert_by_epoch(
-        &self,
-        epoch: u64,
-    ) -> anyhow::Result<Option<LightClientStateUpdateCertificateV2<SeqTypes>>>;
-
-    /// Insert a state certificate for a given epoch.
-    async fn insert_state_cert(
-        &self,
-        epoch: u64,
-        cert: LightClientStateUpdateCertificateV2<SeqTypes>,
-    ) -> anyhow::Result<()>;
 
     /// Load the latest known consensus state.
     ///

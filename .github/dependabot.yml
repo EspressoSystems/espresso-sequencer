@@ -20,11 +20,17 @@ updates:
       ark:
         patterns:
           - "ark-*"
-      cdn:
-        patterns:
-          - "cdn-*"
       jf:
         patterns:
           - "jf-*"
     schedule:
       interval: "daily"
+
+  - package-ecosystem: "uv"
+    directory: "/.github/claude"
+    groups:
+      all:
+        patterns:
+          - "*"
+    schedule:
+      interval: "weekly"
