@@ -158,7 +158,7 @@ pub struct Options {
     /// Peer nodes use to fetch missing state
     ///
     /// A node joining a running network needs at least one peer that serves the light-client
-    /// module (query module with SQL storage). Without one, startup fails, unless local storage
+    /// API (query module with SQL storage). Without one, startup fails, unless local storage
     /// already holds the anchor's window.
     #[clap(long, env = "ESPRESSO_NODE_STATE_PEERS", value_delimiter = ',')]
     #[derivative(Debug(format_with = "fmt_urls"))]
@@ -197,7 +197,7 @@ pub struct Options {
 
     /// Timeout for each step of the startup stake-table catchup.
     ///
-    /// Bounds a peer catchup step (`wait_for_stake_table`), the anchor read, a light-client
+    /// Bounds a peer catchup step (`wait_for_stake_table`), the anchor read, an LC contract
     /// catchup fetch from one peer, a peer height read, and DRB preparation. Below the median peer
     /// tip's epoch a timed-out step is retried until the bootstrap deadline. From there up, it
     /// ends peer catchup. The timeout does not cancel the catchup task, which is a detached
@@ -205,7 +205,7 @@ pub struct Options {
     #[clap(long, env = "ESPRESSO_NODE_BOOTSTRAP_EPOCH_CATCHUP_TIMEOUT", default_value = "30s", value_parser = parse_duration)]
     pub bootstrap_epoch_catchup_timeout: Duration,
 
-    /// How long startup retries before giving up, in total for the anchor read, light-client
+    /// How long startup retries before giving up, in total for the anchor read, LC contract
     /// catchup and peer catchup toward the chain tip the state peers report.
     ///
     /// At the deadline the node exits with an error.

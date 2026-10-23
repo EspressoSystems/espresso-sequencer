@@ -6586,17 +6586,16 @@ mod test {
         }
     }
 
-    /// A validator that restarts on an empty database catches up its stake tables from the L1
-    /// light client finalized header instead of from peers epoch by epoch, and goes on to propose again.
+    /// A validator that restarts on an empty database catches up its stake tables from the
+    /// LC contract header instead of from peers epoch by epoch, and goes on to propose again.
     ///
-    /// Six nodes run the new protocol. Once the network is past epoch twelve, the light client
+    /// Six nodes run the new protocol. Once the network is past epoch twelve, the LC contract
     /// mock is pointed at a recent decided block, node 5 is stopped, and it restarts on an empty
     /// database with node 0 as its only state peer. That peer cannot serve the epoch root of
     /// epoch 3, which stalls a peer catchup at epoch 3, the way one failed fetch left a decaf validator
     /// stuck far below the tip.
     #[test_log::test(tokio::test(flavor = "multi_thread"))]
-    async fn test_new_protocol_fresh_validator_catches_up_from_light_client() -> anyhow::Result<()>
-    {
+    async fn test_new_protocol_fresh_validator_catches_up_from_lc_contract() -> anyhow::Result<()> {
         const NUM_NODES: usize = 6;
         const NODE: usize = 5;
         const EPOCH_HEIGHT: u64 = 10;
@@ -6656,28 +6655,28 @@ mod test {
         let mut events = network.peers[0].event_stream();
         wait_for_epochs(&mut events, EPOCH_HEIGHT, EPOCHS_BEFORE_RESTART).await;
 
-        // Point the light client at a decided block the API can still serve.
+        // Point the LC contract at a decided block the API can still serve.
         let tip: u64 = api_client.get("status/block-height").send().await?;
-        let finalized_height = tip - 1;
-        let finalized_epoch = epoch_from_block_number(finalized_height, EPOCH_HEIGHT);
+        let lc_contract_height = tip - 1;
+        let lc_contract_epoch = epoch_from_block_number(lc_contract_height, EPOCH_HEIGHT);
         let header: Header = api_client
-            .get(&format!("availability/header/{finalized_height}"))
+            .get(&format!("availability/header/{lc_contract_height}"))
             .send()
             .await?;
         let state = header.get_light_client_state(ViewNumber::genesis())?;
-        let light_client_address = network
+        let lc_contract_address = network
             .contracts
             .as_ref()
             .and_then(|contracts| contracts.address(Contract::LightClientProxy))
-            .context("light client contract not deployed")?;
+            .context("LC contract not deployed")?;
         let provider = ProviderBuilder::new()
             .wallet(EthereumWallet::from(network.cfg.signer()))
             .connect_http(network.cfg.l1_url());
-        let receipt = LightClientV3Mock::new(light_client_address, provider)
+        let receipt = LightClientV3Mock::new(lc_contract_address, provider)
             .setFinalizedState(
                 LightClientStateSol {
                     viewNum: 0,
-                    blockHeight: finalized_height,
+                    blockHeight: lc_contract_height,
                     blockCommRoot: field_to_u256(state.block_comm_root),
                 }
                 .into(),
@@ -6694,7 +6693,7 @@ mod test {
                 .wait_for_finalized_block(receipt.block_number.context("no block number")?),
         )
         .await
-        .context("the finalized header never became L1 finalized")?;
+        .context("the LC contract header never became L1 finalized")?;
 
         let height_before_restart = tip;
         let mut node = network.peers.pop().context("no validator to restart")?;
@@ -6748,15 +6747,15 @@ mod test {
             .find_map(|line| line.strip_prefix("consensus_bootstrap_window_epoch "))
             .context("current epoch gauge not exported")?
             .parse()?;
-        // The current epoch is the finalized header's, with nothing below it caught up from peers.
+        // The current epoch is the LC contract header's, with nothing below it caught up from peers.
         let membership = node.node_state().coordinator.membership().clone();
-        for epoch in (finalized_epoch - 3)..=(finalized_epoch + 1) {
+        for epoch in (lc_contract_epoch - 3)..=(lc_contract_epoch + 1) {
             assert!(
                 membership.snapshot(EpochNumber::new(epoch)).is_some(),
-                "stake table for epoch {epoch} was not caught up from the light client"
+                "stake table for epoch {epoch} was not caught up from the LC contract"
             );
         }
-        for epoch in [finalized_epoch, finalized_epoch + 1] {
+        for epoch in [lc_contract_epoch, lc_contract_epoch + 1] {
             assert!(
                 membership
                     .epoch_block_reward(EpochNumber::new(epoch))
@@ -6766,12 +6765,12 @@ mod test {
         }
         assert!(
             exported.contains(&format!(
-                "consensus_bootstrap_anchor_epoch {finalized_epoch}"
+                "consensus_bootstrap_anchor_epoch {lc_contract_epoch}"
             )),
             "{exported}"
         );
-        // Peer catchup above the finalized header may advance the current epoch past it.
-        assert!(current_epoch >= finalized_epoch, "{exported}");
+        // Peer catchup above the LC contract header may advance the current epoch past it.
+        assert!(current_epoch >= lc_contract_epoch, "{exported}");
 
         node.start_consensus().await;
 

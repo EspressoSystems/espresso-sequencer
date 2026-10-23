@@ -1330,8 +1330,8 @@ pub mod testing {
         contracts: Option<Contracts>,
         /// See [`Self::set_genesis_chain_config`].
         genesis_chain_config: Option<ChainConfig>,
-        /// State peers the startup light-client catchup fetches from. Required once the light client
-        /// has finalized state.
+        /// State peers the startup LC contract catchup fetches from. Required once the LC contract
+        /// has state.
         bootstrap_peers: Vec<Url>,
     }
 

@@ -268,7 +268,7 @@ where
     catch_up_cliquenet_stake_tables(
         &coordinator,
         epoch_height,
-        || l1_finalized_state(&node_state, replaying),
+        || l1_lc_contract_state(&node_state, replaying),
         &state_peer_clients,
         &params.bootstrap,
         Some(&StartupCatchupMetrics::new(&*metrics)),
@@ -326,7 +326,7 @@ where
         upgrade_lock,
         epoch_height,
         options: params.options,
-        // Mid-run, the poll loop waits for the catchup, so the finalized state read, light-client catchup
+        // Mid-run, the poll loop waits for the catchup, so the LC contract state read, LC contract catchup
         // and peer catchup together get one step's time per upstream plus one, not the boot
         // deadline. The next poll retries.
         bootstrap: StartupCatchupParams {
@@ -774,7 +774,7 @@ impl<P: SequencerPersistence> Follower<P> {
         let current_epoch = catch_up_cliquenet_stake_tables(
             &self.coordinator,
             self.epoch_height,
-            || l1_finalized_state(&self.node_state, self.replaying),
+            || l1_lc_contract_state(&self.node_state, self.replaying),
             &self.state_peer_clients,
             &self.bootstrap,
             None,
@@ -860,11 +860,11 @@ impl ChainSource for NodeLightClient {
     }
 }
 
-async fn l1_finalized_state(
+async fn l1_lc_contract_state(
     node_state: &NodeState,
     replaying: bool,
 ) -> anyhow::Result<LightClientStateSol> {
-    // A replayed chain has no light-client contract to read.
+    // A replayed chain has no LC contract to read.
     if replaying {
         return Ok(LightClientStateSol::default());
     }
