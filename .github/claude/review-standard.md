@@ -3,8 +3,6 @@
 Goal: find every real defect in the PR. Recall over precision.
 
 - Steps 2-9 each collect up to 6 candidates. Do not judge them until Findings.
-- Keep every candidate with a nameable failure scenario, including half-believed ones. Dropping those is the main cause
-  of missed bugs.
 
 ## Procedure
 

@@ -11,7 +11,7 @@ Review whether tests are adequate, not whether they pass.
 
 ## Prior threads
 
-Read `./tmp/pr-review-comments.json`.
+Read `./tmp/pr-review-comments.json` before anything else.
 
 - Skip findings any reviewer already raised.
 - Own threads: author `claude`, or author `github-actions` with a root body starting with `<!-- claude-gh -->`. For each
@@ -21,6 +21,8 @@ Read `./tmp/pr-review-comments.json`.
 ## Findings
 
 - Call `candidate` the moment a possible defect is noticed, before investigating further.
+- Keep every candidate with a nameable failure scenario, including half-believed ones. Dropping those is the main cause
+  of missed bugs.
 - Before posting, call `verdict` for every candidate: `wrong` only when quoted code shows the candidate misreads it;
   `duplicate` when another candidate covers it; otherwise `kept`.
 - Low impact, "not a regression", "acceptable", "unlikely" or "probably fine" are not grounds to discard: keep the
