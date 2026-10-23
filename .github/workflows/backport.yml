@@ -1,7 +1,6 @@
 # Threat model: see "CI threat model" in .github/claude/README.md.
 # pull_request_target runs this file from the base branch with secrets and never
 # checks out PR head code: the job starts only on merge.
-# Accepted: ANTHROPIC_API_KEY can still leave via allowed hosts such as github.com.
 name: Backport merged pull request
 on:
   pull_request_target:
@@ -98,28 +97,6 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: step-security/harden-runner@v2
-        with:
-          egress-policy: block
-          allowed-endpoints: >
-            api.anthropic.com:443
-            downloads.claude.ai:443
-            claude.ai:443
-            github.com:443
-            api.github.com:443
-            codeload.github.com:443
-            objects.githubusercontent.com:443
-            release-assets.githubusercontent.com:443
-            static.rust-lang.org:443
-            index.crates.io:443
-            static.crates.io:443
-            crates.io:443
-            azure.archive.ubuntu.com:80
-            archive.ubuntu.com:80
-            security.ubuntu.com:80
-            *.actions.githubusercontent.com:443
-            *.blob.core.windows.net:443
-
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
@@ -191,7 +168,8 @@ jobs:
           ci-sandbox --ro ~/.local/bin --ro ~/.local/share/claude --ro ~/.cargo --ro ~/.rustup \
             --rw "$CARGO_HOME" --env CARGO_HOME \
             --env ANTHROPIC_API_KEY --env CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC -- \
-            claude -p "$prompt" --model claude-opus-4-8 --dangerously-skip-permissions
+            claude -p "$prompt" --model claude-opus-4-8 --dangerously-skip-permissions \
+            --setting-sources user --strict-mcp-config
 
       - name: Verify resolved backports compile and bundle them
         timeout-minutes: 120
@@ -312,6 +290,12 @@ jobs:
             fi
             if git grep -lnE '^(<<<<<<< |>>>>>>> )' "$sha" -- >/dev/null; then
               fail "$pr" "conflict markers are still present after resolution."
+              continue
+            fi
+
+            # Bot pushes trigger no workflows, so lint never sees this output.
+            if ! scripts/check-invisible-unicode "$sha"; then
+              fail "$pr" "invisible Unicode characters are present after resolution."
               continue
             fi
 
