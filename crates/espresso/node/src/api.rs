@@ -6723,7 +6723,7 @@ mod test {
             .init_node(
                 NODE,
                 genesis_state,
-                tmp_options(&fresh_storage),
+                <SqlDataSource as TestableSequencerDataSource>::persistence_options(&fresh_storage),
                 Some(FailingLeafCatchup::new(
                     StatePeers::<SequencerApiVersion>::from_urls(
                         vec![api_url],
