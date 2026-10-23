@@ -5814,7 +5814,7 @@
 <a href=#5814 id=5814 data-nosnippet>5814</a>            <span class="string">"config"</span>,
 <a href=#5815 id=5815 data-nosnippet>5815</a>        ]);
 <a href=#5816 id=5816 data-nosnippet>5816</a>        <span class="kw">let </span><span class="kw-2">mut </span>cfg = PublicNodeConfig::new(<span class="kw-2">&amp;</span>opt, <span class="kw-2">&amp;</span>opt.modules(), <span class="kw-2">&amp;</span>test_genesis());
-<a href=#5817 id=5817 data-nosnippet>5817</a>        <span class="comment">// Set directly: the follower module needs storage-sql, whose args differ under embedded-db.
+<a href=#5817 id=5817 data-nosnippet>5817</a>        <span class="comment">// Set directly: the follower module needs storage-sql.
 <a href=#5818 id=5818 data-nosnippet>5818</a>        </span>cfg.follower = <span class="prelude-val">Some</span>(FollowerConfig {
 <a href=#5819 id=5819 data-nosnippet>5819</a>            poll_interval: Duration::from_millis(<span class="number">2500</span>),
 <a href=#5820 id=5820 data-nosnippet>5820</a>            max_blocks_per_poll: <span class="number">17</span>,
@@ -5993,207 +5993,204 @@
 <a href=#5993 id=5993 data-nosnippet>5993</a>        );
 <a href=#5994 id=5994 data-nosnippet>5994</a>    }
 <a href=#5995 id=5995 data-nosnippet>5995</a>
-<a href=#5996 id=5996 data-nosnippet>5996</a>    <span class="comment">// Postgres only, as in `options.rs`: storage-sql under embedded-db needs a `--path` that is
-<a href=#5997 id=5997 data-nosnippet>5997</a>    // irrelevant here.
-<a href=#5998 id=5998 data-nosnippet>5998</a>    </span><span class="attr">#[cfg(not(feature = <span class="string">"embedded-db"</span>))]
-<a href=#5999 id=5999 data-nosnippet>5999</a>    #[tokio::test]
-<a href=#6000 id=6000 data-nosnippet>6000</a>    </span><span class="kw">async fn </span>sql_storage_settings_are_served_in_full() {
-<a href=#6001 id=6001 data-nosnippet>6001</a>        <span class="kw">use </span>proto::config_service_server::ConfigService <span class="kw">as _</span>;
-<a href=#6002 id=6002 data-nosnippet>6002</a>
-<a href=#6003 id=6003 data-nosnippet>6003</a>        <span class="kw">use </span><span class="kw">crate</span>::options::{
-<a href=#6004 id=6004 data-nosnippet>6004</a>            PublicNodeConfig,
-<a href=#6005 id=6005 data-nosnippet>6005</a>            tests::{parse_options_with, test_genesis},
-<a href=#6006 id=6006 data-nosnippet>6006</a>        };
-<a href=#6007 id=6007 data-nosnippet>6007</a>
-<a href=#6008 id=6008 data-nosnippet>6008</a>        <span class="kw">struct </span>UnusedDataSource;
-<a href=#6009 id=6009 data-nosnippet>6009</a>
-<a href=#6010 id=6010 data-nosnippet>6010</a>        <span class="kw">impl </span>HotShotConfigDataSource <span class="kw">for </span>UnusedDataSource {
-<a href=#6011 id=6011 data-nosnippet>6011</a>            <span class="kw">async fn </span>get_config(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; espresso_types::config::PublicNetworkConfig {
-<a href=#6012 id=6012 data-nosnippet>6012</a>                <span class="macro">unreachable!</span>(<span class="string">"the runtime config is served from the state, not the data source"</span>)
-<a href=#6013 id=6013 data-nosnippet>6013</a>            }
-<a href=#6014 id=6014 data-nosnippet>6014</a>        }
-<a href=#6015 id=6015 data-nosnippet>6015</a>
-<a href=#6016 id=6016 data-nosnippet>6016</a>        <span class="kw">let </span>opt = parse_options_with(<span class="kw-2">&amp;</span>[
-<a href=#6017 id=6017 data-nosnippet>6017</a>            <span class="string">"--cliquenet-bind-address"</span>,
-<a href=#6018 id=6018 data-nosnippet>6018</a>            <span class="string">"127.0.0.1:9999"</span>,
-<a href=#6019 id=6019 data-nosnippet>6019</a>            <span class="string">"--"</span>,
-<a href=#6020 id=6020 data-nosnippet>6020</a>            <span class="string">"storage-sql"</span>,
-<a href=#6021 id=6021 data-nosnippet>6021</a>            <span class="string">"--prune"</span>,
-<a href=#6022 id=6022 data-nosnippet>6022</a>            <span class="string">"--pruning-threshold"</span>,
-<a href=#6023 id=6023 data-nosnippet>6023</a>            <span class="string">"1000000000000"</span>,
-<a href=#6024 id=6024 data-nosnippet>6024</a>        ]);
-<a href=#6025 id=6025 data-nosnippet>6025</a>        <span class="kw">let </span>cfg = PublicNodeConfig::new(<span class="kw-2">&amp;</span>opt, <span class="kw-2">&amp;</span>opt.modules(), <span class="kw-2">&amp;</span>test_genesis());
-<a href=#6026 id=6026 data-nosnippet>6026</a>        <span class="kw">let </span>sql = cfg.storage.sql.clone().expect(<span class="string">"storage-sql was configured"</span>);
-<a href=#6027 id=6027 data-nosnippet>6027</a>
-<a href=#6028 id=6028 data-nosnippet>6028</a>        <span class="kw">let </span>state = NodeApiStateImpl::new(std::sync::Arc::new(UnusedDataSource))
-<a href=#6029 id=6029 data-nosnippet>6029</a>            .with_public_node_config(<span class="prelude-val">Some</span>(cfg));
-<a href=#6030 id=6030 data-nosnippet>6030</a>        <span class="kw">let </span>storage = state
-<a href=#6031 id=6031 data-nosnippet>6031</a>            .get_runtime_config(tonic::Request::new(proto::GetRuntimeConfigRequest {}))
-<a href=#6032 id=6032 data-nosnippet>6032</a>            .<span class="kw">await
-<a href=#6033 id=6033 data-nosnippet>6033</a>            </span>.unwrap()
-<a href=#6034 id=6034 data-nosnippet>6034</a>            .into_inner()
-<a href=#6035 id=6035 data-nosnippet>6035</a>            .storage
-<a href=#6036 id=6036 data-nosnippet>6036</a>            .expect(<span class="string">"the runtime config always reports a backend"</span>);
-<a href=#6037 id=6037 data-nosnippet>6037</a>
-<a href=#6038 id=6038 data-nosnippet>6038</a>        <span class="macro">assert_eq!</span>(storage.backend, proto::StorageBackend::Sql <span class="kw">as </span>i32);
-<a href=#6039 id=6039 data-nosnippet>6039</a>        <span class="macro">assert_eq!</span>(storage.fs, <span class="prelude-val">None</span>);
-<a href=#6040 id=6040 data-nosnippet>6040</a>        <span class="comment">// Compared against the source, not against `sql.clone().into()`, which would assert the
-<a href=#6041 id=6041 data-nosnippet>6041</a>        // mapping against itself. v1 serves the durations as `{secs, nanos}`.
-<a href=#6042 id=6042 data-nosnippet>6042</a>        </span><span class="macro">assert_eq!</span>(
-<a href=#6043 id=6043 data-nosnippet>6043</a>            storage.sql,
-<a href=#6044 id=6044 data-nosnippet>6044</a>            <span class="prelude-val">Some</span>(proto::SqlStorage {
-<a href=#6045 id=6045 data-nosnippet>6045</a>                prune: <span class="bool-val">true</span>,
-<a href=#6046 id=6046 data-nosnippet>6046</a>                archive: sql.archive,
-<a href=#6047 id=6047 data-nosnippet>6047</a>                lightweight: sql.lightweight,
-<a href=#6048 id=6048 data-nosnippet>6048</a>                disable_proactive_fetching: sql.disable_proactive_fetching,
-<a href=#6049 id=6049 data-nosnippet>6049</a>                fetch_rate_limit: sql.fetch_rate_limit.map(|limit| limit <span class="kw">as </span>u64),
-<a href=#6050 id=6050 data-nosnippet>6050</a>                active_fetch_delay_ms: sql.active_fetch_delay.map(|delay| delay.as_millis() <span class="kw">as </span>u64),
-<a href=#6051 id=6051 data-nosnippet>6051</a>                chunk_fetch_delay_ms: sql.chunk_fetch_delay.map(|delay| delay.as_millis() <span class="kw">as </span>u64),
-<a href=#6052 id=6052 data-nosnippet>6052</a>                sync_status_chunk_size: sql.sync_status_chunk_size.map(|size| size <span class="kw">as </span>u64),
-<a href=#6053 id=6053 data-nosnippet>6053</a>                sync_status_ttl_ms: sql.sync_status_ttl.map(|ttl| ttl.as_millis() <span class="kw">as </span>u64),
-<a href=#6054 id=6054 data-nosnippet>6054</a>                proactive_scan_chunk_size: sql.proactive_scan_chunk_size.map(|size| size <span class="kw">as </span>u64),
-<a href=#6055 id=6055 data-nosnippet>6055</a>                proactive_scan_interval_ms: sql
-<a href=#6056 id=6056 data-nosnippet>6056</a>                    .proactive_scan_interval
-<a href=#6057 id=6057 data-nosnippet>6057</a>                    .map(|interval| interval.as_millis() <span class="kw">as </span>u64),
-<a href=#6058 id=6058 data-nosnippet>6058</a>                idle_connection_timeout_ms: sql.idle_connection_timeout.as_millis() <span class="kw">as </span>u64,
-<a href=#6059 id=6059 data-nosnippet>6059</a>                connection_timeout_ms: sql.connection_timeout.as_millis() <span class="kw">as </span>u64,
-<a href=#6060 id=6060 data-nosnippet>6060</a>                slow_statement_threshold_ms: sql.slow_statement_threshold.as_millis() <span class="kw">as </span>u64,
-<a href=#6061 id=6061 data-nosnippet>6061</a>                statement_timeout_ms: sql.statement_timeout.as_millis() <span class="kw">as </span>u64,
-<a href=#6062 id=6062 data-nosnippet>6062</a>                min_connections: sql.min_connections,
-<a href=#6063 id=6063 data-nosnippet>6063</a>                max_connections: sql.max_connections,
-<a href=#6064 id=6064 data-nosnippet>6064</a>                query_min_connections: sql.query_min_connections,
-<a href=#6065 id=6065 data-nosnippet>6065</a>                query_max_connections: sql.query_max_connections,
-<a href=#6066 id=6066 data-nosnippet>6066</a>                pruning: <span class="prelude-val">Some</span>(proto::PruningConfig {
-<a href=#6067 id=6067 data-nosnippet>6067</a>                    pruning_threshold: <span class="prelude-val">Some</span>(<span class="number">1000000000000</span>),
-<a href=#6068 id=6068 data-nosnippet>6068</a>                    minimum_retention_ms: sql
-<a href=#6069 id=6069 data-nosnippet>6069</a>                        .pruning
-<a href=#6070 id=6070 data-nosnippet>6070</a>                        .minimum_retention
-<a href=#6071 id=6071 data-nosnippet>6071</a>                        .map(|retention| retention.as_millis() <span class="kw">as </span>u64),
-<a href=#6072 id=6072 data-nosnippet>6072</a>                    target_retention_ms: sql
-<a href=#6073 id=6073 data-nosnippet>6073</a>                        .pruning
-<a href=#6074 id=6074 data-nosnippet>6074</a>                        .target_retention
-<a href=#6075 id=6075 data-nosnippet>6075</a>                        .map(|retention| retention.as_millis() <span class="kw">as </span>u64),
-<a href=#6076 id=6076 data-nosnippet>6076</a>                    batch_size: sql.pruning.batch_size,
-<a href=#6077 id=6077 data-nosnippet>6077</a>                    max_usage: sql.pruning.max_usage.map(u32::from),
-<a href=#6078 id=6078 data-nosnippet>6078</a>                    interval_ms: sql
-<a href=#6079 id=6079 data-nosnippet>6079</a>                        .pruning
-<a href=#6080 id=6080 data-nosnippet>6080</a>                        .interval
-<a href=#6081 id=6081 data-nosnippet>6081</a>                        .map(|interval| interval.as_millis() <span class="kw">as </span>u64),
-<a href=#6082 id=6082 data-nosnippet>6082</a>                    pages: sql.pruning.pages,
-<a href=#6083 id=6083 data-nosnippet>6083</a>                }),
-<a href=#6084 id=6084 data-nosnippet>6084</a>                consensus_pruning: <span class="prelude-val">Some</span>(proto::ConsensusPruningConfig {
-<a href=#6085 id=6085 data-nosnippet>6085</a>                    target_retention: sql.consensus_pruning.target_retention,
-<a href=#6086 id=6086 data-nosnippet>6086</a>                    minimum_retention: sql.consensus_pruning.minimum_retention,
-<a href=#6087 id=6087 data-nosnippet>6087</a>                    target_usage: sql.consensus_pruning.target_usage,
-<a href=#6088 id=6088 data-nosnippet>6088</a>                }),
-<a href=#6089 id=6089 data-nosnippet>6089</a>            })
-<a href=#6090 id=6090 data-nosnippet>6090</a>        );
-<a href=#6091 id=6091 data-nosnippet>6091</a>        <span class="comment">// The defaults these come from are non-zero, so the comparisons above are not vacuous.
-<a href=#6092 id=6092 data-nosnippet>6092</a>        </span><span class="kw">let </span>served = storage.sql.unwrap();
-<a href=#6093 id=6093 data-nosnippet>6093</a>        <span class="macro">assert!</span>(served.statement_timeout_ms &gt; <span class="number">0</span>);
-<a href=#6094 id=6094 data-nosnippet>6094</a>        <span class="macro">assert!</span>(served.consensus_pruning.unwrap().target_retention &gt; <span class="number">0</span>);
-<a href=#6095 id=6095 data-nosnippet>6095</a>    }
-<a href=#6096 id=6096 data-nosnippet>6096</a>
-<a href=#6097 id=6097 data-nosnippet>6097</a>    <span class="kw">fn </span>assert_matches_v1_rendering&lt;E, I, T, <span class="kw">const </span>ARITY: usize&gt;(
-<a href=#6098 id=6098 data-nosnippet>6098</a>        proof: <span class="kw-2">&amp;</span>jf_merkle_tree_compat::prelude::MerkleProof&lt;E, I, T, ARITY&gt;,
-<a href=#6099 id=6099 data-nosnippet>6099</a>    ) <span class="kw">where
-<a href=#6100 id=6100 data-nosnippet>6100</a>        </span>E: jf_merkle_tree_compat::Element
+<a href=#5996 id=5996 data-nosnippet>5996</a>    <span class="attr">#[tokio::test]
+<a href=#5997 id=5997 data-nosnippet>5997</a>    </span><span class="kw">async fn </span>sql_storage_settings_are_served_in_full() {
+<a href=#5998 id=5998 data-nosnippet>5998</a>        <span class="kw">use </span>proto::config_service_server::ConfigService <span class="kw">as _</span>;
+<a href=#5999 id=5999 data-nosnippet>5999</a>
+<a href=#6000 id=6000 data-nosnippet>6000</a>        <span class="kw">use </span><span class="kw">crate</span>::options::{
+<a href=#6001 id=6001 data-nosnippet>6001</a>            PublicNodeConfig,
+<a href=#6002 id=6002 data-nosnippet>6002</a>            tests::{parse_options_with, test_genesis},
+<a href=#6003 id=6003 data-nosnippet>6003</a>        };
+<a href=#6004 id=6004 data-nosnippet>6004</a>
+<a href=#6005 id=6005 data-nosnippet>6005</a>        <span class="kw">struct </span>UnusedDataSource;
+<a href=#6006 id=6006 data-nosnippet>6006</a>
+<a href=#6007 id=6007 data-nosnippet>6007</a>        <span class="kw">impl </span>HotShotConfigDataSource <span class="kw">for </span>UnusedDataSource {
+<a href=#6008 id=6008 data-nosnippet>6008</a>            <span class="kw">async fn </span>get_config(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; espresso_types::config::PublicNetworkConfig {
+<a href=#6009 id=6009 data-nosnippet>6009</a>                <span class="macro">unreachable!</span>(<span class="string">"the runtime config is served from the state, not the data source"</span>)
+<a href=#6010 id=6010 data-nosnippet>6010</a>            }
+<a href=#6011 id=6011 data-nosnippet>6011</a>        }
+<a href=#6012 id=6012 data-nosnippet>6012</a>
+<a href=#6013 id=6013 data-nosnippet>6013</a>        <span class="kw">let </span>opt = parse_options_with(<span class="kw-2">&amp;</span>[
+<a href=#6014 id=6014 data-nosnippet>6014</a>            <span class="string">"--cliquenet-bind-address"</span>,
+<a href=#6015 id=6015 data-nosnippet>6015</a>            <span class="string">"127.0.0.1:9999"</span>,
+<a href=#6016 id=6016 data-nosnippet>6016</a>            <span class="string">"--"</span>,
+<a href=#6017 id=6017 data-nosnippet>6017</a>            <span class="string">"storage-sql"</span>,
+<a href=#6018 id=6018 data-nosnippet>6018</a>            <span class="string">"--prune"</span>,
+<a href=#6019 id=6019 data-nosnippet>6019</a>            <span class="string">"--pruning-threshold"</span>,
+<a href=#6020 id=6020 data-nosnippet>6020</a>            <span class="string">"1000000000000"</span>,
+<a href=#6021 id=6021 data-nosnippet>6021</a>        ]);
+<a href=#6022 id=6022 data-nosnippet>6022</a>        <span class="kw">let </span>cfg = PublicNodeConfig::new(<span class="kw-2">&amp;</span>opt, <span class="kw-2">&amp;</span>opt.modules(), <span class="kw-2">&amp;</span>test_genesis());
+<a href=#6023 id=6023 data-nosnippet>6023</a>        <span class="kw">let </span>sql = cfg.storage.sql.clone().expect(<span class="string">"storage-sql was configured"</span>);
+<a href=#6024 id=6024 data-nosnippet>6024</a>
+<a href=#6025 id=6025 data-nosnippet>6025</a>        <span class="kw">let </span>state = NodeApiStateImpl::new(std::sync::Arc::new(UnusedDataSource))
+<a href=#6026 id=6026 data-nosnippet>6026</a>            .with_public_node_config(<span class="prelude-val">Some</span>(cfg));
+<a href=#6027 id=6027 data-nosnippet>6027</a>        <span class="kw">let </span>storage = state
+<a href=#6028 id=6028 data-nosnippet>6028</a>            .get_runtime_config(tonic::Request::new(proto::GetRuntimeConfigRequest {}))
+<a href=#6029 id=6029 data-nosnippet>6029</a>            .<span class="kw">await
+<a href=#6030 id=6030 data-nosnippet>6030</a>            </span>.unwrap()
+<a href=#6031 id=6031 data-nosnippet>6031</a>            .into_inner()
+<a href=#6032 id=6032 data-nosnippet>6032</a>            .storage
+<a href=#6033 id=6033 data-nosnippet>6033</a>            .expect(<span class="string">"the runtime config always reports a backend"</span>);
+<a href=#6034 id=6034 data-nosnippet>6034</a>
+<a href=#6035 id=6035 data-nosnippet>6035</a>        <span class="macro">assert_eq!</span>(storage.backend, proto::StorageBackend::Sql <span class="kw">as </span>i32);
+<a href=#6036 id=6036 data-nosnippet>6036</a>        <span class="macro">assert_eq!</span>(storage.fs, <span class="prelude-val">None</span>);
+<a href=#6037 id=6037 data-nosnippet>6037</a>        <span class="comment">// Compared against the source, not against `sql.clone().into()`, which would assert the
+<a href=#6038 id=6038 data-nosnippet>6038</a>        // mapping against itself. v1 serves the durations as `{secs, nanos}`.
+<a href=#6039 id=6039 data-nosnippet>6039</a>        </span><span class="macro">assert_eq!</span>(
+<a href=#6040 id=6040 data-nosnippet>6040</a>            storage.sql,
+<a href=#6041 id=6041 data-nosnippet>6041</a>            <span class="prelude-val">Some</span>(proto::SqlStorage {
+<a href=#6042 id=6042 data-nosnippet>6042</a>                prune: <span class="bool-val">true</span>,
+<a href=#6043 id=6043 data-nosnippet>6043</a>                archive: sql.archive,
+<a href=#6044 id=6044 data-nosnippet>6044</a>                lightweight: sql.lightweight,
+<a href=#6045 id=6045 data-nosnippet>6045</a>                disable_proactive_fetching: sql.disable_proactive_fetching,
+<a href=#6046 id=6046 data-nosnippet>6046</a>                fetch_rate_limit: sql.fetch_rate_limit.map(|limit| limit <span class="kw">as </span>u64),
+<a href=#6047 id=6047 data-nosnippet>6047</a>                active_fetch_delay_ms: sql.active_fetch_delay.map(|delay| delay.as_millis() <span class="kw">as </span>u64),
+<a href=#6048 id=6048 data-nosnippet>6048</a>                chunk_fetch_delay_ms: sql.chunk_fetch_delay.map(|delay| delay.as_millis() <span class="kw">as </span>u64),
+<a href=#6049 id=6049 data-nosnippet>6049</a>                sync_status_chunk_size: sql.sync_status_chunk_size.map(|size| size <span class="kw">as </span>u64),
+<a href=#6050 id=6050 data-nosnippet>6050</a>                sync_status_ttl_ms: sql.sync_status_ttl.map(|ttl| ttl.as_millis() <span class="kw">as </span>u64),
+<a href=#6051 id=6051 data-nosnippet>6051</a>                proactive_scan_chunk_size: sql.proactive_scan_chunk_size.map(|size| size <span class="kw">as </span>u64),
+<a href=#6052 id=6052 data-nosnippet>6052</a>                proactive_scan_interval_ms: sql
+<a href=#6053 id=6053 data-nosnippet>6053</a>                    .proactive_scan_interval
+<a href=#6054 id=6054 data-nosnippet>6054</a>                    .map(|interval| interval.as_millis() <span class="kw">as </span>u64),
+<a href=#6055 id=6055 data-nosnippet>6055</a>                idle_connection_timeout_ms: sql.idle_connection_timeout.as_millis() <span class="kw">as </span>u64,
+<a href=#6056 id=6056 data-nosnippet>6056</a>                connection_timeout_ms: sql.connection_timeout.as_millis() <span class="kw">as </span>u64,
+<a href=#6057 id=6057 data-nosnippet>6057</a>                slow_statement_threshold_ms: sql.slow_statement_threshold.as_millis() <span class="kw">as </span>u64,
+<a href=#6058 id=6058 data-nosnippet>6058</a>                statement_timeout_ms: sql.statement_timeout.as_millis() <span class="kw">as </span>u64,
+<a href=#6059 id=6059 data-nosnippet>6059</a>                min_connections: sql.min_connections,
+<a href=#6060 id=6060 data-nosnippet>6060</a>                max_connections: sql.max_connections,
+<a href=#6061 id=6061 data-nosnippet>6061</a>                query_min_connections: sql.query_min_connections,
+<a href=#6062 id=6062 data-nosnippet>6062</a>                query_max_connections: sql.query_max_connections,
+<a href=#6063 id=6063 data-nosnippet>6063</a>                pruning: <span class="prelude-val">Some</span>(proto::PruningConfig {
+<a href=#6064 id=6064 data-nosnippet>6064</a>                    pruning_threshold: <span class="prelude-val">Some</span>(<span class="number">1000000000000</span>),
+<a href=#6065 id=6065 data-nosnippet>6065</a>                    minimum_retention_ms: sql
+<a href=#6066 id=6066 data-nosnippet>6066</a>                        .pruning
+<a href=#6067 id=6067 data-nosnippet>6067</a>                        .minimum_retention
+<a href=#6068 id=6068 data-nosnippet>6068</a>                        .map(|retention| retention.as_millis() <span class="kw">as </span>u64),
+<a href=#6069 id=6069 data-nosnippet>6069</a>                    target_retention_ms: sql
+<a href=#6070 id=6070 data-nosnippet>6070</a>                        .pruning
+<a href=#6071 id=6071 data-nosnippet>6071</a>                        .target_retention
+<a href=#6072 id=6072 data-nosnippet>6072</a>                        .map(|retention| retention.as_millis() <span class="kw">as </span>u64),
+<a href=#6073 id=6073 data-nosnippet>6073</a>                    batch_size: sql.pruning.batch_size,
+<a href=#6074 id=6074 data-nosnippet>6074</a>                    max_usage: sql.pruning.max_usage.map(u32::from),
+<a href=#6075 id=6075 data-nosnippet>6075</a>                    interval_ms: sql
+<a href=#6076 id=6076 data-nosnippet>6076</a>                        .pruning
+<a href=#6077 id=6077 data-nosnippet>6077</a>                        .interval
+<a href=#6078 id=6078 data-nosnippet>6078</a>                        .map(|interval| interval.as_millis() <span class="kw">as </span>u64),
+<a href=#6079 id=6079 data-nosnippet>6079</a>                    pages: sql.pruning.pages,
+<a href=#6080 id=6080 data-nosnippet>6080</a>                }),
+<a href=#6081 id=6081 data-nosnippet>6081</a>                consensus_pruning: <span class="prelude-val">Some</span>(proto::ConsensusPruningConfig {
+<a href=#6082 id=6082 data-nosnippet>6082</a>                    target_retention: sql.consensus_pruning.target_retention,
+<a href=#6083 id=6083 data-nosnippet>6083</a>                    minimum_retention: sql.consensus_pruning.minimum_retention,
+<a href=#6084 id=6084 data-nosnippet>6084</a>                    target_usage: sql.consensus_pruning.target_usage,
+<a href=#6085 id=6085 data-nosnippet>6085</a>                }),
+<a href=#6086 id=6086 data-nosnippet>6086</a>            })
+<a href=#6087 id=6087 data-nosnippet>6087</a>        );
+<a href=#6088 id=6088 data-nosnippet>6088</a>        <span class="comment">// The defaults these come from are non-zero, so the comparisons above are not vacuous.
+<a href=#6089 id=6089 data-nosnippet>6089</a>        </span><span class="kw">let </span>served = storage.sql.unwrap();
+<a href=#6090 id=6090 data-nosnippet>6090</a>        <span class="macro">assert!</span>(served.statement_timeout_ms &gt; <span class="number">0</span>);
+<a href=#6091 id=6091 data-nosnippet>6091</a>        <span class="macro">assert!</span>(served.consensus_pruning.unwrap().target_retention &gt; <span class="number">0</span>);
+<a href=#6092 id=6092 data-nosnippet>6092</a>    }
+<a href=#6093 id=6093 data-nosnippet>6093</a>
+<a href=#6094 id=6094 data-nosnippet>6094</a>    <span class="kw">fn </span>assert_matches_v1_rendering&lt;E, I, T, <span class="kw">const </span>ARITY: usize&gt;(
+<a href=#6095 id=6095 data-nosnippet>6095</a>        proof: <span class="kw-2">&amp;</span>jf_merkle_tree_compat::prelude::MerkleProof&lt;E, I, T, ARITY&gt;,
+<a href=#6096 id=6096 data-nosnippet>6096</a>    ) <span class="kw">where
+<a href=#6097 id=6097 data-nosnippet>6097</a>        </span>E: jf_merkle_tree_compat::Element
+<a href=#6098 id=6098 data-nosnippet>6098</a>            + ark_serialize::CanonicalSerialize
+<a href=#6099 id=6099 data-nosnippet>6099</a>            + ark_serialize::CanonicalDeserialize,
+<a href=#6100 id=6100 data-nosnippet>6100</a>        I: jf_merkle_tree_compat::Index
 <a href=#6101 id=6101 data-nosnippet>6101</a>            + ark_serialize::CanonicalSerialize
 <a href=#6102 id=6102 data-nosnippet>6102</a>            + ark_serialize::CanonicalDeserialize,
-<a href=#6103 id=6103 data-nosnippet>6103</a>        I: jf_merkle_tree_compat::Index
-<a href=#6104 id=6104 data-nosnippet>6104</a>            + ark_serialize::CanonicalSerialize
-<a href=#6105 id=6105 data-nosnippet>6105</a>            + ark_serialize::CanonicalDeserialize,
-<a href=#6106 id=6106 data-nosnippet>6106</a>        T: jf_merkle_tree_compat::NodeValue,
-<a href=#6107 id=6107 data-nosnippet>6107</a>    {
-<a href=#6108 id=6108 data-nosnippet>6108</a>        <span class="kw">let </span>expected = serde_json::to_value(proof).unwrap();
-<a href=#6109 id=6109 data-nosnippet>6109</a>        <span class="kw">let </span>converted = proto::MerklePathResponse::from(proof);
-<a href=#6110 id=6110 data-nosnippet>6110</a>
-<a href=#6111 id=6111 data-nosnippet>6111</a>        <span class="macro">assert_eq!</span>(converted.pos, expected[<span class="string">"pos"</span>].as_str().unwrap());
-<a href=#6112 id=6112 data-nosnippet>6112</a>        <span class="kw">let </span>expected_path = expected[<span class="string">"proof"</span>].as_array().unwrap();
-<a href=#6113 id=6113 data-nosnippet>6113</a>        <span class="macro">assert_eq!</span>(converted.proof.len(), expected_path.len());
-<a href=#6114 id=6114 data-nosnippet>6114</a>        <span class="macro">assert!</span>(
-<a href=#6115 id=6115 data-nosnippet>6115</a>            !expected_path.is_empty(),
-<a href=#6116 id=6116 data-nosnippet>6116</a>            <span class="string">"a path of no nodes would assert nothing"
-<a href=#6117 id=6117 data-nosnippet>6117</a>        </span>);
-<a href=#6118 id=6118 data-nosnippet>6118</a>        <span class="kw">for </span>(node, expected) <span class="kw">in </span>converted.proof.iter().zip(expected_path) {
-<a href=#6119 id=6119 data-nosnippet>6119</a>            assert_merkle_node(node, expected);
-<a href=#6120 id=6120 data-nosnippet>6120</a>        }
-<a href=#6121 id=6121 data-nosnippet>6121</a>    }
-<a href=#6122 id=6122 data-nosnippet>6122</a>
-<a href=#6123 id=6123 data-nosnippet>6123</a>    <span class="attr">#[test]
-<a href=#6124 id=6124 data-nosnippet>6124</a>    </span><span class="kw">fn </span>block_state_path_mirrors_its_v1_rendering() {
-<a href=#6125 id=6125 data-nosnippet>6125</a>        <span class="kw">use </span>committable::Committable <span class="kw">as _</span>;
-<a href=#6126 id=6126 data-nosnippet>6126</a>        <span class="kw">use </span>jf_merkle_tree_compat::MerkleTreeScheme <span class="kw">as _</span>;
-<a href=#6127 id=6127 data-nosnippet>6127</a>
-<a href=#6128 id=6128 data-nosnippet>6128</a>        <span class="kw">let </span>commitment = reference_header(<span class="string">"v3"</span>).<span class="number">0</span>.commit();
-<a href=#6129 id=6129 data-nosnippet>6129</a>        <span class="kw">let </span>tree = espresso_types::BlockMerkleTree::from_elems(<span class="prelude-val">Some</span>(<span class="number">32</span>), [commitment, commitment])
-<a href=#6130 id=6130 data-nosnippet>6130</a>            .unwrap();
-<a href=#6131 id=6131 data-nosnippet>6131</a>        <span class="comment">// The block tree is light-weight: every leaf but the frontier is forgotten, so only the
-<a href=#6132 id=6132 data-nosnippet>6132</a>        // last index can be looked up here.
-<a href=#6133 id=6133 data-nosnippet>6133</a>        </span><span class="kw">let </span>(<span class="kw">_</span>, proof) = tree.lookup(<span class="number">1</span>).expect_ok().unwrap();
-<a href=#6134 id=6134 data-nosnippet>6134</a>        assert_matches_v1_rendering(<span class="kw-2">&amp;</span>proof);
-<a href=#6135 id=6135 data-nosnippet>6135</a>    }
-<a href=#6136 id=6136 data-nosnippet>6136</a>
-<a href=#6137 id=6137 data-nosnippet>6137</a>    <span class="doccomment">/// The fee tree indexes by account and branches 256 ways where the block tree indexes by
-<a href=#6138 id=6138 data-nosnippet>6138</a>    /// height and branches 3, so it exercises the conversion over a different `Index` and a
-<a href=#6139 id=6139 data-nosnippet>6139</a>    /// different arity.
-<a href=#6140 id=6140 data-nosnippet>6140</a>    </span><span class="attr">#[test]
-<a href=#6141 id=6141 data-nosnippet>6141</a>    </span><span class="kw">fn </span>fee_state_path_mirrors_its_v1_rendering() {
-<a href=#6142 id=6142 data-nosnippet>6142</a>        <span class="kw">use </span>jf_merkle_tree_compat::MerkleTreeScheme <span class="kw">as _</span>;
-<a href=#6143 id=6143 data-nosnippet>6143</a>
-<a href=#6144 id=6144 data-nosnippet>6144</a>        <span class="kw">let </span>account = espresso_types::FeeAccount::default();
-<a href=#6145 id=6145 data-nosnippet>6145</a>        <span class="kw">let </span>tree = espresso_types::FeeMerkleTree::from_kv_set(
-<a href=#6146 id=6146 data-nosnippet>6146</a>            <span class="number">20</span>,
-<a href=#6147 id=6147 data-nosnippet>6147</a>            [(account, espresso_types::FeeAmount::from(<span class="number">123u64</span>))],
-<a href=#6148 id=6148 data-nosnippet>6148</a>        )
-<a href=#6149 id=6149 data-nosnippet>6149</a>        .unwrap();
-<a href=#6150 id=6150 data-nosnippet>6150</a>        <span class="kw">let </span>(<span class="kw">_</span>, proof) = tree.lookup(account).expect_ok().unwrap();
-<a href=#6151 id=6151 data-nosnippet>6151</a>        assert_matches_v1_rendering(<span class="kw-2">&amp;</span>proof);
-<a href=#6152 id=6152 data-nosnippet>6152</a>    }
+<a href=#6103 id=6103 data-nosnippet>6103</a>        T: jf_merkle_tree_compat::NodeValue,
+<a href=#6104 id=6104 data-nosnippet>6104</a>    {
+<a href=#6105 id=6105 data-nosnippet>6105</a>        <span class="kw">let </span>expected = serde_json::to_value(proof).unwrap();
+<a href=#6106 id=6106 data-nosnippet>6106</a>        <span class="kw">let </span>converted = proto::MerklePathResponse::from(proof);
+<a href=#6107 id=6107 data-nosnippet>6107</a>
+<a href=#6108 id=6108 data-nosnippet>6108</a>        <span class="macro">assert_eq!</span>(converted.pos, expected[<span class="string">"pos"</span>].as_str().unwrap());
+<a href=#6109 id=6109 data-nosnippet>6109</a>        <span class="kw">let </span>expected_path = expected[<span class="string">"proof"</span>].as_array().unwrap();
+<a href=#6110 id=6110 data-nosnippet>6110</a>        <span class="macro">assert_eq!</span>(converted.proof.len(), expected_path.len());
+<a href=#6111 id=6111 data-nosnippet>6111</a>        <span class="macro">assert!</span>(
+<a href=#6112 id=6112 data-nosnippet>6112</a>            !expected_path.is_empty(),
+<a href=#6113 id=6113 data-nosnippet>6113</a>            <span class="string">"a path of no nodes would assert nothing"
+<a href=#6114 id=6114 data-nosnippet>6114</a>        </span>);
+<a href=#6115 id=6115 data-nosnippet>6115</a>        <span class="kw">for </span>(node, expected) <span class="kw">in </span>converted.proof.iter().zip(expected_path) {
+<a href=#6116 id=6116 data-nosnippet>6116</a>            assert_merkle_node(node, expected);
+<a href=#6117 id=6117 data-nosnippet>6117</a>        }
+<a href=#6118 id=6118 data-nosnippet>6118</a>    }
+<a href=#6119 id=6119 data-nosnippet>6119</a>
+<a href=#6120 id=6120 data-nosnippet>6120</a>    <span class="attr">#[test]
+<a href=#6121 id=6121 data-nosnippet>6121</a>    </span><span class="kw">fn </span>block_state_path_mirrors_its_v1_rendering() {
+<a href=#6122 id=6122 data-nosnippet>6122</a>        <span class="kw">use </span>committable::Committable <span class="kw">as _</span>;
+<a href=#6123 id=6123 data-nosnippet>6123</a>        <span class="kw">use </span>jf_merkle_tree_compat::MerkleTreeScheme <span class="kw">as _</span>;
+<a href=#6124 id=6124 data-nosnippet>6124</a>
+<a href=#6125 id=6125 data-nosnippet>6125</a>        <span class="kw">let </span>commitment = reference_header(<span class="string">"v3"</span>).<span class="number">0</span>.commit();
+<a href=#6126 id=6126 data-nosnippet>6126</a>        <span class="kw">let </span>tree = espresso_types::BlockMerkleTree::from_elems(<span class="prelude-val">Some</span>(<span class="number">32</span>), [commitment, commitment])
+<a href=#6127 id=6127 data-nosnippet>6127</a>            .unwrap();
+<a href=#6128 id=6128 data-nosnippet>6128</a>        <span class="comment">// The block tree is light-weight: every leaf but the frontier is forgotten, so only the
+<a href=#6129 id=6129 data-nosnippet>6129</a>        // last index can be looked up here.
+<a href=#6130 id=6130 data-nosnippet>6130</a>        </span><span class="kw">let </span>(<span class="kw">_</span>, proof) = tree.lookup(<span class="number">1</span>).expect_ok().unwrap();
+<a href=#6131 id=6131 data-nosnippet>6131</a>        assert_matches_v1_rendering(<span class="kw-2">&amp;</span>proof);
+<a href=#6132 id=6132 data-nosnippet>6132</a>    }
+<a href=#6133 id=6133 data-nosnippet>6133</a>
+<a href=#6134 id=6134 data-nosnippet>6134</a>    <span class="doccomment">/// The fee tree indexes by account and branches 256 ways where the block tree indexes by
+<a href=#6135 id=6135 data-nosnippet>6135</a>    /// height and branches 3, so it exercises the conversion over a different `Index` and a
+<a href=#6136 id=6136 data-nosnippet>6136</a>    /// different arity.
+<a href=#6137 id=6137 data-nosnippet>6137</a>    </span><span class="attr">#[test]
+<a href=#6138 id=6138 data-nosnippet>6138</a>    </span><span class="kw">fn </span>fee_state_path_mirrors_its_v1_rendering() {
+<a href=#6139 id=6139 data-nosnippet>6139</a>        <span class="kw">use </span>jf_merkle_tree_compat::MerkleTreeScheme <span class="kw">as _</span>;
+<a href=#6140 id=6140 data-nosnippet>6140</a>
+<a href=#6141 id=6141 data-nosnippet>6141</a>        <span class="kw">let </span>account = espresso_types::FeeAccount::default();
+<a href=#6142 id=6142 data-nosnippet>6142</a>        <span class="kw">let </span>tree = espresso_types::FeeMerkleTree::from_kv_set(
+<a href=#6143 id=6143 data-nosnippet>6143</a>            <span class="number">20</span>,
+<a href=#6144 id=6144 data-nosnippet>6144</a>            [(account, espresso_types::FeeAmount::from(<span class="number">123u64</span>))],
+<a href=#6145 id=6145 data-nosnippet>6145</a>        )
+<a href=#6146 id=6146 data-nosnippet>6146</a>        .unwrap();
+<a href=#6147 id=6147 data-nosnippet>6147</a>        <span class="kw">let </span>(<span class="kw">_</span>, proof) = tree.lookup(account).expect_ok().unwrap();
+<a href=#6148 id=6148 data-nosnippet>6148</a>        assert_matches_v1_rendering(<span class="kw-2">&amp;</span>proof);
+<a href=#6149 id=6149 data-nosnippet>6149</a>    }
+<a href=#6150 id=6150 data-nosnippet>6150</a>
+<a href=#6151 id=6151 data-nosnippet>6151</a>    <span class="kw">fn </span>assert_merkle_node(node: <span class="kw-2">&amp;</span>proto::AdvzMerkleNode, expected: <span class="kw-2">&amp;</span>serde_json::Value) {
+<a href=#6152 id=6152 data-nosnippet>6152</a>        <span class="kw">use </span>proto::advz_merkle_node::Node;
 <a href=#6153 id=6153 data-nosnippet>6153</a>
-<a href=#6154 id=6154 data-nosnippet>6154</a>    <span class="kw">fn </span>assert_merkle_node(node: <span class="kw-2">&amp;</span>proto::AdvzMerkleNode, expected: <span class="kw-2">&amp;</span>serde_json::Value) {
-<a href=#6155 id=6155 data-nosnippet>6155</a>        <span class="kw">use </span>proto::advz_merkle_node::Node;
-<a href=#6156 id=6156 data-nosnippet>6156</a>
-<a href=#6157 id=6157 data-nosnippet>6157</a>        <span class="kw">match </span>node.node.as_ref().unwrap() {
-<a href=#6158 id=6158 data-nosnippet>6158</a>            Node::Empty(<span class="kw">_</span>) =&gt; <span class="macro">assert_eq!</span>(expected, <span class="string">"Empty"</span>),
-<a href=#6159 id=6159 data-nosnippet>6159</a>            Node::Branch(branch) =&gt; {
-<a href=#6160 id=6160 data-nosnippet>6160</a>                <span class="kw">let </span>expected = <span class="kw-2">&amp;</span>expected[<span class="string">"Branch"</span>];
-<a href=#6161 id=6161 data-nosnippet>6161</a>                <span class="macro">assert_eq!</span>(branch.value, expected[<span class="string">"value"</span>].as_str().unwrap());
-<a href=#6162 id=6162 data-nosnippet>6162</a>                <span class="kw">let </span>children = expected[<span class="string">"children"</span>].as_array().unwrap();
-<a href=#6163 id=6163 data-nosnippet>6163</a>                <span class="macro">assert_eq!</span>(branch.children.len(), children.len());
-<a href=#6164 id=6164 data-nosnippet>6164</a>                <span class="kw">for </span>(child, expected) <span class="kw">in </span>branch.children.iter().zip(children) {
-<a href=#6165 id=6165 data-nosnippet>6165</a>                    assert_merkle_node(child, expected);
-<a href=#6166 id=6166 data-nosnippet>6166</a>                }
-<a href=#6167 id=6167 data-nosnippet>6167</a>            },
-<a href=#6168 id=6168 data-nosnippet>6168</a>            Node::Leaf(leaf) =&gt; {
-<a href=#6169 id=6169 data-nosnippet>6169</a>                <span class="kw">let </span>expected = <span class="kw-2">&amp;</span>expected[<span class="string">"Leaf"</span>];
-<a href=#6170 id=6170 data-nosnippet>6170</a>                <span class="macro">assert_eq!</span>(leaf.value, expected[<span class="string">"value"</span>].as_str().unwrap());
-<a href=#6171 id=6171 data-nosnippet>6171</a>                <span class="macro">assert_eq!</span>(leaf.pos, expected[<span class="string">"pos"</span>].as_str().unwrap());
-<a href=#6172 id=6172 data-nosnippet>6172</a>                <span class="macro">assert_eq!</span>(leaf.elem, expected[<span class="string">"elem"</span>].as_str().unwrap());
-<a href=#6173 id=6173 data-nosnippet>6173</a>            },
-<a href=#6174 id=6174 data-nosnippet>6174</a>            Node::ForgottenSubtree(forgotten) =&gt; {
-<a href=#6175 id=6175 data-nosnippet>6175</a>                <span class="kw">let </span>expected = <span class="kw-2">&amp;</span>expected[<span class="string">"ForgettenSubtree"</span>];
-<a href=#6176 id=6176 data-nosnippet>6176</a>                <span class="macro">assert_eq!</span>(forgotten.value, expected[<span class="string">"value"</span>].as_str().unwrap());
-<a href=#6177 id=6177 data-nosnippet>6177</a>            },
-<a href=#6178 id=6178 data-nosnippet>6178</a>        }
-<a href=#6179 id=6179 data-nosnippet>6179</a>    }
-<a href=#6180 id=6180 data-nosnippet>6180</a>
-<a href=#6181 id=6181 data-nosnippet>6181</a>    <span class="attr">#[test]
-<a href=#6182 id=6182 data-nosnippet>6182</a>    </span><span class="kw">fn </span>snapshot_query_takes_exactly_one_selector() {
-<a href=#6183 id=6183 data-nosnippet>6183</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(
-<a href=#6184 id=6184 data-nosnippet>6184</a>            snapshot_from_query(<span class="prelude-val">Some</span>(<span class="number">7</span>), <span class="prelude-val">None</span>).unwrap(),
-<a href=#6185 id=6185 data-nosnippet>6185</a>            v1::Snapshot::Height(<span class="number">7</span>)
-<a href=#6186 id=6186 data-nosnippet>6186</a>        ));
-<a href=#6187 id=6187 data-nosnippet>6187</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(
-<a href=#6188 id=6188 data-nosnippet>6188</a>            snapshot_from_query(<span class="prelude-val">None</span>, <span class="prelude-val">Some</span>(<span class="string">"MERKLE_COMM~x"</span>.to_owned())).unwrap(),
-<a href=#6189 id=6189 data-nosnippet>6189</a>            v1::Snapshot::Commit(<span class="kw">_</span>)
-<a href=#6190 id=6190 data-nosnippet>6190</a>        ));
-<a href=#6191 id=6191 data-nosnippet>6191</a>        <span class="kw">for </span>(height, commit) <span class="kw">in </span>[(<span class="prelude-val">None</span>, <span class="prelude-val">None</span>), (<span class="prelude-val">Some</span>(<span class="number">7</span>), <span class="prelude-val">Some</span>(<span class="string">"MERKLE_COMM~x"</span>.to_owned()))] {
-<a href=#6192 id=6192 data-nosnippet>6192</a>            <span class="macro">assert_eq!</span>(
-<a href=#6193 id=6193 data-nosnippet>6193</a>                snapshot_from_query(height, commit).unwrap_err().code(),
-<a href=#6194 id=6194 data-nosnippet>6194</a>                tonic::Code::InvalidArgument
-<a href=#6195 id=6195 data-nosnippet>6195</a>            );
-<a href=#6196 id=6196 data-nosnippet>6196</a>        }
-<a href=#6197 id=6197 data-nosnippet>6197</a>    }
-<a href=#6198 id=6198 data-nosnippet>6198</a>}
+<a href=#6154 id=6154 data-nosnippet>6154</a>        <span class="kw">match </span>node.node.as_ref().unwrap() {
+<a href=#6155 id=6155 data-nosnippet>6155</a>            Node::Empty(<span class="kw">_</span>) =&gt; <span class="macro">assert_eq!</span>(expected, <span class="string">"Empty"</span>),
+<a href=#6156 id=6156 data-nosnippet>6156</a>            Node::Branch(branch) =&gt; {
+<a href=#6157 id=6157 data-nosnippet>6157</a>                <span class="kw">let </span>expected = <span class="kw-2">&amp;</span>expected[<span class="string">"Branch"</span>];
+<a href=#6158 id=6158 data-nosnippet>6158</a>                <span class="macro">assert_eq!</span>(branch.value, expected[<span class="string">"value"</span>].as_str().unwrap());
+<a href=#6159 id=6159 data-nosnippet>6159</a>                <span class="kw">let </span>children = expected[<span class="string">"children"</span>].as_array().unwrap();
+<a href=#6160 id=6160 data-nosnippet>6160</a>                <span class="macro">assert_eq!</span>(branch.children.len(), children.len());
+<a href=#6161 id=6161 data-nosnippet>6161</a>                <span class="kw">for </span>(child, expected) <span class="kw">in </span>branch.children.iter().zip(children) {
+<a href=#6162 id=6162 data-nosnippet>6162</a>                    assert_merkle_node(child, expected);
+<a href=#6163 id=6163 data-nosnippet>6163</a>                }
+<a href=#6164 id=6164 data-nosnippet>6164</a>            },
+<a href=#6165 id=6165 data-nosnippet>6165</a>            Node::Leaf(leaf) =&gt; {
+<a href=#6166 id=6166 data-nosnippet>6166</a>                <span class="kw">let </span>expected = <span class="kw-2">&amp;</span>expected[<span class="string">"Leaf"</span>];
+<a href=#6167 id=6167 data-nosnippet>6167</a>                <span class="macro">assert_eq!</span>(leaf.value, expected[<span class="string">"value"</span>].as_str().unwrap());
+<a href=#6168 id=6168 data-nosnippet>6168</a>                <span class="macro">assert_eq!</span>(leaf.pos, expected[<span class="string">"pos"</span>].as_str().unwrap());
+<a href=#6169 id=6169 data-nosnippet>6169</a>                <span class="macro">assert_eq!</span>(leaf.elem, expected[<span class="string">"elem"</span>].as_str().unwrap());
+<a href=#6170 id=6170 data-nosnippet>6170</a>            },
+<a href=#6171 id=6171 data-nosnippet>6171</a>            Node::ForgottenSubtree(forgotten) =&gt; {
+<a href=#6172 id=6172 data-nosnippet>6172</a>                <span class="kw">let </span>expected = <span class="kw-2">&amp;</span>expected[<span class="string">"ForgettenSubtree"</span>];
+<a href=#6173 id=6173 data-nosnippet>6173</a>                <span class="macro">assert_eq!</span>(forgotten.value, expected[<span class="string">"value"</span>].as_str().unwrap());
+<a href=#6174 id=6174 data-nosnippet>6174</a>            },
+<a href=#6175 id=6175 data-nosnippet>6175</a>        }
+<a href=#6176 id=6176 data-nosnippet>6176</a>    }
+<a href=#6177 id=6177 data-nosnippet>6177</a>
+<a href=#6178 id=6178 data-nosnippet>6178</a>    <span class="attr">#[test]
+<a href=#6179 id=6179 data-nosnippet>6179</a>    </span><span class="kw">fn </span>snapshot_query_takes_exactly_one_selector() {
+<a href=#6180 id=6180 data-nosnippet>6180</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(
+<a href=#6181 id=6181 data-nosnippet>6181</a>            snapshot_from_query(<span class="prelude-val">Some</span>(<span class="number">7</span>), <span class="prelude-val">None</span>).unwrap(),
+<a href=#6182 id=6182 data-nosnippet>6182</a>            v1::Snapshot::Height(<span class="number">7</span>)
+<a href=#6183 id=6183 data-nosnippet>6183</a>        ));
+<a href=#6184 id=6184 data-nosnippet>6184</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(
+<a href=#6185 id=6185 data-nosnippet>6185</a>            snapshot_from_query(<span class="prelude-val">None</span>, <span class="prelude-val">Some</span>(<span class="string">"MERKLE_COMM~x"</span>.to_owned())).unwrap(),
+<a href=#6186 id=6186 data-nosnippet>6186</a>            v1::Snapshot::Commit(<span class="kw">_</span>)
+<a href=#6187 id=6187 data-nosnippet>6187</a>        ));
+<a href=#6188 id=6188 data-nosnippet>6188</a>        <span class="kw">for </span>(height, commit) <span class="kw">in </span>[(<span class="prelude-val">None</span>, <span class="prelude-val">None</span>), (<span class="prelude-val">Some</span>(<span class="number">7</span>), <span class="prelude-val">Some</span>(<span class="string">"MERKLE_COMM~x"</span>.to_owned()))] {
+<a href=#6189 id=6189 data-nosnippet>6189</a>            <span class="macro">assert_eq!</span>(
+<a href=#6190 id=6190 data-nosnippet>6190</a>                snapshot_from_query(height, commit).unwrap_err().code(),
+<a href=#6191 id=6191 data-nosnippet>6191</a>                tonic::Code::InvalidArgument
+<a href=#6192 id=6192 data-nosnippet>6192</a>            );
+<a href=#6193 id=6193 data-nosnippet>6193</a>        }
+<a href=#6194 id=6194 data-nosnippet>6194</a>    }
+<a href=#6195 id=6195 data-nosnippet>6195</a>}
 </code></pre></div></section></main></body></html>

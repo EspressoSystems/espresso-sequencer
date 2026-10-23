@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["PG_SERIALIZATION_FAILURE_CODE","PRUNE_TABLES"],"fn":["decide_event_from_chain","deserialize_authenticated_validator_map","prune_to_view"],"struct":["DecidedLeaf","Options","Persistence"],"trait":["BackendOptions"]};

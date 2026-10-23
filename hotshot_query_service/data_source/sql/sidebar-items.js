@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"macro":[["include_migrations",1]],"struct":["Error","Migration"],"type":["Builder","Config","SqlDataSource"]};
+window.SIDEBAR_ITEMS = {"struct":["Migration"]};

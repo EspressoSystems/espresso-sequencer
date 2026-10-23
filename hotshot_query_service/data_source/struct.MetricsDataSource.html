@@ -8,7 +8,7 @@ data source is kept in memory, so it does not require a persistent storage backe
 availability API.</p>
 <p>Since all the state required by <a href="struct.MetricsDataSource.html" title="struct hotshot_query_service::data_source::MetricsDataSource"><code>MetricsDataSource</code></a> is updated automatically by HotShot, there
 is no need to spawn an update loop to update the data source with new events, as is required
-with full archival data sources like <a href="sql/type.SqlDataSource.html" title="type hotshot_query_service::data_source::sql::SqlDataSource"><code>SqlDataSource</code></a>. Instead,
+with full archival data sources like <a href="super::SqlDataSource"><code>SqlDataSource</code></a>. Instead,
 <a href="struct.MetricsDataSource.html" title="struct hotshot_query_service::data_source::MetricsDataSource"><code>MetricsDataSource</code></a> will be populated with useful data as long as consensus records its
 metrics through <a href="../status/trait.UpdateStatusData.html#tymethod.populate_metrics" title="method hotshot_query_service::status::UpdateStatusData::populate_metrics"><code>populate_metrics</code></a>:</p>
 

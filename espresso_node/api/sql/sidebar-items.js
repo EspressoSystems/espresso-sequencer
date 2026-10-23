@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["fee_header_dependencies","get_leaf_from_proposal","load_accounts","load_accounts_at","load_chain_config","load_frontier","load_frontier_at","load_reward_merkle_tree_v2","load_v1_reward_accounts","reconstruct_state","reward_header_dependencies"],"struct":["ArchiveStateGc"],"type":["DataSource"]};
+window.SIDEBAR_ITEMS = {"mod":["postgres","sqlite"]};

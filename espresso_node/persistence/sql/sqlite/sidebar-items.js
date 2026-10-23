@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["read_pragma","read_pragmas","sqlite_probe_dir"],"mod":["imp"],"struct":["Options","Persistence"]};
