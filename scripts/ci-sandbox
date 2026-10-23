@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+# Run an untrusted command in a bubblewrap sandbox. No process outlives it
+# (pid namespace + die-with-parent), /proc is fresh, and the env is cleared.
+set -euo pipefail
+
+usage() {
+  cat >&2 <<EOF
+usage: ${0##*/} [--no-net] [--ro PATH]... [--rw PATH]... [--env VAR]... -- CMD [ARGS...]
+EOF
+  exit 1
+}
+
+net=(--share-net)
+binds=()
+envs=()
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -h | --help) usage ;;
+    --no-net) net=() && shift ;;
+    --ro | --rw)
+      [[ $# -ge 2 ]] || usage
+      path=$(realpath --canonicalize-existing -- "$2")
+      [[ "$1" == --ro ]] && flag=--ro-bind || flag=--bind
+      binds+=("${flag}" "${path}" "${path}")
+      shift 2
+      ;;
+    --env)
+      [[ $# -ge 2 ]] || usage
+      [[ -n "${!2+x}" ]] || { echo "env var $2 is not set" >&2; exit 1; }
+      envs+=(--setenv "$2" "${!2}")
+      shift 2
+      ;;
+    --) shift && break ;;
+    *) usage ;;
+  esac
+done
+[[ $# -gt 0 ]] || usage
+
+# /run holds the docker and dbus sockets, either of which reaches the host.
+# Bind back only what name resolution (Ubuntu) and PATH (NixOS) need.
+run=()
+for dir in /run/systemd/resolve /run/current-system /run/wrappers; do
+  [[ -d "${dir}" ]] && run+=(--ro-bind "${dir}" "${dir}")
+done
+
+exec bwrap \
+  --ro-bind / / --dev /dev --proc /proc --tmpfs /tmp --tmpfs "${HOME}" \
+  --tmpfs /run "${run[@]}" \
+  "${binds[@]}" --bind "${PWD}" "${PWD}" --chdir "${PWD}" \
+  --unshare-all --unshare-user --disable-userns "${net[@]}" --die-with-parent --new-session --clearenv \
+  --setenv PATH "${PATH}" --setenv HOME "${HOME}" "${envs[@]}" \
+  -- "$@"
