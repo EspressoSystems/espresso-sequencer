@@ -14,8 +14,8 @@ Goal: find every real defect in the PR. Recall over precision.
 
 ## Scope
 
-CI is green: build, lints, formatting, tests, serialization reference tests and API compatibility checks passed. Do not
-spend effort on anything those catch.
+Perform static review only; CI runs build, lint, format, test, serialization and API compatibility gates separately.
+Review whether tests are adequate, not whether they pass.
 
 ## Procedure
 
