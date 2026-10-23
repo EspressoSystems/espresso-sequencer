@@ -64,10 +64,8 @@ use self::data_source::{
     HotShotConfigDataSource, NodeKeysDataSource, NodePublicKeys, NodeStateDataSource,
     StateSignatureDataSource,
 };
-#[cfg(any(test, feature = "testing"))]
-use crate::SequencerContext;
 use crate::{
-    SeqTypes, SequencerApiVersion,
+    SeqTypes,
     api::{
         context::{ApiContext, ConsensusSource, NodeLightClient},
         data_source::TokenDataSource,
@@ -84,6 +82,8 @@ use crate::{
     },
     state_cert::{StateCertFetchError, validate_state_cert},
 };
+#[cfg(any(test, feature = "testing"))]
+use crate::{SequencerApiVersion, SequencerContext};
 
 pub mod context;
 pub mod data_source;

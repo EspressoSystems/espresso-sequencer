@@ -5,8 +5,9 @@
 | File                    | Purpose                                                                           |
 | ----------------------- | --------------------------------------------------------------------------------- |
 | `claude_gh.py`          | The CLI the workflows call.                                                       |
-| `review.md`             | Runbook for the `review` job.                                                     |
-| `review-backport.md`    | Appended to `review.md` on backport PRs (branch `backport-<n>-to-*`).             |
+| `review.md`             | Shared part of the `review` job: inputs, prior threads, findings, output.         |
+| `review-standard.md`    | Review procedure, placed before `review.md` on regular PRs.                       |
+| `review-backport.md`    | Placed before `review.md` instead on backport PRs (branch `backport-<n>-to-*`).   |
 | `mention.md`            | Prompt for `@claude` mentions.                                                    |
 | `code-review.md`        | Appended to the system prompt of the `/code-review` comment command.              |
 | `backport-resolve.md`   | Prompt for resolving backport conflicts (`.github/workflows/backport.yml`).       |
@@ -18,18 +19,19 @@ Commands: `just claude::fmt`, `just claude::lint`, `just claude::check`, `just c
 
 ## PR review in CI
 
-`.github/workflows/claude-review.yml` runs on non-draft, non-fork PRs when opened, reopened or marked ready. It calls
-`claude-job.yml`, which also serves `claude.yml` (`@claude` mentions and `/code-review`): `start` posts a status comment
-with the write token. `run` fetches team review comments into `tmp/pr-review-comments.json` (plus original-PR context
-for backports) and runs `claude_gh.py run review` with a read token and `ANTHROPIC_API_KEY`; Claude reads the diff and
-checkout and records inline comments, candidates with verdicts, and a summary. `apply` posts the record with the write
-token and edits the status comment with the summary and cost footer. All three jobs run `.github/claude` from one
-commit: the merge commit for reviews, the default branch head for `claude.yml`.
+`.github/workflows/claude-review.yml` runs on non-draft, non-fork PRs when opened, reopened or marked ready; an OWNER or
+MEMBER `/review` comment on a PR re-runs it on the current head via `claude.yml`. It calls `claude-job.yml`, which also
+serves `claude.yml` (`@claude` mentions, `/review` and `/code-review`): `start` posts a status comment with the write
+token. `run` fetches team review comments into `tmp/pr-review-comments.json` (plus original-PR context for backports)
+and runs `claude_gh.py run review` with a read token and `ANTHROPIC_API_KEY`; Claude reads the diff and checkout and
+records inline comments, candidates with verdicts, and a summary. `apply` posts the record with the write token and
+edits the status comment with the summary and cost footer. All three jobs run `.github/claude` from one commit: the
+merge commit for PR-open reviews, the default branch head for `claude.yml` (including `/review`).
 
 ## Evaluating review changes
 
 `eval/eval.py` replays the `review` job on the PRs in `eval/cases.toml`, using the working tree's `claude_gh.py` and
-`review.md`.
+`review*.md`.
 
 - Never posts or modifies anything on GitHub: only the `run` step executes, against a GitHub whose write methods raise.
 - Needs no local state: all files go under `tmp/claude-eval/`, worktrees under `tmp/claude-eval/wt/<pr>`.
@@ -81,8 +83,8 @@ Per PR: $0.6-2.5 with opus, about 2x with fable.
 
 ### Known limitations
 
-- Prior review comments are not replayed (empty `tmp/pr-review-comments.json`): thread handling (runbook step 1) and
-  skipping existing feedback are not evaluated.
+- Prior review comments are not replayed (empty `tmp/pr-review-comments.json`): thread handling (`## Prior threads` in
+  `review.md`) and skipping existing feedback are not evaluated.
 - The PR title and body stay visible to the reviewer and may describe the bug or a later fix (a PR that fixes one bug
   and introduces another).
 - One run per PR is noisy; results vary between runs. Compare over several runs before concluding.
