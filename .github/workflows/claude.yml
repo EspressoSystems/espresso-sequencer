@@ -10,8 +10,8 @@ on:
   issues:
     types: [opened]
 
-# Both jobs run .github/claude from the default branch head, never from the PR: review events on
-# fork PRs would otherwise run the fork's scripts with the API key.
+# Both jobs run .github/claude from the default branch head. For review events GitHub loads this
+# file and claude-job.yml from the PR merge commit; same-repo PR authors already have write access.
 jobs:
   mention:
     if: |
