@@ -316,7 +316,9 @@ jobs:
             fi
             gh pr ready "$pr" || true
             if [ -f "$out/$pr.md" ]; then
-              gh pr comment "$pr" --body-file "$out/$pr.md" || true
+              # Fixed first line: a model-written body must not start with the claude-gh trust marker.
+              { printf '### Conflict resolution summary\n\n'; cat "$out/$pr.md"; } \
+                | gh pr comment "$pr" --body-file - || true
             else
               gh pr comment "$pr" --body "⚠️ No resolution summary was produced for this backport. Claude may not have completed the resolution as expected; please review carefully." || true
             fi
