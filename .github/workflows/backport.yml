@@ -1,19 +1,6 @@
-# Threat model
-#
-# pull_request_target runs this file from the base branch with secrets, also for
-# fork PRs and without approval. Nothing here checks out or runs PR head code: the
-# job starts only on merge, so its input is reviewed code already on main.
-#
-# Trusted: this file, the prompt at $GITHUB_SHA, merged code on main and release
-# branches. A malicious change that gets merged is out of scope.
-#
-# Untrusted: Claude, and everything in the worktree once it ran. Reviewed code
-# can still hide a prompt injection. So:
-# - resolve has no write token. Claude, git and cargo on its commits run only in
-#   scripts/ci-sandbox: no host processes, no env, no home, nothing outlives it.
-#   harden-runner narrows egress.
-# - push holds the write token and runs no code from the backport branches.
-#
+# Threat model: see "CI threat model" in .github/claude/README.md.
+# pull_request_target runs this file from the base branch with secrets and never
+# checks out PR head code: the job starts only on merge.
 # Accepted: ANTHROPIC_API_KEY can still leave via allowed hosts such as github.com.
 name: Backport merged pull request
 on:
@@ -29,9 +16,7 @@ on:
         description: "Target branch"
         required: true
         type: string
-permissions:
-  contents: write
-  pull-requests: write
+permissions: {}
 jobs:
   backport:
     name: Backport pull request
@@ -40,6 +25,9 @@ jobs:
       github.event_name == 'workflow_dispatch' ||
       (github.event.pull_request.merged &&
        !startsWith(github.event.pull_request.head.ref, 'backport-'))
+    permissions:
+      contents: write
+      pull-requests: write
     outputs:
       needs_claude: ${{ steps.detect.outputs.needs_claude }}
     steps:
@@ -172,8 +160,10 @@ jobs:
           set -euo pipefail
           for entry in $NEEDS_CLAUDE; do
             dir=$(mktemp -d)
-            git show "origin/${entry#*:}:rust-toolchain.toml" > "$dir/rust-toolchain.toml"
-            (cd "$dir" && rustup toolchain install) || echo "::warning::no toolchain for ${entry#*:}"
+            if ! git show "origin/${entry#*:}:rust-toolchain.toml" > "$dir/rust-toolchain.toml" ||
+              ! (cd "$dir" && rustup toolchain install); then
+              echo "::warning::no toolchain for ${entry#*:}"
+            fi
           done
 
       - name: Claude conflict resolution
@@ -184,6 +174,10 @@ jobs:
           CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1"
         run: |
           set -euo pipefail
+          # Sandboxed output must not be parsed as workflow commands.
+          token=$(openssl rand -hex 16)
+          echo "::stop-commands::$token"
+          trap 'echo "::$token::"' EXIT
           export PATH="$HOME/.local/bin:$PATH"
           # Read the prompt from the triggering commit: the working tree is now on
           # the backport branch, which may predate this file.
@@ -195,13 +189,18 @@ jobs:
             claude -p "$prompt" --model claude-opus-4-8 --dangerously-skip-permissions
 
       - name: Verify resolved backports compile and bundle them
-        timeout-minutes: 60
+        timeout-minutes: 120
         env:
           NEEDS_CLAUDE: ${{ needs.backport.outputs.needs_claude }}
         run: |
           set -euo pipefail
+          # Sandboxed output must not be parsed as workflow commands.
+          token=$(openssl rand -hex 16)
+          echo "::stop-commands::$token"
+          trap 'echo "::$token::"' EXIT
           out="$RUNNER_TEMP/out"
-          # ~/.cargo/bin is on the host PATH, so the sandbox gets its own CARGO_HOME.
+          # ~/.cargo is mounted read-only, so cargo needs a writable CARGO_HOME. A fresh
+          # one, because Claude never saw it and cannot have planted anything in it.
           export CARGO_HOME="$RUNNER_TEMP/cargo-home"
           mkdir -p "$out" "$CARGO_HOME"
           # git and cargo read config and build scripts from Claude's worktree, so they
@@ -225,8 +224,8 @@ jobs:
               fail "$pr" "Claude produced no new commits over origin/$branch."
             elif ! sb git checkout --detach "$sha"; then
               fail "$pr" "git checkout $sha failed."
-            elif ! sb cargo check --tests --examples; then
-              fail "$pr" "\`cargo check --tests --examples\` failed after resolution."
+            elif ! sb timeout 30m cargo check --locked --tests --examples; then
+              fail "$pr" "\`cargo check --locked --tests --examples\` failed or timed out after resolution."
             elif ! sb sh -c 'git update-ref "refs/resolved/$1" "$2" && git bundle create - "$3..refs/resolved/$1"' \
                 sh "$pr" "$sha" "$base" > "$out/$pr.bundle"; then
               rm -f "$out/$pr.bundle"
@@ -253,6 +252,9 @@ jobs:
     # Also after a failed resolve, so every PR gets a failure comment.
     if: always() && needs.backport.outputs.needs_claude != ''
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
     steps:
       - uses: actions/checkout@v7
 
@@ -294,7 +296,7 @@ jobs:
               fail "$pr" "the resolve job produced no result."
               continue
             fi
-            if ! git fetch origin "$branch" || ! git bundle verify --quiet "$out/$pr.bundle" ||
+            if ! git fetch --depth=1 origin "$branch" || ! git bundle verify --quiet "$out/$pr.bundle" ||
               ! git fetch "$out/$pr.bundle" "refs/resolved/$pr"; then
               fail "$pr" "fetching the resolved commits failed."
               continue

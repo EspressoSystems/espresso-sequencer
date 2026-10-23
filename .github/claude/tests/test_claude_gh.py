@@ -200,7 +200,11 @@ def test_options_no_bash():
     assert o.setting_sources == ["user"]
     assert o.permission_mode == "dontAsk"
     assert o.max_turns == 120
-    assert o.env == {"GH_TOKEN": "", "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS": "1"}
+    assert o.env == {
+        "GH_TOKEN": "",
+        "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS": "1",
+        "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+    }
 
 
 def test_options_builtin_and_settings_per_job():

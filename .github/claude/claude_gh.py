@@ -77,7 +77,11 @@ JOB_WRITES = {
 }
 # The CLI gets no GitHub token: all GitHub access goes through the `gh` MCP server.
 # Background subagents outlive the main result and leave the review unposted.
-CLI_ENV = {"GH_TOKEN": "", "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS": "1"}
+CLI_ENV = {
+    "GH_TOKEN": "",
+    "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS": "1",
+    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+}
 MAX_TURNS = 120
 SERVER = "gh"
 THREAD_ID = re.compile(r"[A-Za-z0-9_=-]+")

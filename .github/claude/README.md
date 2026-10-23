@@ -22,10 +22,49 @@ Commands: `just claude::fmt`, `just claude::lint`, `just claude::check`, `just c
 `.github/workflows/claude-review.yml` runs on non-draft, non-fork PRs when opened, reopened or marked ready. It calls
 `claude-job.yml`, which also serves `claude.yml` (`@claude` mentions and `/code-review`): `start` posts a status comment
 with the write token. `run` fetches team review comments into `tmp/pr-review-comments.json` (plus original-PR context
-for backports) and runs `claude_gh.py run review` with a read token and `ANTHROPIC_API_KEY`; Claude reads the diff and
-checkout and records inline comments, candidates with verdicts, and a summary. `apply` posts the record with the write
-token and edits the status comment with the summary and cost footer. All three jobs run `.github/claude` from one
-commit: the merge commit for reviews, the default branch head for `claude.yml`.
+for backports) and runs `claude_gh.py run review` in `scripts/ci-sandbox` with a read token and `ANTHROPIC_API_KEY`;
+Claude reads the diff and checkout and records inline comments, candidates with verdicts, and a summary. `apply` posts
+the record with the write token and edits the status comment with the summary and cost footer. All three jobs run
+`.github/claude` from one commit: the merge commit for reviews, the default branch head for `claude.yml`.
+
+## CI threat model
+
+Applies to `backport.yml`, `claude-agents-md.yml` and `claude-job.yml`.
+
+Inputs:
+
+- Trusted: the workflow files, prompts and scripts at the ref the workflow runs from.
+- Untrusted: the PR checkout (also from forks), merged code and docs Claude reads (can carry a prompt injection), and
+  every model output.
+- A malicious change that is reviewed and merged is out of scope.
+
+Rules:
+
+- Claude, and git or cargo on a tree Claude touched, run only in `scripts/ci-sandbox`: no host processes, cleared env
+  except PATH, HOME and named `--env` vars, empty home, nothing outlives it.
+- No write-token job checks out, executes or runs git against a tree Claude touched.
+- Write-token jobs read an artifact only after a format-specific check.
+
+| Workflow               | Job        | Token | Claude | Sandbox, egress                   | Handoff                  | Consumer check                                                |
+| ---------------------- | ---------- | ----- | ------ | --------------------------------- | ------------------------ | ------------------------------------------------------------- |
+| `backport.yml`         | `backport` | write | no     | none                              | `needs_claude` output    | none: PR numbers and branches come from `gh pr view`          |
+| `backport.yml`         | `resolve`  | read  | yes    | `ci-sandbox`, harden-runner block | bundles, shas, summaries | `push`: `git bundle verify`, sha equals the one cargo checked |
+| `backport.yml`         | `push`     | write | no     | none                              | reads artifact           | no conflict markers; pushes only the verified sha             |
+| `claude-agents-md.yml` | `audit`    | read  | yes    | `ci-sandbox`, harden-runner block | patch, report            | `propose`: paths only `AGENTS.md`, `doc/`; text hunks only    |
+| `claude-agents-md.yml` | `propose`  | write | no     | none                              | reads artifact           | `git apply` after the check, then `create-pull-request`       |
+| `claude-job.yml`       | `start`    | write | no     | none                              | status comment id        | `apply` edits only that comment                               |
+| `claude-job.yml`       | `run`      | read  | yes    | `ci-sandbox`, harden-runner audit | `actions.json` record    | `apply`: `claude_gh.py` validates the record                  |
+| `claude-job.yml`       | `apply`    | write | no     | none                              | reads artifact           | each action validated; allowed actions per job                |
+
+Accepted risks:
+
+- Claude can exfiltrate `ANTHROPIC_API_KEY` or read context through comment text and through allowed hosts such as
+  github.com.
+- The sandboxed process's own environment is readable by itself, so every `--env` var is exposed to Claude.
+- `backport.yml` `push` accepts any file content on the backport branch. Author and scope are not checked; human review
+  of the backport PR is the control.
+- `--share-net` leaves the host loopback reachable from the sandbox.
+- `claude-job.yml` `run` has an open network until its harden-runner policy moves from audit to block.
 
 ## Evaluating review changes
 

@@ -2,8 +2,8 @@ name: Claude job
 
 # One start/run/apply triple for every Claude job; claude-review.yml and claude.yml call it.
 # start and apply hold the write token and never run Claude. run holds ANTHROPIC_API_KEY and
-# a read token and only records actions. All three run .github/claude from the same commit,
-# so the record run writes is the one apply reads.
+# a read token and only records actions, inside scripts/ci-sandbox. All three run .github/claude
+# from the same commit, so the record run writes is the one apply reads.
 on:
   workflow_call:
     inputs:
@@ -81,6 +81,12 @@ jobs:
       pull-requests: read
       issues: read
     steps:
+      # Audit only: an incomplete allowlist would break every PR review. Switch to
+      # block once the audit log shows the endpoint list.
+      - uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
+
       - uses: actions/checkout@v7
         with:
           fetch-depth: 1
@@ -191,6 +197,14 @@ jobs:
         with:
           cache-dependency-glob: .github/claude/uv.lock
 
+      # Installs ci-sandbox outside the worktree, which holds the untrusted PR.
+      - uses: ./.github/actions/ci-sandbox
+
+      # Resolve the venv before the sandbox: its python and the bundled claude CLI then
+      # need no uv, no cache and no network.
+      - name: Install claude-gh
+        run: uv sync --locked --no-dev --project .github/claude
+
       - name: Claude
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -202,11 +216,26 @@ jobs:
           BASE_SHA: ${{ steps.pr.outputs.base-sha }}
         run: |
           set -euo pipefail
+          # Sandboxed output must not be parsed as workflow commands.
+          token=$(openssl rand -hex 16)
+          echo "::stop-commands::$token"
+          trap 'echo "::$token::"' EXIT
+          # Sandbox: no home, only the checkout writable, and only the env claude_gh.py reads.
+          # The venv python may be uv-managed, under ~/.local/share/uv.
+          binds=(--ro "$GITHUB_EVENT_PATH")
+          uv_python=$(uv python dir)
+          [[ ! -d "$uv_python" ]] || binds+=(--ro "$uv_python")
+          claude_gh() {
+            ci-sandbox "${binds[@]}" \
+              --env ANTHROPIC_API_KEY --env GH_TOKEN --env GITHUB_EVENT_PATH --env GITHUB_REPOSITORY \
+              --env GITHUB_SERVER_URL --env GITHUB_RUN_ID --env GITHUB_EVENT_NAME -- \
+              .github/claude/.venv/bin/python .github/claude/claude_gh.py "$@"
+          }
           case "$JOB" in
-            review) $CLAUDE_GH run review --workdir pr ;;
-            mention) $CLAUDE_GH run mention ;;
+            review) claude_gh run review --workdir pr ;;
+            mention) claude_gh run mention ;;
             code-review)
-              $CLAUDE_GH run code-review --model "$MODEL" --effort "$EFFORT" --workdir pr \
+              claude_gh run code-review --model "$MODEL" --effort "$EFFORT" --workdir pr \
                 --head-sha "$HEAD_SHA" --base-sha "$BASE_SHA" ;;
           esac
 
