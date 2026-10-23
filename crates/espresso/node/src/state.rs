@@ -495,13 +495,14 @@ where
     match storage.load_state_start_height().await {
         Ok(Some(start)) => tracing::error!(
             start,
-            "the merklized state started from a snapshot at height {start}, not from genesis, so \
-             its trees lack block proofs below it and fee accounts that no block since has \
-             touched; complete trees need a replay from genesis, which runs only on a database \
-             with no merklized state"
+            "merklized state started from a boundary snapshot, not genesis, so its trees are \
+             incomplete"
         ),
         Ok(None) => {},
-        Err(err) => tracing::warn!("failed to load the state start height: {err:#}"),
+        Err(err) => tracing::warn!(
+            err = %format_args!("{err:#}"),
+            "failed to load the state start height"
+        ),
     }
 }
 
@@ -514,7 +515,11 @@ where
     loop {
         match f().await {
             Ok(res) => return res,
-            Err(err) => tracing::error!("{step} failed, retrying: {err:#}"),
+            Err(err) => tracing::error!(
+                step,
+                err = %format_args!("{err:#}"),
+                "state loop start step failed, retrying"
+            ),
         }
         sleep(BOUNDARY_RETRY_INTERVAL).await;
     }
@@ -613,7 +618,8 @@ where
                 tracing::warn!(
                     boundary,
                     retry,
-                    "fetching the state at the epoch boundary failed, retrying: {err:#}"
+                    err = %format_args!("{err:#}"),
+                    "fetching the state at the epoch boundary failed, retrying"
                 );
                 retry += 1;
                 sleep(BOUNDARY_RETRY_INTERVAL).await;
@@ -648,7 +654,10 @@ where
                 pruned,
                 "no block above the data pruned height yet; waiting for one"
             ),
-            Err(err) => tracing::warn!("failed to load the local block height: {err:#}"),
+            Err(err) => tracing::warn!(
+                err = %format_args!("{err:#}"),
+                "failed to load the local block height"
+            ),
         }
         sleep(BOUNDARY_RETRY_INTERVAL).await;
     }
