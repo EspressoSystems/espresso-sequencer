@@ -22,16 +22,15 @@ use espresso_types::{
     NetworkConfig, Payload, PubKey, Ratio, RegisteredValidatorMap, StakeTableHash, parse_duration,
     parse_size,
     traits::{EventsPersistenceRead, MembershipPersistence, StakeTuple},
-    v0::traits::{EventConsumer, PersistenceOptions, SequencerPersistence, StateCatchup},
+    v0::traits::{
+        EventConsumer, PersistenceOptions, SequencerPersistence, StateCatchup, StateCertPersistence,
+    },
     v0_3::{
         AuthenticatedValidator, EventKey, IndexedStake, RegisteredValidator, RewardAmount,
         StakeTableEvent,
     },
 };
 use futures::stream::StreamExt;
-use hotshot_libp2p_networking::network::behaviours::dht::store::persistent::{
-    DhtPersistentStorage, SerializableRecord,
-};
 use hotshot_new_protocol::message::Certificate2;
 use hotshot_query_service::{
     data_source::{
@@ -40,8 +39,8 @@ use hotshot_query_service::{
             SerializableRetry,
             pruning::PrunerCfg,
             sql::{
-                Config, Db, Read, SerializableRetryConfig, SqlStorage, StorageConnectionType,
-                Transaction, Write, include_migrations, query_as, syntax_helpers::MAX_FN,
+                Backend as _, Config, Db, DbKind, Read, SerializableRetryConfig, SqlStorage,
+                StorageConnectionType, Transaction, Write, include_migrations, query_as,
             },
         },
     },
@@ -941,11 +940,10 @@ impl PersistenceOptions for Options {
     }
 
     async fn reset(self) -> anyhow::Result<()> {
-        SqlStorage::connect(
-            Config::try_from(&self)?.reset_schema(),
-            StorageConnectionType::Sequencer,
-        )
-        .await?;
+        let config = Config::try_from(&self)?;
+        #[cfg(not(feature = "embedded-db"))]
+        light_client::storage::LightClientPostgresOptions::reset(config.connect_options()).await?;
+        SqlStorage::connect(config.reset_schema(), StorageConnectionType::Sequencer).await?;
         Ok(())
     }
 }
@@ -1574,22 +1572,21 @@ impl Persistence {
     /// Measured in a read transaction: on SQLite it scans every page of the pruned tables, and
     /// holding the write lock that long stalls the vote and proposal writes consensus waits on.
     async fn consensus_storage_usage(&self) -> anyhow::Result<u64> {
-        #[cfg(feature = "embedded-db")]
-        let usage_query = format!(
-            "SELECT sum(pgsize) FROM dbstat WHERE name IN ({})",
-            PRUNE_TABLES
-                .iter()
-                .map(|table| format!("'{table}'"))
-                .join(",")
-        );
-
-        #[cfg(not(feature = "embedded-db"))]
-        let usage_query = {
-            let table_sizes = PRUNE_TABLES
-                .iter()
-                .map(|table| format!("pg_table_size('{table}')"))
-                .join(" + ");
-            format!("SELECT {table_sizes}")
+        let usage_query = match Db::KIND {
+            DbKind::Sqlite => format!(
+                "SELECT sum(pgsize) FROM dbstat WHERE name IN ({})",
+                PRUNE_TABLES
+                    .iter()
+                    .map(|table| format!("'{table}'"))
+                    .join(",")
+            ),
+            DbKind::Postgres => {
+                let table_sizes = PRUNE_TABLES
+                    .iter()
+                    .map(|table| format!("pg_table_size('{table}')"))
+                    .join(" + ");
+                format!("SELECT {table_sizes}")
+            },
         };
 
         let mut tx = self.db.read().await?;
@@ -2028,7 +2025,8 @@ impl SequencerPersistence for Persistence {
             let stmt = format!(
                 "INSERT INTO highest_voted_view (id, view) VALUES (0, $1)
                 ON CONFLICT (id) DO UPDATE SET view = {MAX_FN}(highest_voted_view.view, \
-                 excluded.view)"
+                 excluded.view)",
+                MAX_FN = Db::MAX_FN,
             );
 
             let mut tx = self.db.write().await?;
@@ -2039,7 +2037,8 @@ impl SequencerPersistence for Persistence {
                 let stmt = format!(
                     "INSERT INTO restart_view (id, view) VALUES (0, $1)
                     ON CONFLICT (id) DO UPDATE SET view = {MAX_FN}(restart_view.view, \
-                     excluded.view)"
+                     excluded.view)",
+                    MAX_FN = Db::MAX_FN,
                 );
                 tx.execute(query(&stmt).bind(restart_view.u64() as i64))
                     .await?;
@@ -2477,6 +2476,60 @@ impl SequencerPersistence for Persistence {
         Ok(Some(cert))
     }
 
+    async fn load_start_epoch_info(&self) -> anyhow::Result<Vec<InitializerEpochInfo<SeqTypes>>> {
+        let rows = self
+            .db
+            .read()
+            .await?
+            .fetch_all(
+                query("SELECT * from epoch_drb_and_root ORDER BY epoch DESC LIMIT $1")
+                    .bind(RECENT_STAKE_TABLES_LIMIT as i64),
+            )
+            .await?;
+
+        // reverse the rows vector to return the most recent epochs, but in ascending order
+        rows.into_iter()
+            .rev()
+            .map(|row| {
+                let epoch: i64 = row.try_get("epoch")?;
+                let drb_result: Option<Vec<u8>> = row.try_get("drb_result")?;
+                let block_header: Option<Vec<u8>> = row.try_get("block_header")?;
+                if let Some(drb_result) = drb_result {
+                    let drb_result_array = drb_result
+                        .try_into()
+                        .or_else(|_| bail!("invalid drb result"))?;
+                    let block_header: Option<<SeqTypes as NodeType>::BlockHeader> = block_header
+                        .map(|data| bincode::deserialize(&data))
+                        .transpose()?;
+                    Ok(Some(InitializerEpochInfo::<SeqTypes> {
+                        epoch: EpochNumber::new(epoch as u64),
+                        drb_result: drb_result_array,
+                        block_header,
+                    }))
+                } else {
+                    // Right now we skip the epoch_drb_and_root row if there is no drb result.
+                    // This seems reasonable based on the expected order of events, but please double check!
+                    Ok(None)
+                }
+            })
+            .filter_map(|e| match e {
+                Err(v) => Some(Err(v)),
+                Ok(Some(v)) => Some(Ok(v)),
+                Ok(None) => None,
+            })
+            .collect()
+    }
+
+    fn enable_metrics(&mut self, metrics: &dyn Metrics) {
+        self.internal_metrics = PersistenceMetricsValue::new(metrics);
+
+        #[cfg(feature = "embedded-db")]
+        self.probe.register(&*metrics.subgroup("disk".into()));
+    }
+}
+
+#[async_trait]
+impl StateCertPersistence for Persistence {
     async fn get_state_cert_by_epoch(
         &self,
         epoch: u64,
@@ -2537,57 +2590,6 @@ impl SequencerPersistence for Persistence {
             tx.commit().await
         })
         .await
-    }
-
-    async fn load_start_epoch_info(&self) -> anyhow::Result<Vec<InitializerEpochInfo<SeqTypes>>> {
-        let rows = self
-            .db
-            .read()
-            .await?
-            .fetch_all(
-                query("SELECT * from epoch_drb_and_root ORDER BY epoch DESC LIMIT $1")
-                    .bind(RECENT_STAKE_TABLES_LIMIT as i64),
-            )
-            .await?;
-
-        // reverse the rows vector to return the most recent epochs, but in ascending order
-        rows.into_iter()
-            .rev()
-            .map(|row| {
-                let epoch: i64 = row.try_get("epoch")?;
-                let drb_result: Option<Vec<u8>> = row.try_get("drb_result")?;
-                let block_header: Option<Vec<u8>> = row.try_get("block_header")?;
-                if let Some(drb_result) = drb_result {
-                    let drb_result_array = drb_result
-                        .try_into()
-                        .or_else(|_| bail!("invalid drb result"))?;
-                    let block_header: Option<<SeqTypes as NodeType>::BlockHeader> = block_header
-                        .map(|data| bincode::deserialize(&data))
-                        .transpose()?;
-                    Ok(Some(InitializerEpochInfo::<SeqTypes> {
-                        epoch: EpochNumber::new(epoch as u64),
-                        drb_result: drb_result_array,
-                        block_header,
-                    }))
-                } else {
-                    // Right now we skip the epoch_drb_and_root row if there is no drb result.
-                    // This seems reasonable based on the expected order of events, but please double check!
-                    Ok(None)
-                }
-            })
-            .filter_map(|e| match e {
-                Err(v) => Some(Err(v)),
-                Ok(Some(v)) => Some(Ok(v)),
-                Ok(None) => None,
-            })
-            .collect()
-    }
-
-    fn enable_metrics(&mut self, metrics: &dyn Metrics) {
-        self.internal_metrics = PersistenceMetricsValue::new(metrics);
-
-        #[cfg(feature = "embedded-db")]
-        self.probe.register(&*metrics.subgroup("disk".into()));
     }
 }
 
@@ -2960,15 +2962,14 @@ impl MembershipPersistence for Persistence {
     async fn delete_stake_tables(&self) -> anyhow::Result<()> {
         serializable_retry!(self, || async {
             let mut tx = self.db.write().await?;
-            #[cfg(not(feature = "embedded-db"))]
-            query(
-                "TRUNCATE stake_table_events, stake_table_events_l1_block, epoch_drb_and_root, \
-                 stake_table_validators",
-            )
-            .execute(tx.as_mut())
-            .await?;
-            #[cfg(feature = "embedded-db")]
-            {
+            if Db::KIND == DbKind::Postgres {
+                query(
+                    "TRUNCATE stake_table_events, stake_table_events_l1_block, \
+                     epoch_drb_and_root, stake_table_validators",
+                )
+                .execute(tx.as_mut())
+                .await?;
+            } else {
                 query("DELETE FROM stake_table_events")
                     .execute(tx.as_mut())
                     .await?;
@@ -3066,66 +3067,6 @@ impl MembershipPersistence for Persistence {
                     .map_err(Into::into)
             })
             .collect()
-    }
-}
-
-#[async_trait]
-impl DhtPersistentStorage for Persistence {
-    /// Save the DHT to the database
-    ///
-    /// # Errors
-    /// - If we fail to serialize the records
-    /// - If we fail to write the serialized records to the DB
-    async fn save(&self, records: Vec<SerializableRecord>) -> anyhow::Result<()> {
-        // Bincode-serialize the records
-        let to_save =
-            bincode::serialize(&records).with_context(|| "failed to serialize records")?;
-
-        // Prepare the statement
-        let stmt = "INSERT INTO libp2p_dht (id, serialized_records) VALUES (0, $1) ON CONFLICT \
-                    (id) DO UPDATE SET serialized_records = $1";
-
-        serializable_retry!(self, || async {
-            // Execute the query
-            let mut tx = self
-                .db
-                .write()
-                .await
-                .with_context(|| "failed to start an atomic DB transaction")?;
-            tx.execute(query(stmt).bind(to_save.clone()))
-                .await
-                .with_context(|| "failed to execute DB query")?;
-
-            // Commit the state
-            tx.commit().await.with_context(|| "failed to commit to DB")
-        })
-        .await
-    }
-
-    /// Load the DHT from the database
-    ///
-    /// # Errors
-    /// - If we fail to read from the DB
-    /// - If we fail to deserialize the records
-    async fn load(&self) -> anyhow::Result<Vec<SerializableRecord>> {
-        // Fetch the results from the DB
-        let result = self
-            .db
-            .read()
-            .await
-            .with_context(|| "failed to start a DB read transaction")?
-            .fetch_one("SELECT * FROM libp2p_dht where id = 0")
-            .await
-            .with_context(|| "failed to fetch from DB")?;
-
-        // Get the `serialized_records` row
-        let serialied_records: Vec<u8> = result.get("serialized_records");
-
-        // Deserialize it
-        let records: Vec<SerializableRecord> = bincode::deserialize(&serialied_records)
-            .with_context(|| "Failed to deserialize records")?;
-
-        Ok(records)
     }
 }
 
@@ -3255,7 +3196,7 @@ mod testing {
 
 #[cfg(test)]
 mod test {
-    use espresso_types::{Leaf, NodeState, ValidatedState, traits::NullEventConsumer};
+    use espresso_types::{Leaf, NodeState, PubKey, ValidatedState, traits::NullEventConsumer};
     use futures::stream::TryStreamExt;
     use hotshot_example_types::node_types::TEST_VERSIONS;
     #[cfg(feature = "embedded-db")]
@@ -3273,7 +3214,7 @@ mod test {
     };
 
     use super::*;
-    use crate::{BLSPubKey, PubKey, persistence::tests::TestablePersistence as _};
+    use crate::{BLSPubKey, persistence::tests::TestablePersistence as _};
 
     #[cfg(feature = "embedded-db")]
     #[tokio::test]
@@ -4176,5 +4117,60 @@ mod postgres_tests {
 
         let latest = storage.load_latest_acted_view().await.unwrap();
         assert_eq!(latest, Some(ViewNumber::new(19)));
+    }
+
+    #[test_log::test(tokio::test(flavor = "multi_thread"))]
+    async fn test_light_client_shares_the_node_database() {
+        use hotshot_query_service::availability::LeafId;
+        use light_client::storage::Storage as _;
+
+        use crate::api::{data_source::DataSourceOptions as _, options::Query};
+
+        let tmp = Persistence::tmp_storage().await;
+        let mut opt = Persistence::options(&tmp);
+        let persistence = opt.create().await.unwrap();
+
+        let db = opt
+            .light_client_db(&Query::default())
+            .unwrap()
+            .connect()
+            .await
+            .unwrap();
+        let leaf = light_client::testing::leaf_chain(0..1, versions::EPOCH_VERSION)
+            .await
+            .remove(0);
+        db.insert_leaf(leaf.clone()).await.unwrap();
+        assert_eq!(
+            db.leaf_upper_bound(LeafId::Number(0)).await.unwrap(),
+            Some(leaf)
+        );
+
+        let (leaves,): (i64,) = sqlx::query_as("SELECT count(*) FROM light_client.leaf")
+            .fetch_one(&persistence.db.pool())
+            .await
+            .unwrap();
+        assert_eq!(leaves, 1);
+    }
+
+    #[test_log::test(tokio::test(flavor = "multi_thread"))]
+    async fn test_reset_drops_light_client_cache() {
+        use light_client::storage::Storage as _;
+
+        use crate::api::{data_source::DataSourceOptions as _, options::Query};
+
+        let tmp = Persistence::tmp_storage().await;
+        let opt = Persistence::options(&tmp);
+        let light_client = || opt.light_client_db(&Query::default()).unwrap().connect();
+        let leaf = light_client::testing::leaf_chain(0..1, versions::EPOCH_VERSION)
+            .await
+            .remove(0);
+        let db = light_client().await.unwrap();
+        db.insert_leaf(leaf).await.unwrap();
+        drop(db);
+
+        opt.clone().reset().await.unwrap();
+
+        let db = light_client().await.unwrap();
+        assert_eq!(db.block_height().await.unwrap(), 0);
     }
 }

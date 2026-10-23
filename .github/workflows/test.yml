@@ -19,7 +19,7 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
-  RUST_LOG: info,libp2p=off,node=error
+  RUST_LOG: info,node=error
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: "0"
   # Save the process compose logs
@@ -175,9 +175,6 @@ jobs:
           retention-days: 1
           path: |
             target/debug/orchestrator
-            target/debug/cdn-broker
-            target/debug/cdn-marshal
-            target/debug/cdn-whitelist
             target/debug/state-relay-server
             target/debug/state-prover
             target/debug/espresso-node
@@ -368,6 +365,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/install-foundry
+      - uses: ./.github/actions/install-postgres
       - uses: taiki-e/install-action@nextest
 
       - name: Download archive

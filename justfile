@@ -1,4 +1,3 @@
-mod hotshot
 mod py "scripts/py.just"
 mod binary-upgrade-tests "binary-upgrade-tests/justfile"
 mod soak "crates/process-metrics/justfile"
@@ -148,13 +147,12 @@ docker-stop-rm:
 anvil *args:
     docker run -p 127.0.0.1:8545:8545 ghcr.io/foundry-rs/foundry:latest "anvil {{args}}"
 
-# hotshot-testing: tested in hotshot.yml
 # hotshot-new-protocol: tested in hotshot.yml
 # espresso-node-sqlite: no tests, enables embedded-db feature
 # slow-tests: slow and serial tests
 # espresso-dev-node: enables embedded-db
 # espresso-crypto-helper: vendored openssl leaks to workspace via feature unification
-nextest_excludes := "--exclude espresso-node-sqlite --exclude hotshot-testing --exclude hotshot-new-protocol --exclude slow-tests --exclude espresso-dev-node --exclude espresso-crypto-helper"
+nextest_excludes := "--exclude espresso-node-sqlite --exclude hotshot-new-protocol --exclude slow-tests --exclude espresso-dev-node --exclude espresso-crypto-helper"
 
 nextest *args:
     cargo nextest run --locked --workspace {{nextest_excludes}} --lib --bins --tests --verbose {{args}}
@@ -168,12 +166,9 @@ test *args:
     just nextest --features embedded-db  {{args}}
     just nextest {{args}}
 
-# These tests stand up whole multi-node networks inline on a single libtest
-# thread, which leaves the largest of them a few KB under the 2 MiB default
-# stack. 4 MiB gives them roughly 2x headroom instead.
 test-slow *args:
     @echo 'Only slow tests are included. Use `test` for those deemed not slow. Or `test-all` for all tests.'
-    RUST_MIN_STACK=4194304 cargo nextest run --profile slow --locked -p slow-tests --verbose {{args}}
+    cargo nextest run --profile slow --locked -p slow-tests --verbose {{args}}
 
 build-dev-node *args:
     cargo build -p espresso-dev-node {{args}}
@@ -251,17 +246,11 @@ check-features-ci *args:
     cargo hack check --feature-powerset \
         --depth 2 \
         --exclude-all-features \
-        --exclude hotshot \
-        --exclude hotshot-builder-api \
         --exclude hotshot-contract-adapter \
         --exclude hotshot-example-types \
-        --exclude hotshot-libp2p-networking \
         --exclude hotshot-orchestrator \
         --exclude hotshot-query-service \
         --exclude hotshot-state-prover \
-        --exclude hotshot-task \
-        --exclude hotshot-task-impls \
-        --exclude hotshot-testing \
         --exclude hotshot-types \
         --exclude hotshot-utils \
         --exclude vid \
@@ -287,7 +276,6 @@ dev-state-relay-server:
 dev-espresso-node:
     target/release/espresso-node \
     --orchestrator-url http://localhost:8080 \
-    --cdn-endpoint "127.0.0.1:1738" \
     --state-relay-server-url http://localhost:8083 \
     -- http --port 8083  -- query --storage-path storage
 
@@ -312,17 +300,17 @@ release-cut version="" source_ref="main":
 release-tag branch tag="":
     gh workflow run tag-release.yml --ref {{branch}} -f tag={{tag}}
 
-# Turn the pre-release for a tag into a release operators may deploy, and mark it latest.
-release-publish tag:
-    gh release edit {{tag}} --prerelease=false --latest
+# Preview the release edits and tracker comment of `/publish <tag> <network>` without writing to GitHub.
+release-publish-preview tag network:
+    scripts/release publish --dry-run --comment "/publish {{tag}} {{network}}"
 
 # Render the release tracker body for a version without writing to GitHub.
 release-body version:
     scripts/release refresh --dry-run --version {{version}}
 
 # generate rust bindings for contracts
-VERSIONED := "LightClient(Arbitrum)?(V\\d+)?(Mock)?|PlonkVerifier(V\\d+)?|StakeTable(V\\d+)?|EspToken(V\\d+)?|RewardClaim(V\\d+)?"
-EXACT := "FeeContract|ERC1967Proxy|OpsTimelock|SafeExitTimelock|OwnableUpgradeable|AccessControlUpgradeable|IRewardClaim|IPlonkVerifier"
+VERSIONED := "LightClient(V\\d+)?(Mock)?|PlonkVerifier(V\\d+)?|StakeTable(V\\d+)?|EspToken(V\\d+)?|RewardClaim(V\\d+)?"
+EXACT := "FeeContract|ERC1967Proxy|OpsTimelock|SafeExitTimelock|OwnableUpgradeable|AccessControlUpgradeable"
 REGEXP := "^(" + VERSIONED + "|" + EXACT + ")$"
 gen-bindings:
     # Update the git submodules

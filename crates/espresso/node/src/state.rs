@@ -13,7 +13,6 @@ use espresso_types::{
     v0_4::Delta,
 };
 use futures::{StreamExt, future::Future};
-use hotshot::traits::ValidatedState as HotShotState;
 use hotshot_query_service::{
     availability::{self, AvailabilityDataSource},
     data_source::{Transaction, VersionedDataSource, storage::pruning::PrunedHeightDataSource},
@@ -21,7 +20,7 @@ use hotshot_query_service::{
     status::StatusDataSource,
     types::HeightIndexed,
 };
-use hotshot_types::utils::is_last_block;
+use hotshot_types::{traits::ValidatedState as HotShotState, utils::is_last_block};
 use jf_merkle_tree_compat::{
     LookupResult, MerkleTreeScheme, ToTraversalPath, UniversalMerkleTreeScheme,
 };
@@ -31,10 +30,7 @@ use versions::{DRB_AND_HEADER_UPGRADE_VERSION, EPOCH_REWARD_VERSION, EPOCH_VERSI
 
 use crate::{
     NodeState, SeqTypes,
-    api::{
-        LightClientProvider, RewardMerkleTreeDataSource, RewardMerkleTreeV2Data,
-        context::ApiContext,
-    },
+    api::{LightClientProvider, RewardMerkleTreeDataSource, RewardMerkleTreeV2Data},
     catchup::{CatchupStorage, SqlStateCatchup},
     persistence::ChainConfigPersistence,
 };
@@ -362,15 +358,14 @@ where
 const PRUNED_LEAF_CHECK_INTERVAL: Duration = Duration::from_secs(10);
 
 #[tracing::instrument(skip_all)]
-pub(crate) async fn update_state_storage_loop<T, C>(
+pub(crate) async fn update_state_storage_loop<T>(
     storage: Arc<T>,
     instance: impl Future<Output = NodeState>,
-    provider: Arc<LightClientProvider<C>>,
+    provider: Arc<LightClientProvider>,
 ) -> anyhow::Result<()>
 where
     T: SequencerStateDataSource,
     for<'a> T::Transaction<'a>: SequencerStateUpdate,
-    C: ApiContext,
 {
     let mut instance = instance.await;
     // Use a separate rewards calculator for the state loop so it doesn't
@@ -458,16 +453,15 @@ where
 /// those the data pruner has already deleted: the availability layer never fetches a leaf at or
 /// below the data pruned height, so the stream would wait for one forever. Those come from peers,
 /// in runs. Returns when the stream ends, or when a leaf from peers does not extend the parent.
-async fn follow_leaves<T, C>(
+async fn follow_leaves<T>(
     storage: &Arc<T>,
     instance: &NodeState,
-    provider: &LightClientProvider<C>,
+    provider: &LightClientProvider,
     mut parent_leaf: Leaf2,
     mut parent_state: ValidatedState,
 ) where
     T: SequencerStateDataSource,
     for<'a> T::Transaction<'a>: SequencerStateUpdate,
-    C: ApiContext,
 {
     // Peers serve at most this many leaves per range request.
     let limit = availability::Options::default().small_object_range_limit as u64;
@@ -544,10 +538,9 @@ where
 }
 
 /// The leaf at `height`, from local storage, or from peers once the data pruner has deleted it.
-async fn leaf_at<T, C>(storage: &Arc<T>, provider: &LightClientProvider<C>, height: u64) -> Leaf2
+async fn leaf_at<T>(storage: &Arc<T>, provider: &LightClientProvider, height: u64) -> Leaf2
 where
     T: SequencerStateDataSource,
-    C: ApiContext,
 {
     loop {
         if let Some(pruned) = pruned_past(&**storage, height).await {
@@ -579,13 +572,7 @@ where
 /// of every protocol version, and one proof covers the run: it proves the last leaf final and
 /// chains the rest to it. The leaves are not stored in this database, since the loop needs them
 /// once and the pruner would only delete them again.
-async fn fetch_pruned_leaves<C>(
-    provider: &LightClientProvider<C>,
-    heights: Range<u64>,
-) -> Vec<Leaf2>
-where
-    C: ApiContext,
-{
+async fn fetch_pruned_leaves(provider: &LightClientProvider, heights: Range<u64>) -> Vec<Leaf2> {
     let start = heights.start as usize;
     let end = heights.end as usize;
     let mut delay = Duration::from_secs(1);

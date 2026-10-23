@@ -18,7 +18,6 @@ use espresso_types::{
     v0_6::RewardAccountQueryDataV2,
 };
 use futures::future::Future;
-use hotshot::traits::ValidatedState as _;
 use hotshot_query_service::{
     Resolvable,
     availability::LeafId,
@@ -28,7 +27,7 @@ use hotshot_query_service::{
         storage::{
             AvailabilityStorage, MerklizedStateStorage, NodeStorage, SqlStorage,
             pruning::{PrunerCfg, PrunerConfig},
-            sql::{Db, TransactionMode, Write, query_as},
+            sql::{Backend as _, Db, DbKind, TransactionMode, Write, query_as},
         },
     },
     merklized_state::Snapshot,
@@ -36,7 +35,7 @@ use hotshot_query_service::{
 use hotshot_types::{
     data::{EpochNumber, QuorumProposalWrapper, ViewNumber},
     message::Proposal,
-    traits::election::MembershipSnapshot,
+    traits::{ValidatedState as _, election::MembershipSnapshot},
     utils::{epoch_from_block_number, is_last_block},
     vote::HasViewNumber,
 };
@@ -437,10 +436,10 @@ impl RewardMerkleTreeDataSource for SqlStorage {
             // Postgres supports improved performance by using `FOR UPDATE` in a sub-select to
             // acquire exclusive locks on visited rows, which are later deleted. SQLite does not
             // support this syntax.
-            #[cfg(not(feature = "embedded-db"))]
-            let for_update = "FOR UPDATE";
-            #[cfg(feature = "embedded-db")]
-            let for_update = "";
+            let for_update = match Db::KIND {
+                DbKind::Sqlite => "",
+                DbKind::Postgres => "FOR UPDATE",
+            };
 
             // Delete batches from the merkle data table until there is nothing left to delete.
             loop {
@@ -1226,8 +1225,7 @@ impl super::data_source::DatabaseMetadataSource for SqlStorage {
             .await
             .context("opening transaction to fetch table sizes")?;
 
-        #[cfg(not(feature = "embedded-db"))]
-        {
+        if Db::KIND == DbKind::Postgres {
             let query = r#"
                 SELECT
                     schemaname || '.' || relname AS table_name,
@@ -1256,10 +1254,7 @@ impl super::data_source::DatabaseMetadataSource for SqlStorage {
             }
 
             Ok(table_sizes)
-        }
-
-        #[cfg(feature = "embedded-db")]
-        {
+        } else {
             // First, get all table names from sqlite_master
             let table_names_query = r#"
                 SELECT name
