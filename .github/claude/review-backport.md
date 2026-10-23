@@ -1,4 +1,4 @@
-Replaces Procedure steps 2-10 of the PR review above; Inputs, step 1, Findings and Output still apply.
+# Backport review
 
 This PR is a backport. The original PR number is in `./tmp/is-backport`.
 
@@ -11,3 +11,4 @@ Perform a BACKPORT-CORRECTNESS review. Do not perform a general code review.
   there. Only flag problems introduced by the backport itself (bad merge, lost hunk, wrong adaptation).
 - If the original PR adds a `doc/operator-notes/*.md` fragment, the backport must carry the same file. Flag it if
   missing.
+- Call `candidate` for each problem found while comparing.

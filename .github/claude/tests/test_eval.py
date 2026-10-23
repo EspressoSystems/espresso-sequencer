@@ -44,7 +44,14 @@ def test_writes_raise_without_touching_inner(name):
 
 
 def test_every_protocol_write_is_covered():
-    reads = {"pr_diff", "compare_diff", "pr_view", "issue_view", "head_sha"}
+    reads = {
+        "pr_diff",
+        "compare_diff",
+        "pr_view",
+        "issue_view",
+        "head_sha",
+        "pr_payload",
+    }
     methods = {m for m in vars(cg.GitHub) if not m.startswith("_")}
     assert methods - reads == set(WRITES)
 
