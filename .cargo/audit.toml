@@ -21,9 +21,6 @@ ignore = [
     # hickory-proto O(n^2) name compression on encode. libp2p does lookups one name at a time, not
     # vulnerable, no patch release in libp2p available yet
     "RUSTSEC-2026-0119",
-    # rkyv OOB read, only fixed in 0.8. The 0.7 copy in Cargo.lock comes from rust_decimal
-    # (staking-cli); we never validate or deserialize untrusted rkyv archives.
-    "RUSTSEC-2026-0235",
     # `LruCache::pop()` leaves a dangling node when a stored key's `Drop` panics. Our direct `lru`
     # is 0.18.2 (patched); the only affected copy is lru 0.7.8 pinned by memoize, whose single use
     # here (`advz_scheme`) is keyed on `usize`. `usize` has no `Drop`, so the panic that arms this
