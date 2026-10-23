@@ -42,12 +42,17 @@ Review whether tests are adequate, not whether they pass.
    - Is the operation idempotent when retried or replayed at startup?
 6. Callers and callees. Grep every changed symbol. Per call site: new precondition, changed return or error, changed
    ordering or timing. Per callee changed in the same PR: still safe here?
+   - For each new or changed condition, check or `ensure!`: find where its inputs come from and list every value they
+     take, including `None`, defaults, and data written before an upgrade or by the legacy path. A real value that now
+     fails or passes: candidate.
 7. Invariants untested by CI:
    - Storage: everything written can be read back, by this code and by the release still running on other nodes. No test
      covers this round trip; check it by reading the write and read paths. Every storage backend gets the change.
    - Upgrades: behavior gated on the right protocol version; both sides of a transition handled.
    - Boundaries: first/last item of an epoch or range, state before a feature activates, empty or genesis state.
    - Operator action needed: an operator note is present.
+   - Secrets: can anything secret (keys, tokens, passwords, credentials in URLs) leave the process or reach a less
+     trusted reader through this change? Follow error rendering and struct dumps, not only explicit fields.
 8. Design at the type level: would better types make this defect or this runtime check impossible?
 9. Tests. Would any test fail without the change? Changed behavior without a test that pins it: candidate.
 10. Cleanup, only with a concrete cost: code duplicating an existing helper (name it); derivable state; dead code;
