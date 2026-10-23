@@ -127,7 +127,7 @@ pub struct Options {
     /// Store data in an embedded SQLite database instead of Postgres.
     ///
     /// The database lives under ESPRESSO_NODE_STORAGE_PATH, and the Postgres options are ignored.
-    #[clap(long, env = "ESPRESSO_NODE_EMBEDDED_DB")]
+    #[clap(long, env = "ESPRESSO_NODE_EMBEDDED_DB", value_parser = clap::builder::FalseyValueParser::new())]
     pub embedded_db: bool,
 
     #[clap(flatten)]
@@ -675,6 +675,29 @@ pub(crate) fn within_gap_fill_horizon(view: u64, watermark: u64) -> bool {
 #[cfg(test)]
 mod test {
     use super::*;
+
+    #[test]
+    fn embedded_db_accepts_the_usual_spellings_of_a_boolean() {
+        use clap::{CommandFactory as _, FromArgMatches as _};
+
+        // A variable no other test reads, so setting it cannot race them.
+        const VAR: &str = "ESPRESSO_NODE_EMBEDDED_DB_SPELLING_TEST";
+        let parse = |value: &str| {
+            unsafe { std::env::set_var(VAR, value) };
+            let matches = Options::command()
+                .mut_arg("embedded_db", |arg| arg.env(VAR))
+                .try_get_matches_from(["espresso-node"])
+                .unwrap();
+            Options::from_arg_matches(&matches).unwrap().embedded_db
+        };
+        for value in ["true", "TRUE", "1", "yes", "on"] {
+            assert!(parse(value), "{value:?}");
+        }
+        for value in ["false", "False", "0", "no", "off", ""] {
+            assert!(!parse(value), "{value:?}");
+        }
+        unsafe { std::env::remove_var(VAR) };
+    }
 
     #[test]
     fn embedded_db_selects_sqlite_under_the_storage_path() {
