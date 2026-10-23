@@ -137,9 +137,6 @@ else
   else
     images=(
       bridge
-      cdn-broker
-      cdn-marshal
-      cdn-whitelist
       deploy
       espresso-dev-node
       nasty-client
@@ -259,9 +256,10 @@ done
 mkdir -p "${workdir}/docker/scripts"
 cp -v docker/scripts/espresso-node-awssecretsmanager.sh "${workdir}/docker/scripts"
 
-# Copy the dev-node and espresso-node-entrypoint script
+# Copy the dev-node and espresso-node-entrypoint scripts, and the espresso-node-sqlite wrapper
 mkdir -p "${workdir}/scripts"
 cp -v scripts/espresso-node-entrypoint "${workdir}/scripts/"
+cp -v scripts/espresso-node-sqlite "${workdir}/scripts/"
 
 export DOCKER_BUILDKIT=1
 
