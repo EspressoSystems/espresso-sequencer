@@ -55,11 +55,12 @@ SAFE_STOP_WINDOW = (2, 10)
 
 # Services NOT touched by the binary upgrade test:
 #   - one-shots that already ran in phase 1 (deploy-*, stake-for-demo,
-#     cdn-whitelist, wait-for-v4)
-#   - infra that doesn't use an espresso-network image (postgres, keydb,
-#     L1 anvil, block-explorer)
-#   - the CDN, which only the base tag's compose runs: no image for it is
-#     published any more, and the upgraded nodes ignore it
+#     wait-for-v4)
+#   - infra that doesn't use an espresso-network image (postgres, L1 anvil,
+#     block-explorer)
+#   - the CDN (broker-*, marshal-0, cdn-whitelist, cdn-open, keydb), which only
+#     the base tag's compose runs: no image for it is published any more, and
+#     the upgraded nodes ignore it
 NOUPGRADE_SERVICES = (
     "block-explorer",
     "broker-0",
