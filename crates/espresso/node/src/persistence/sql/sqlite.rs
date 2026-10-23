@@ -17,7 +17,9 @@ mod imp;
 pub use imp::*;
 use qs::{Config, SqlStorage};
 
-use super::{Options as SqlOptions, SqliteOptions};
+use super::Options as SqlOptions;
+#[cfg(any(test, feature = "testing"))]
+use super::SqliteOptions;
 use crate::{
     api::options::Query,
     persistence::storage_probe::{self, SqlitePragmas, StorageProbe},

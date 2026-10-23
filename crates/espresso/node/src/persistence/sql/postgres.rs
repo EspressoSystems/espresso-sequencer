@@ -12,7 +12,9 @@ mod imp;
 pub use imp::*;
 use qs::{Config, SqlStorage};
 
-use super::{Options as SqlOptions, PostgresOptions};
+use super::Options as SqlOptions;
+#[cfg(any(test, feature = "testing"))]
+use super::PostgresOptions;
 use crate::{api::options::Query, persistence::storage_probe::StorageProbe};
 
 impl BackendOptions for qs::Db {

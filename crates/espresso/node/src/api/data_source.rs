@@ -678,19 +678,19 @@ mod test {
     fn sql_storage_keeps_light_client_in_postgres() {
         use clap::Parser as _;
 
-        let opt = persistence::sql::postgres::Options::try_from(
-            persistence::sql::Options::try_parse_from([
-                "espresso-node",
-                "--host",
-                "db.example",
-                "--port",
-                "6543",
-                "--database",
-                "espresso",
-            ])
-            .unwrap(),
-        )
+        let mut opt = persistence::sql::Options::try_parse_from([
+            "espresso-node",
+            "--host",
+            "db.example",
+            "--port",
+            "6543",
+            "--database",
+            "espresso",
+        ])
         .unwrap();
+        // The parsed default follows the build (and later the environment), not this test.
+        opt.embedded_db = false;
+        let opt = persistence::sql::postgres::Options::try_from(opt).unwrap();
         let LightClientDbOptions::Postgres(lc) = opt.light_client_db(&Query::default()).unwrap()
         else {
             panic!("expected the light client in Postgres");
