@@ -14,19 +14,30 @@ use std::{collections::HashMap, fmt::Debug, future::Future, str::FromStr};
 
 use futures::stream::TryStreamExt;
 use hotshot_types::traits::node_implementation::NodeType;
-use sqlx::{ConnectOptions, Database, Row as _, pool::PoolOptions};
+use sqlx::{
+    ConnectOptions, Database, Row as _,
+    pool::{Pool, PoolOptions},
+};
 
 use super::{
-    Migration, QueryBuilder, Transaction, Write,
+    Db, Migration, QueryBuilder, Transaction, Write,
     queries::state::{Node, build_hash_batch_insert},
 };
 use crate::{QueryResult, merklized_state::MerklizedState};
 
-/// The underlying database type for a SQL data source.
+/// The database a [`Backend`] runs on.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DbKind {
+    Postgres,
+    Sqlite,
+}
+
+/// The database a copy of the SQL storage runs on.
 ///
-/// Currently, only PostgreSQL and SQLite are supported, with selection based on the "embedded-db" feature flag.
-/// - When the "embedded-db" feature is enabled, SQLite is used.
-/// - When it’s disabled, PostgreSQL is used.
+/// The SQL storage is compiled once per backend, with [`Db`] naming that backend's
+/// [`sqlx::Database`], and each backend implements this trait for its own [`Db`]. Code branches on
+/// [`EMBEDDED`](Self::EMBEDDED) where both branches compile for either database, and calls a
+/// method of this trait where a branch would only compile for one.
 ///
 /// ### Design Choice
 /// The reason for taking this approach over sqlx's Any database is that we can support SQL types
@@ -49,19 +60,6 @@ use crate::{QueryResult, merklized_state::MerklizedState};
 ///     for<'a> i64: Type<DB> + Encode<'a, DB>,
 /// {}
 /// ```
-#[cfg(feature = "embedded-db")]
-pub type Db = sqlx::Sqlite;
-#[cfg(not(feature = "embedded-db"))]
-pub type Db = sqlx::Postgres;
-
-/// The database a [`Backend`] runs on.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum DbKind {
-    Postgres,
-    Sqlite,
-}
-
-/// The database [`Db`] names.
 ///
 /// Code matches on [`KIND`](Self::KIND) where both arms compile for either database, and calls a
 /// method of this trait where an arm would only compile for one. Each backend implements it in its
@@ -88,12 +86,15 @@ pub trait Backend: Database {
 
     /// Hooks every pooled connection needs on this backend, for a database using `schema`.
     fn session_hooks(pool: PoolOptions<Self>, schema: String) -> PoolOptions<Self>;
+
+    /// Log the sessions and locks behind a serialization conflict in `op`, in the background.
+    fn log_conflict_sessions(pool: Pool<Self>, op: &'static str);
 }
 
 /// Merklized state queries with a portable form and a faster form that only Postgres can run.
 ///
 /// The provided methods are the portable form, written against [`Db`] rather than `Self` so they
-/// type check for whichever database [`Db`] is. Postgres overrides them.
+/// type check in every copy of the SQL storage. Postgres overrides them.
 pub(crate) trait StateQueries: Backend {
     fn hashes_by_id(
         conn: &mut <Db as Database>::Connection,

@@ -22,7 +22,7 @@ testing = [
     "hotshot-new-protocol/testing",
 ]
 benchmarking = []
-embedded-db = ["hotshot-query-service/embedded-db", "sqlx/sqlite"]
+embedded-db = []
 
 [dependencies]
 alloy = { workspace = true }
@@ -88,7 +88,7 @@ serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_json = { workspace = true }
 snafu = { workspace = true }
-sqlx = { workspace = true }
+sqlx = { workspace = true, features = ["sqlite"] }
 staking-cli = { workspace = true, optional = true }
 strum = { workspace = true }
 tagged-base64 = { workspace = true }

@@ -17,7 +17,6 @@ use anyhow::Context;
 use async_trait::async_trait;
 use backon::{BackoffBuilder, ExponentialBuilder};
 use chrono::Utc;
-use futures::future::FutureExt;
 use hotshot_types::{
     data::VidShare,
     traits::{
@@ -27,7 +26,6 @@ use hotshot_types::{
 };
 use itertools::Itertools;
 use log::LevelFilter;
-use rand::Rng;
 use sqlx::{
     ConnectOptions, Row,
     pool::{Pool, PoolOptions},
@@ -51,126 +49,34 @@ use crate::{
     status::HasMetrics,
 };
 pub extern crate sqlx;
-pub use sqlx::Database;
-#[cfg(feature = "embedded-db")]
-pub use sqlx::Sqlite;
+pub use sqlx::{Database, Sqlite};
 
+// Loaded through `#[path]` by each backend module, so its children are named from here.
+#[path = "sql/data_source.rs"]
+pub mod data_source;
+#[path = "sql/db.rs"]
 mod db;
+#[path = "sql/migrate.rs"]
 mod migrate;
-#[cfg(not(feature = "embedded-db"))]
-mod postgres;
-mod queries;
-#[cfg(feature = "embedded-db")]
-mod sqlite;
+#[path = "sql/migration.rs"]
+pub mod migration;
+#[path = "sql/queries.rs"]
+pub(in crate::data_source::storage::sql) mod queries;
+#[path = "sql/transaction.rs"]
 mod transaction;
 
 pub use anyhow::Error;
+pub use data_source::{Builder, SqlDataSource};
 pub use db::*;
 pub use include_dir::include_dir;
-#[cfg(not(feature = "embedded-db"))]
-use postgres as backend;
 pub use queries::QueryBuilder;
 pub use refinery::Migration;
-#[cfg(feature = "embedded-db")]
-use sqlite as backend;
 pub use transaction::*;
 
 use self::{migrate::Migrator, transaction::PoolMetrics};
-use super::{AvailabilityStorage, NodeStorage};
-// This needs to be reexported so that we can reference it by absolute path relative to this crate
-// in the expansion of `include_migrations`, even when `include_migrations` is invoked from another
-// crate which doesn't have `include_dir` as a dependency.
-pub use crate::include_migrations;
-
-/// Embed migrations from the given directory into the current binary for PostgreSQL or SQLite.
-///
-/// The macro invocation `include_migrations!(path)` evaluates to an expression of type `impl
-/// Iterator<Item = Migration>`. Each migration must be a text file which is an immediate child of
-/// `path`, and there must be no non-migration files in `path`. The migration files must have names
-/// of the form `V${version}__${name}.sql`, where `version` is a positive integer indicating how the
-/// migration is to be ordered relative to other migrations, and `name` is a descriptive name for
-/// the migration.
-///
-/// `path` should be an absolute path. It is possible to give a path relative to the root of the
-/// invoking crate by using environment variable expansions and the `CARGO_MANIFEST_DIR` environment
-/// variable.
-///
-/// As an example, this is the invocation used to load the default migrations from the
-/// `hotshot-query-service` crate. The migrations are located in a directory called `migrations` at
-/// - PostgreSQL migrations are in `/migrations/postgres`.
-/// - SQLite migrations are in `/migrations/sqlite`.
-///
-/// ```
-/// # use hotshot_query_service::data_source::sql::{include_migrations, Migration};
-/// // For PostgreSQL
-/// #[cfg(not(feature = "embedded-db"))]
-///  let mut migrations: Vec<Migration> =
-///     include_migrations!("$CARGO_MANIFEST_DIR/migrations/postgres").collect();
-/// // For SQLite
-/// #[cfg(feature = "embedded-db")]
-/// let mut migrations: Vec<Migration> =
-///     include_migrations!("$CARGO_MANIFEST_DIR/migrations/sqlite").collect();
-///
-///     migrations.sort();
-///     assert_eq!(migrations[0].version(), 10);
-///     assert_eq!(migrations[0].name(), "init_schema");
-/// ```
-///
-/// Note that a similar macro is available from Refinery:
-/// [embed_migrations](https://docs.rs/refinery/0.8.11/refinery/macro.embed_migrations.html). This
-/// macro differs in that it evaluates to an iterator of [migrations](Migration), making it an
-/// expression macro, while `embed_migrations` is a statement macro that defines a module which
-/// provides access to the embedded migrations only indirectly via a
-/// [`Runner`](https://docs.rs/refinery/0.8.11/refinery/struct.Runner.html). The direct access to
-/// migrations provided by [`include_migrations`] makes this macro easier to use with
-/// [`Config::migrations`], for combining custom migrations with [`default_migrations`].
-#[macro_export]
-macro_rules! include_migrations {
-    ($dir:tt) => {
-        $crate::data_source::storage::sql::include_dir!($dir)
-            .files()
-            .map(|file| {
-                let path = file.path();
-                let name = path
-                    .file_name()
-                    .and_then(std::ffi::OsStr::to_str)
-                    .unwrap_or_else(|| {
-                        panic!(
-                            "migration file {} must have a non-empty UTF-8 name",
-                            path.display()
-                        )
-                    });
-                let sql = file
-                    .contents_utf8()
-                    .unwrap_or_else(|| panic!("migration file {name} must use UTF-8 encoding"));
-                $crate::data_source::storage::sql::Migration::unapplied(name, sql)
-                    .expect("invalid migration")
-            })
-    };
-}
-
-/// Drop connections that come back to the pool with a transaction still open.
-///
-/// In sqlx 0.8.6, a `begin()` cancelled mid-flight can return its connection to the pool inside
-/// a transaction that sqlx does not know about.
-pub fn release_only_idle(pool: PoolOptions<sqlx::Postgres>) -> PoolOptions<sqlx::Postgres> {
-    // TODO(abdul): remove once a sqlx release includes launchbadge/sqlx#4394.
-    // With no transaction open, this query starts its own, so both timestamps are the same.
-    // Keep `raw_sql`. A normal query is sent in several messages and Postgres moves
-    // `statement_timestamp()` forward on each one, so the timestamps would always differ.
-    pool.after_release(|conn, _| {
-        async move {
-            let row = conn
-                .fetch_one(sqlx::raw_sql(
-                    "SELECT transaction_timestamp() <> statement_timestamp()",
-                ))
-                .await?;
-            let in_transaction: bool = row.try_get(0)?;
-            Ok(!in_transaction)
-        }
-        .boxed()
-    })
-}
+pub use super::super::retry::SerializableRetryConfig;
+use super::{super::retry::is_serialization_conflict_err, Db};
+use crate::data_source::storage::{AvailabilityStorage, NodeStorage, sql::StorageConnectionType};
 
 /// The migrations required to build the default schema for this version of [`SqlStorage`].
 pub fn default_migrations() -> Vec<Migration> {
@@ -243,7 +149,7 @@ fn add_custom_migrations(
 
 #[derive(Clone)]
 pub struct Config {
-    db_opt: <Db as Backend>::ConnectOptions,
+    pub(super) db_opt: <Db as Backend>::ConnectOptions,
 
     pool_opt: PoolOptions<Db>,
 
@@ -251,7 +157,7 @@ pub struct Config {
     /// SQLite shares one pool between both connection types, so it ignores this.
     pool_opt_query: PoolOptions<Db>,
 
-    schema: String,
+    pub(super) schema: String,
     reset: bool,
     migrations: Vec<Migration>,
     no_migrations: bool,
@@ -271,7 +177,7 @@ impl Config {
     // Each backend implements `From` for its own connect options in its own module. A `From` over
     // the projection `<Db as Backend>::ConnectOptions` would not be normalized by coherence, and
     // would then conflict with every other `From` and `TryFrom` impl for `Config`.
-    fn with_connect_options(db_opt: <Db as Backend>::ConnectOptions) -> Self {
+    pub(super) fn with_connect_options(db_opt: <Db as Backend>::ConnectOptions) -> Self {
         Self {
             db_opt,
             pool_opt: PoolOptions::default(),
@@ -314,10 +220,9 @@ impl Config {
 
     /// Reset the schema on connection.
     ///
-    /// When this [`Config`] is used to [`connect`](Self::connect) a
-    /// [`SqlDataSource`](crate::data_source::SqlDataSource), if this option is set, the relevant
-    /// [`schema`](Self::schema) will first be dropped and then recreated, yielding a completely
-    /// fresh instance of the query service.
+    /// When this [`Config`] is used to [`connect`](Self::connect) a [`SqlDataSource`], if this
+    /// option is set, the Postgres schema or the SQLite file will first be dropped and then
+    /// recreated, yielding a completely fresh instance of the query service.
     ///
     /// This is a particularly useful capability for development and staging environments. Still, it
     /// must be used with extreme caution, as using this will irrevocably delete any data pertaining
@@ -561,12 +466,6 @@ impl<'a> Pruner<'a> {
     }
 }
 
-#[derive(PartialEq)]
-pub enum StorageConnectionType {
-    Sequencer,
-    Query,
-}
-
 impl SqlStorage {
     pub fn pool(&self) -> Pool<Db> {
         self.pool.clone()
@@ -700,115 +599,6 @@ impl SqlStorage {
     }
 }
 
-/// Retry policy for transactions aborted by PostgreSQL serialization conflicts (SQLSTATE 40001).
-#[derive(Clone, Copy, Debug)]
-pub struct SerializableRetryConfig {
-    /// Initial delay before the first retry.
-    base: Duration,
-    /// Maximum delay between retries.
-    max: Duration,
-    /// Multiplier applied to the delay between successive retries.
-    factor: u32,
-    /// Backoff jitter as a `(numerator, denominator)` ratio of the delay.
-    jitter: (u64, u64),
-    /// Maximum number of retries before giving up.
-    retry_max: u32,
-    /// When set, each retried conflict spawns a background `pg_stat_activity` / `pg_locks` snapshot.
-    pg_stat_diag: bool,
-}
-
-impl Default for SerializableRetryConfig {
-    fn default() -> Self {
-        Self {
-            base: Duration::from_millis(10),
-            max: Duration::from_millis(500),
-            factor: 2,
-            jitter: (5, 10),
-            retry_max: 100,
-            pg_stat_diag: false,
-        }
-    }
-}
-
-impl SerializableRetryConfig {
-    /// Construct a retry policy. `jitter` is a `(numerator, denominator)` ratio of the delay.
-    pub const fn new(
-        base: Duration,
-        max: Duration,
-        factor: u32,
-        jitter: (u64, u64),
-        retry_max: u32,
-        pg_stat_diag: bool,
-    ) -> Self {
-        Self {
-            base,
-            max,
-            factor,
-            jitter,
-            retry_max,
-            pg_stat_diag,
-        }
-    }
-
-    /// Run `f`, retrying (up to `retry_max` times with exponential backoff + jitter) whenever
-    /// `should_retry` returns `true` for the error. `f` is re-run from scratch on each attempt.
-    async fn retry_if<F, Fut, T, E>(
-        &self,
-        op: &'static str,
-        mut should_retry: impl FnMut(&E) -> bool,
-        f: F,
-    ) -> Result<T, E>
-    where
-        F: Fn() -> Fut,
-        Fut: Future<Output = Result<T, E>>,
-    {
-        let mut delay = self.base;
-        for i in 0..=self.retry_max {
-            match f().await {
-                Ok(res) => return Ok(res),
-                Err(err) if i < self.retry_max && should_retry(&err) => {
-                    tracing::warn!(
-                        op,
-                        attempt = i + 1,
-                        max_retries = self.retry_max,
-                        delay_ms = delay.as_millis(),
-                        "serialization conflict, retrying transaction after {delay:?}"
-                    );
-                    sleep(delay).await;
-                    delay = self.backoff(delay);
-                },
-                Err(err) => return Err(err),
-            }
-        }
-        unreachable!()
-    }
-
-    /// Compute the next backoff delay: `delay * factor` plus random jitter, capped at `max`.
-    fn backoff(&self, delay: Duration) -> Duration {
-        if delay >= self.max {
-            return self.max;
-        }
-        let ms = delay
-            .saturating_mul(self.factor)
-            .as_millis()
-            .min(u64::MAX as u128) as u64;
-        let (jitter_num, jitter_den) = self.jitter;
-        let jitter = if jitter_num == 0 || jitter_den == 0 {
-            0
-        } else {
-            let mut rng = rand::thread_rng();
-            ms * rng.gen_range(0..jitter_num) / jitter_den
-        };
-        min(Duration::from_millis(ms + jitter), self.max)
-    }
-}
-
-/// Returns `true` if `err`'s [`Display`](std::fmt::Display) output identifies it as a PostgreSQL
-/// serialization conflict (SQLSTATE 40001, message "could not serialize access").
-fn is_serialization_conflict_err<E: std::fmt::Display>(err: &E) -> bool {
-    format!("{err:#}").contains("could not serialize access")
-}
-
 /// Like [`is_serialization_conflict_err`] but also logs concurrent DB sessions for diagnostics.
 fn serialization_conflict_with_diag<E: std::fmt::Display>(
     pool: Pool<Db>,
@@ -817,89 +607,15 @@ fn serialization_conflict_with_diag<E: std::fmt::Display>(
     let mut first = true;
     move |err| {
         if is_serialization_conflict_err(err) {
-            if first && Db::KIND == DbKind::Postgres {
+            if first {
                 first = false;
-                spawn_pg_stat_activity_log(pool.clone(), op);
+                Db::log_conflict_sessions(pool.clone(), op);
             }
             true
         } else {
             false
         }
     }
-}
-
-/// Spawn a background task that queries `pg_stat_activity` and `pg_locks` to identify the
-/// connections and predicate locks involved in a serialization conflict, logging them at `warn`.
-fn spawn_pg_stat_activity_log(pool: Pool<Db>, op: &'static str) {
-    use sqlx::Row as _;
-    tokio::spawn(async move {
-        match sqlx::query(
-            "SELECT pid, COALESCE(state, 'unknown') AS state, left(COALESCE(query, ''), 200) AS \
-             query FROM pg_stat_activity WHERE pid != pg_backend_pid() AND state IS DISTINCT FROM \
-             'idle' AND usename = current_user",
-        )
-        .fetch_all(&pool)
-        .await
-        {
-            Ok(rows) if rows.is_empty() => {
-                tracing::warn!(op, "serialization conflict: no other non-idle DB sessions");
-            },
-            Ok(rows) => {
-                for row in &rows {
-                    let pid: i32 = row.try_get("pid").unwrap_or(-1);
-                    let state: String = row.try_get("state").unwrap_or_default();
-                    let query_text: String = row.try_get("query").unwrap_or_default();
-                    tracing::warn!(
-                        op,
-                        pid,
-                        state,
-                        "serialization conflict: concurrent session: {query_text}",
-                    );
-                }
-            },
-            Err(e) => {
-                tracing::error!(op, "failed to query pg_stat_activity: {e:#}");
-            },
-        }
-
-        // Log SSI predicate locks held by all non-idle sessions
-        match sqlx::query(
-            "SELECT l.pid, l.locktype, CASE WHEN l.relation IS NOT NULL THEN c.relname ELSE NULL \
-             END AS relation, l.page, l.tuple, left(COALESCE(a.query, ''), 100) AS query FROM \
-             pg_locks l JOIN pg_stat_activity a ON a.pid = l.pid LEFT JOIN pg_class c ON c.oid = \
-             l.relation WHERE l.mode = 'SIReadLock' AND a.state IS DISTINCT FROM 'idle' AND l.pid \
-             != pg_backend_pid() ORDER BY l.pid, c.relname",
-        )
-        .fetch_all(&pool)
-        .await
-        {
-            Ok(rows) if rows.is_empty() => {
-                tracing::warn!(op, "serialization conflict: no SIReadLocks held");
-            },
-            Ok(rows) => {
-                for row in &rows {
-                    let pid: i32 = row.try_get("pid").unwrap_or(-1);
-                    let locktype: String = row.try_get("locktype").unwrap_or_default();
-                    let relation: Option<String> = row.try_get("relation").unwrap_or(None);
-                    let page: Option<i32> = row.try_get("page").unwrap_or(None);
-                    let tuple: Option<i16> = row.try_get("tuple").unwrap_or(None);
-                    let query_text: String = row.try_get("query").unwrap_or_default();
-                    tracing::warn!(
-                        op,
-                        pid,
-                        locktype,
-                        relation,
-                        page,
-                        tuple,
-                        "serialization conflict: SIReadLock: {query_text}",
-                    );
-                }
-            },
-            Err(e) => {
-                tracing::warn!(op, "failed to query pg_locks: {e:#}");
-            },
-        }
-    });
 }
 
 #[async_trait]
@@ -920,186 +636,6 @@ impl SerializableRetry for SqlStorage {
                 .retry_if(op, is_serialization_conflict_err, f)
                 .await
         }
-    }
-}
-
-#[cfg(test)]
-mod serializable_retry_tests {
-    use std::sync::{
-        Arc,
-        atomic::{AtomicU32, Ordering},
-    };
-
-    use super::{Duration, SerializableRetryConfig, is_serialization_conflict_err};
-
-    /// A retry policy with small delays and a low retry cap, so the exhaustion test runs quickly.
-    const TEST_RETRY: SerializableRetryConfig = SerializableRetryConfig::new(
-        Duration::from_millis(1),
-        Duration::from_millis(5),
-        2,
-        (5, 10),
-        5,
-        false,
-    );
-
-    /// An error whose message matches a PostgreSQL serialization conflict.
-    fn mock_serialization_error() -> anyhow::Error {
-        anyhow::anyhow!(
-            "could not serialize access due to read/write dependencies among transactions"
-        )
-    }
-
-    #[test]
-    fn test_is_serialization_conflict_err() {
-        // The PostgreSQL serialization-conflict message must be recognised.
-        assert!(is_serialization_conflict_err(&mock_serialization_error()));
-        // Other database errors must NOT match.
-        assert!(!is_serialization_conflict_err(&anyhow::anyhow!(
-            "duplicate key value violates unique constraint"
-        )));
-        // Non-database errors must not match.
-        assert!(!is_serialization_conflict_err(&anyhow::anyhow!(
-            "plain error"
-        )));
-    }
-
-    #[test_log::test(tokio::test(flavor = "multi_thread"))]
-    async fn test_retry_if_succeeds_immediately() {
-        let calls = Arc::new(AtomicU32::new(0));
-        let calls_clone = calls.clone();
-
-        let result: anyhow::Result<()> = TEST_RETRY
-            .retry_if("test", is_serialization_conflict_err, || {
-                let calls = calls_clone.clone();
-                async move {
-                    calls.fetch_add(1, Ordering::SeqCst);
-                    Ok(())
-                }
-            })
-            .await;
-
-        assert!(result.is_ok());
-        assert_eq!(calls.load(Ordering::SeqCst), 1);
-    }
-
-    #[test_log::test(tokio::test(flavor = "multi_thread"))]
-    async fn test_retry_if_retries_on_serialization_error() {
-        let calls = Arc::new(AtomicU32::new(0));
-        let calls_clone = calls.clone();
-
-        // The closure fails twice with a serialization error, then succeeds on the third attempt.
-        let result: anyhow::Result<()> = TEST_RETRY
-            .retry_if("test", is_serialization_conflict_err, || {
-                let calls = calls_clone.clone();
-                async move {
-                    let n = calls.fetch_add(1, Ordering::SeqCst);
-                    if n < 2 {
-                        Err(mock_serialization_error())
-                    } else {
-                        Ok(())
-                    }
-                }
-            })
-            .await;
-
-        assert!(result.is_ok());
-        assert_eq!(calls.load(Ordering::SeqCst), 3);
-    }
-
-    #[test_log::test(tokio::test(flavor = "multi_thread"))]
-    async fn test_retry_if_exhausts_retries() {
-        let calls = Arc::new(AtomicU32::new(0));
-        let calls_clone = calls.clone();
-
-        // The closure always fails; retry must give up after TEST_RETRY.retry_max (5) retries.
-        let result: anyhow::Result<()> = TEST_RETRY
-            .retry_if("test", is_serialization_conflict_err, || {
-                let calls = calls_clone.clone();
-                async move {
-                    calls.fetch_add(1, Ordering::SeqCst);
-                    Err(mock_serialization_error())
-                }
-            })
-            .await;
-
-        assert!(result.is_err());
-        // 1 initial attempt + 5 retries = 6 total calls.
-        assert_eq!(calls.load(Ordering::SeqCst), 6);
-    }
-
-    #[test_log::test(tokio::test(flavor = "multi_thread"))]
-    async fn test_retry_if_no_retry_on_other_errors() {
-        let calls = Arc::new(AtomicU32::new(0));
-        let calls_clone = calls.clone();
-
-        // Non-serialization errors must not be retried.
-        let result: anyhow::Result<()> = TEST_RETRY
-            .retry_if("test", is_serialization_conflict_err, || {
-                let calls = calls_clone.clone();
-                async move {
-                    calls.fetch_add(1, Ordering::SeqCst);
-                    Err(anyhow::anyhow!("unrelated error"))
-                }
-            })
-            .await;
-
-        assert!(result.is_err());
-        assert_eq!(calls.load(Ordering::SeqCst), 1);
-    }
-
-    /// Verify that [`function_name!`](crate::function_name) resolves to the unqualified name of the
-    /// enclosing function, both from a nested helper and from the test fn itself.
-    #[test]
-    fn test_function_name_macro() {
-        fn outer_test_fn() -> &'static str {
-            crate::function_name!()
-        }
-        assert_eq!(outer_test_fn(), "outer_test_fn");
-        assert_eq!(crate::function_name!(), "test_function_name_macro");
-
-        // Non-ASCII identifiers must not panic: the macro slices the `type_name` output, and
-        // a multi-byte codepoint near a slice boundary would panic if the macro used fixed
-        // byte offsets instead of char-boundary-safe operations.
-        fn télécharger() -> &'static str {
-            crate::function_name!()
-        }
-        assert_eq!(télécharger(), "télécharger");
-    }
-
-    /// Verify that [`function_name!`](crate::function_name) resolves to the function name even from
-    /// `async` contexts, where the body is lowered into a generator/closure. This is the case that
-    /// every production call site hits, and a naive macro reports `{{closure}}` here.
-    #[test_log::test(tokio::test)]
-    async fn test_function_name_macro_async() {
-        // Plain `async fn`: the body becomes a generator, adding a `{{closure}}` path segment.
-        async fn plain_async_fn() -> &'static str {
-            crate::function_name!()
-        }
-        assert_eq!(plain_async_fn().await, "plain_async_fn");
-
-        // Closure returning an async block inside an `async fn`, mirroring the real
-        // `serializable_retry!(self, || async { .. })` call sites: adds multiple `{{closure}}`
-        // segments to the path.
-        async fn nested_async_blocks() -> &'static str {
-            let f = || async { crate::function_name!() };
-            f().await
-        }
-        assert_eq!(nested_async_blocks().await, "nested_async_blocks");
-
-        // `#[async_trait]` method: the body is rewritten to `Box::pin(async move { .. })`, exactly
-        // as the real `serializable_retry!` call sites are.
-        struct S;
-        #[async_trait::async_trait]
-        trait T {
-            async fn async_trait_method(&self) -> &'static str;
-        }
-        #[async_trait::async_trait]
-        impl T for S {
-            async fn async_trait_method(&self) -> &'static str {
-                crate::function_name!()
-            }
-        }
-        assert_eq!(S.async_trait_method().await, "async_trait_method");
     }
 }
 
@@ -1584,19 +1120,10 @@ impl VersionedDataSource for SqlStorage {
 // These tests start `postgres` from PATH, which doesn't work on Windows.
 #[cfg(all(any(test, feature = "testing"), not(target_os = "windows")))]
 pub mod testing {
-    use std::{
-        env,
-        process::{Child, Command, Stdio},
-        time::Duration,
-    };
-
     use refinery::Migration;
-    use test_utils::reserve_tcp_port;
-    use tokio::time::timeout;
 
-    pub use super::backend::tmp_db::TmpDb;
+    pub use super::super::tmp_db::TmpDb;
     use super::{Backend as _, Db, DbKind};
-    use crate::testing::sleep;
 
     /// The migrations a [`TmpDb`] applies on top of the default schema.
     pub(crate) fn test_migrations() -> Vec<Migration> {
@@ -1605,141 +1132,6 @@ pub mod testing {
             &TestMerkleTreeMigration::create("test_tree"),
         )
         .unwrap()])
-    }
-
-    /// A throwaway Postgres server with user `postgres` and trust auth, removed on drop.
-    ///
-    /// Available whichever database the query service is built for, for crates that keep data of
-    /// their own in Postgres.
-    #[derive(Debug)]
-    pub struct TmpPostgres {
-        host: String,
-        port: u16,
-        data_dir: std::path::PathBuf,
-        postgres: Option<Child>,
-    }
-
-    impl TmpPostgres {
-        pub async fn init() -> Self {
-            let port = reserve_tcp_port().unwrap();
-            let host = "127.0.0.1".to_string();
-
-            // initdb requires an empty target; clear any dir left by a crashed run
-            // that reused this (recycled) ephemeral port.
-            let data_dir = env::temp_dir().join(format!("espresso-tmpdb-{port}"));
-            let _ = std::fs::remove_dir_all(&data_dir);
-
-            let output = Command::new("initdb")
-                .arg("-D")
-                .arg(&data_dir)
-                .args(["-U", "postgres", "--auth=trust"])
-                .output()
-                .expect("initdb failed to run; is postgres installed and on PATH?");
-            assert!(
-                output.status.success(),
-                "initdb failed for {data_dir:?}: {}",
-                String::from_utf8_lossy(&output.stderr)
-            );
-
-            let mut db = Self {
-                host,
-                port,
-                data_dir,
-                postgres: None,
-            };
-
-            db.start().await;
-            db
-        }
-
-        pub fn host(&self) -> String {
-            self.host.clone()
-        }
-
-        pub fn port(&self) -> u16 {
-            self.port
-        }
-
-        fn stop(&mut self) {
-            let Some(mut postgres) = self.postgres.take() else {
-                return;
-            };
-            tracing::info!(port = self.port, "stopping postgres");
-            // Fast shutdown (SIGINT to the postmaster) releases the datadir before
-            // Drop removes it; fall back to SIGKILL if pg_ctl is unavailable.
-            let stopped = Command::new("pg_ctl")
-                .arg("-D")
-                .arg(&self.data_dir)
-                .args(["stop", "-m", "fast", "-w"])
-                .stdout(Stdio::null())
-                .stderr(Stdio::null())
-                .status()
-                .map(|status| status.success())
-                .unwrap_or(false);
-            if !stopped {
-                let _ = postgres.kill();
-            }
-            let _ = postgres.wait();
-        }
-
-        async fn start(&mut self) {
-            tracing::info!(port = self.port, "starting postgres");
-            let postgres = Command::new("postgres")
-                .arg("-D")
-                .arg(&self.data_dir)
-                .args(["-p", &self.port.to_string()])
-                .args(["-h", &self.host])
-                // Keep the unix socket inside the data dir instead of a shared /tmp.
-                .arg("-k")
-                .arg(&self.data_dir)
-                .stdout(Stdio::null())
-                .stderr(Stdio::null())
-                .spawn()
-                .expect("failed to start postgres; is it installed and on PATH?");
-            self.postgres = Some(postgres);
-
-            self.wait_for_ready().await;
-        }
-
-        async fn wait_for_ready(&self) {
-            let timeout_duration = Duration::from_secs(
-                env::var("SQL_TMP_DB_CONNECT_TIMEOUT")
-                    .unwrap_or("60".to_string())
-                    .parse()
-                    .expect("SQL_TMP_DB_CONNECT_TIMEOUT must be an integer number of seconds"),
-            );
-
-            if let Err(err) = timeout(timeout_duration, async {
-                while !Command::new("pg_isready")
-                    .args(["-h", &self.host])
-                    .args(["-p", &self.port.to_string()])
-                    .args(["-U", "postgres"])
-                    .stdout(Stdio::null())
-                    .stderr(Stdio::null())
-                    .status()
-                    .map(|status| status.success())
-                    .unwrap_or(false)
-                {
-                    tracing::warn!("database is not ready");
-                    sleep(Duration::from_secs(1)).await;
-                }
-            })
-            .await
-            {
-                panic!(
-                    "failed to connect to TmpDb within configured timeout {timeout_duration:?}: \
-                     {err:#}\n{}",
-                    "Consider increasing the timeout by setting SQL_TMP_DB_CONNECT_TIMEOUT"
-                );
-            }
-        }
-    }
-
-    impl Drop for TmpPostgres {
-        fn drop(&mut self) {
-            self.stop();
-            let _ = std::fs::remove_dir_all(&self.data_dir);
-        }
     }
 
     pub struct TestMerkleTreeMigration;
