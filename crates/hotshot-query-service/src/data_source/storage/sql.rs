@@ -505,7 +505,7 @@ impl Config {
 
         #[cfg(not(feature = "embedded-db"))]
         {
-            self.pool_opt = self.pool_opt.max_lifetime(Some(timeout));
+            self.pool_opt_query = self.pool_opt_query.max_lifetime(Some(timeout));
         }
 
         self
