@@ -542,10 +542,20 @@ def test_target_from_pull_request_event():
 
 def test_tool_line_has_no_bodies_or_newlines():
     line = cg.tool_line(
-        "mcp__gh__inline_comment", {"path": "a.rs", "line": 3, "body": "secret\nbody"}
+        "mcp__gh__inline_comment",
+        {"path": "a.rs", "line": 3, "body": "secret\nbody"},
+        Path("/w"),
     )
     assert line == "tool inline_comment path=a.rs line=3 body=<11 chars>"
-    assert "\n" not in cg.tool_line("Grep", {"pattern": "a\nb" * 100})
+    assert "\n" not in cg.tool_line("Grep", {"pattern": "a\nb" * 100}, Path("/w"))
+
+
+def test_tool_line_paths_relative_to_cwd():
+    cwd = Path("/home/runner/work/espresso-network/espresso-network/pr")
+    line = cg.tool_line(
+        "Read", {"file_path": f"{cwd}/tmp/pr-review-comments.json"}, cwd
+    )
+    assert line == "tool Read file_path=tmp/pr-review-comments.json"
 
 
 def run_job(tmp_path: Path, calls: list, result: ResultMessage | None, runner=None):

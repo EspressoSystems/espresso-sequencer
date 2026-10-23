@@ -381,11 +381,12 @@ def is_note(name: str) -> bool:
     return name.removeprefix(f"mcp__{SERVER}__") in NOTES
 
 
-def tool_line(name: str, args: Mapping[str, Any]) -> str:
+def tool_line(name: str, args: Mapping[str, Any], cwd: Path) -> str:
     parts = []
     for key, value in args.items():
         text = f"<{len(value)} chars>" if key == "body" else str(value)
-        parts.append(f"{key}={text.replace(chr(10), ' ')[:80]}")
+        text = text.removeprefix(f"{cwd}/").replace("\n", " ")[:100]
+        parts.append(f"{key}={text}")
     return f"tool {name.removeprefix(f'mcp__{SERVER}__')} {' '.join(parts)}".rstrip()
 
 
@@ -967,6 +968,7 @@ def write_record(path: Path, record: Record) -> None:
 
 async def run(job: Job, runner: Runner) -> int:
     result = None
+    cwd = (job.cwd or Path.cwd()).absolute()
     rec = job.record
     try:
         async for message in runner(job):
@@ -975,7 +977,7 @@ async def run(job: Job, runner: Runner) -> int:
                     if isinstance(block, TextBlock):
                         log.info("text %s", one_line(block.text, 300))
                     elif isinstance(block, ToolUseBlock) and not is_note(block.name):
-                        log.info(tool_line(block.name, block.input))
+                        log.info(tool_line(block.name, block.input, cwd))
             elif isinstance(message, ResultMessage):
                 result = message
     finally:
