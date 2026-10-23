@@ -14,24 +14,24 @@
 //! 1. From storage: `reload_stake` put the stored epochs in memory before this module runs.
 //!    Nothing is fetched for them.
 //! 2. LC contract catchup: the LC contract vouches for its header `F`. The epoch roots below `F`
-//!    are fetched with Merkle proofs against `F` for the epochs of `epoch(F)-3 ..= epoch(F)+1` that
-//!    storage lacks. Failures are retried until the deadline. Missing epochs without state peers
-//!    fail at once.
+//!    are fetched with Merkle proofs against `F` for the epochs of `epoch(F)-3 ..= epoch(F)+1`
+//!    that storage lacks. Failures are retried until the deadline. Missing epochs without state
+//!    peers fail at once.
 //! 3. Peer catchup: from the highest epoch with an epoch root, one epoch at a time, derived from
-//!    QC-verified leaves. Steps up to the epoch of the median peer's chain tip are retried until the
-//!    deadline. Above it, up to the epoch of the highest reported tip, the first failure marks the
-//!    live tip and peer catchup stops there. Without state peers, or on a chain of no blocks, peer
-//!    catchup is skipped. With peers, the block heights are read after LC contract catchup, for a
-//!    few passes. If none answers, peer catchup is skipped with a warning: it fetches through the
-//!    same peers.
+//!    QC-verified leaves. Steps up to the epoch of the median peer's chain tip are retried until
+//!    the deadline. Above it, up to the epoch of the highest reported tip, the first failure
+//!    marks the live tip and peer catchup stops there. Without state peers, or on a chain of no
+//!    blocks, peer catchup is skipped. With peers, the block heights are read after LC contract
+//!    catchup, for a few passes. If none answers in that time, peer catchup is skipped with a
+//!    warning: it fetches through the same peers. If the deadline is already spent, startup fails.
 //!
 //! All stages share one deadline.
 //!
-//! Called from validator boot (`SequencerContext::init`), follower boot (`init_with_source`) and the
-//! follower mid-run skip-ahead (`Follower::catch_up_skipped_epochs`).
+//! Called from validator boot (`SequencerContext::init`), follower boot (`init_with_source`) and
+//! the follower mid-run skip-ahead (`Follower::catch_up_skipped_epochs`).
 //! `init_node_state` runs `reload_stake` first. The returned current epoch `N` goes to
-//! `coordinator_network.apply_epoch`, which dials the validators of those stake tables before consensus
-//! starts.
+//! `coordinator_network.apply_epoch`, which dials the validators of those stake tables before
+//! consensus starts.
 
 use std::{collections::BTreeSet, ops::RangeInclusive, time::Duration};
 
@@ -57,9 +57,10 @@ use vec1::Vec1;
 const INITIAL_BACKOFF: Duration = Duration::from_secs(1);
 /// Longest wait between two retries.
 const MAX_BACKOFF: Duration = Duration::from_secs(60);
-/// Time to read the peers' block heights: three passes with the first two backoffs.
-const PEER_HEIGHT_BUDGET: Duration = Duration::from_secs(5);
-/// Epochs past `epoch(F)` that the median peer tip epoch may reach, `F` being the LC contract header.
+/// Time to read the peers' block heights: passes at 0, 1 and 3 initial backoffs, plus slack.
+const PEER_HEIGHT_BUDGET: Duration = INITIAL_BACKOFF.saturating_mul(5);
+/// Epochs past `epoch(F)` that the median peer tip epoch may reach, `F` being the LC contract
+/// header.
 const MAX_TIP_EPOCHS_PAST_LC_CONTRACT: u64 = 2;
 
 /// Catches up the stake tables of `N-1`, `N`, `N+1`, the epochs cliquenet connects to. Returns `N`.
@@ -129,21 +130,29 @@ pub(crate) enum StartupCatchupError {
     )]
     NoStatePeers { lc_contract_height: u64 },
 
+    /// An epoch cliquenet connects to has no stake table after catchup.
+    #[error("missing stake table for epoch {epoch} after startup catchup")]
+    MissingStakeTable { epoch: EpochNumber },
+}
+
+/// Why a peer's LC contract header or epoch root proofs were refused.
+#[derive(Debug, thiserror::Error)]
+enum LcContractProofError {
     /// The peer did not serve the LC contract header.
     #[error("fetching the LC contract header")]
-    LcContractHeaderFetch(#[source] anyhow::Error),
+    HeaderFetch(#[source] anyhow::Error),
 
     /// The peer served a header of another height than the LC contract's.
     #[error("LC contract header has height {got}, expected {expected}")]
-    LcContractHeaderHeight { got: u64, expected: u64 },
+    HeaderHeight { got: u64, expected: u64 },
 
     /// The light-client state of the LC contract header is unreadable.
     #[error("reading the light client state of the LC contract header")]
-    LcContractHeaderState(#[source] anyhow::Error),
+    HeaderState(#[source] anyhow::Error),
 
     /// The LC contract header does not match the block commitment root the LC contract holds.
     #[error("LC contract header at height {height} does not match the block commitment root")]
-    LcContractRootMismatch { height: u64 },
+    RootMismatch { height: u64 },
 
     /// The peer did not serve the proof of the epoch root.
     #[error("fetching the epoch root at height {height}")]
@@ -162,12 +171,8 @@ pub(crate) enum StartupCatchupError {
     },
 
     /// The proof is for another height than the epoch root requested.
-    #[error("peer returned height {got} for the epoch root at {height}")]
-    EpochRootHeight { got: u64, height: u64 },
-
-    /// An epoch cliquenet connects to has no stake table after catchup.
-    #[error("missing stake table for epoch {epoch} after startup catchup")]
-    MissingStakeTable { epoch: EpochNumber },
+    #[error("peer returned height {got} for the epoch root, expected {expected}")]
+    EpochRootHeight { got: u64, expected: u64 },
 }
 
 /// A retried stage of the startup catchup.
@@ -190,8 +195,8 @@ pub(crate) enum Stage {
 /// Time bounds of the startup catchup.
 #[derive(Clone, Copy, Debug)]
 pub struct StartupCatchupParams {
-    /// Bound on a single peer catchup step, LC contract catchup fetch, LC contract state read or block height
-    /// read.
+    /// Bound on a single peer catchup step, LC contract catchup fetch, LC contract state read or
+    /// block height read.
     pub step_timeout: Duration,
     /// How long LC contract catchup and peer catchup may keep retrying, together, before startup
     /// gives up.
@@ -229,7 +234,7 @@ impl<C: Client> StartupCatchup<'_, C> {
         if let Some(catchup) = snapshot.lc_contract_catchup() {
             self.catch_up_from_lc_contract(&catchup).await?;
         }
-        snapshot.peer_block_heights = self.read_peer_block_heights().await;
+        snapshot.peer_block_heights = self.read_peer_block_heights().await?;
         let plan = snapshot.plan();
         self.log_plan(&snapshot, &plan);
 
@@ -245,8 +250,8 @@ impl<C: Client> StartupCatchup<'_, C> {
     }
 }
 
-/// Snapshot of the catchup sources before any catchup runs: local storage, the LC contract and
-/// the state peers.
+/// Snapshot of the catchup sources: local storage and the LC contract before LC contract catchup,
+/// the state peers after it.
 #[derive(Clone, Debug, PartialEq)]
 struct SourcesSnapshot {
     /// Blocks in one epoch.
@@ -437,11 +442,11 @@ impl LcContractCatchup {
         &self,
         peer: &C,
         blocks_per_epoch: u64,
-    ) -> Result<Vec<Header>, StartupCatchupError> {
+    ) -> Result<Vec<Header>, LcContractProofError> {
         let header = peer
             .header(self.lc_contract_height)
             .await
-            .map_err(StartupCatchupError::LcContractHeaderFetch)?;
+            .map_err(LcContractProofError::HeaderFetch)?;
         self.verify_lc_contract_header(&header)?;
         let root = header.block_merkle_tree_root();
 
@@ -451,14 +456,14 @@ impl LcContractCatchup {
             let proof = peer
                 .header_proof(self.lc_contract_height, BlockId::Number(height as usize))
                 .await
-                .map_err(|source| StartupCatchupError::EpochRootFetch { height, source })?;
+                .map_err(|source| LcContractProofError::EpochRootFetch { height, source })?;
             let header = proof
                 .verify(root)
-                .map_err(|source| StartupCatchupError::EpochRootInvalid { height, source })?;
+                .map_err(|source| LcContractProofError::EpochRootInvalid { height, source })?;
             if header.height() != height {
-                return Err(StartupCatchupError::EpochRootHeight {
+                return Err(LcContractProofError::EpochRootHeight {
                     got: header.height(),
-                    height,
+                    expected: height,
                 });
             }
             Ok(header)
@@ -469,18 +474,18 @@ impl LcContractCatchup {
     /// Accept `header` only if it is the block the LC contract commits to at `F`.
     ///
     /// The view number does not enter `block_comm_root`, so any view serves.
-    fn verify_lc_contract_header(&self, header: &Header) -> Result<(), StartupCatchupError> {
+    fn verify_lc_contract_header(&self, header: &Header) -> Result<(), LcContractProofError> {
         if header.height() != self.lc_contract_height {
-            return Err(StartupCatchupError::LcContractHeaderHeight {
+            return Err(LcContractProofError::HeaderHeight {
                 got: header.height(),
                 expected: self.lc_contract_height,
             });
         }
         let state = header
             .get_light_client_state(ViewNumber::genesis())
-            .map_err(StartupCatchupError::LcContractHeaderState)?;
+            .map_err(LcContractProofError::HeaderState)?;
         if state.block_comm_root != self.block_comm_root {
-            return Err(StartupCatchupError::LcContractRootMismatch {
+            return Err(LcContractProofError::RootMismatch {
                 height: self.lc_contract_height,
             });
         }
@@ -536,16 +541,18 @@ impl<C: Client> StartupCatchup<'_, C> {
 /// Peer catchup: the epochs to derive from the peers' chain tips.
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct PeerCatchup {
-    /// Epoch of the median peer's last block, capped at `epoch(F) + MAX_TIP_EPOCHS_PAST_LC_CONTRACT`. Peer catchup
-    /// must reach the epoch after it, and retries until the deadline on the way.
+    /// Epoch of the median peer's last block, capped at
+    /// `epoch(F) + MAX_TIP_EPOCHS_PAST_LC_CONTRACT`. Peer catchup must reach the epoch after it,
+    /// and retries until the deadline on the way.
     median_peer_tip_epoch: EpochNumber,
-    /// Epoch of the highest peer's last block, at least `median_peer_tip_epoch`. Peer catchup stops at
-    /// the epoch after it, trying each step above the median once.
+    /// Epoch of the highest peer's last block, at least `median_peer_tip_epoch`. Peer catchup
+    /// stops at the epoch after it, trying each step above the median once.
     highest_peer_tip_epoch: EpochNumber,
 }
 
 impl PeerCatchup {
-    /// Whether deriving `epoch` must succeed: it is at most the epoch after the median peer tip epoch.
+    /// Whether deriving `epoch` must succeed: it is at most the epoch after the median peer tip
+    /// epoch.
     fn required(&self, epoch: EpochNumber) -> bool {
         epoch <= self.median_peer_tip_epoch + 1
     }
@@ -560,11 +567,19 @@ impl<C: Client> StartupCatchup<'_, C> {
     /// The block heights the peers report, each read bounded by `step_timeout`.
     ///
     /// Passes over the peers repeat with backoff until one answers, for at most
-    /// `PEER_HEIGHT_BUDGET` and the deadline. Empty without peers, or when none answered: peer
-    /// catchup would fetch through the same peers, so it is skipped.
-    async fn read_peer_block_heights(&self) -> Vec<u64> {
+    /// `PEER_HEIGHT_BUDGET` and the deadline. Empty without peers, or when none answered in that
+    /// time: peer catchup would fetch through the same peers, so it is skipped. Fails when the
+    /// deadline is already spent.
+    async fn read_peer_block_heights(&self) -> Result<Vec<u64>, StartupCatchupError> {
         if self.state_peers.is_empty() {
-            return vec![];
+            return Ok(vec![]);
+        }
+        if self.deadline <= Instant::now() {
+            return Err(StartupCatchupError::DeadlineExceeded {
+                stage: Stage::PeerHeights,
+                attempts: 0,
+                source: anyhow!("the deadline passed before the peer block heights were read"),
+            });
         }
         let deadline = self.deadline.min(Instant::now() + PEER_HEIGHT_BUDGET);
         let read = retry(deadline, Stage::PeerHeights, 1, |_, remaining| async move {
@@ -582,17 +597,17 @@ impl<C: Client> StartupCatchup<'_, C> {
             Ok(heights)
         })
         .await;
-        read.unwrap_or_else(|err| {
+        Ok(read.unwrap_or_else(|err| {
             tracing::warn!(
-                %err,
+                err = format!("{:#}", anyhow::Error::from(err)),
                 "startup catchup: no state peer reported a block height; skipping peer catchup"
             );
             vec![]
-        })
+        }))
     }
 
-    /// Derive the stake table of one epoch at a time above `highest_held_epoch`, the highest epoch with
-    /// an epoch root. Returns the highest epoch reached when peer catchup ends.
+    /// Derive the stake table of one epoch at a time above `highest_held_epoch`, the highest epoch
+    /// with an epoch root. Returns the highest epoch reached when peer catchup ends.
     ///
     /// Steps `catchup` requires are retried until the deadline. Above them, the first step peers
     /// cannot serve marks the live tip, and reaching the highest tip epoch ends peer catchup.
@@ -794,8 +809,8 @@ mod tests {
         total_timeout: Duration::from_secs(30),
     };
 
-    /// Sources snapshot of a chain of `EPOCH_HEIGHT`-block epochs, with `lc_contract_height` the block
-    /// height of the LC contract state (0 for none).
+    /// Sources snapshot of a chain of `EPOCH_HEIGHT`-block epochs, with `lc_contract_height` the
+    /// block height of the LC contract state (0 for none).
     fn snapshot(
         lc_contract_height: u64,
         stored: &[u64],
@@ -936,7 +951,7 @@ mod tests {
         let err = wrong_root.verify_lc_contract_header(&header).unwrap_err();
         assert_matches!(
             err,
-            StartupCatchupError::LcContractRootMismatch { height } if height == LC_CONTRACT_HEIGHT
+            LcContractProofError::RootMismatch { height } if height == LC_CONTRACT_HEIGHT
         );
 
         let wrong_height = LcContractCatchup {
@@ -946,7 +961,7 @@ mod tests {
         let err = wrong_height.verify_lc_contract_header(&header).unwrap_err();
         assert_matches!(
             err,
-            StartupCatchupError::LcContractHeaderHeight { got, expected }
+            LcContractProofError::HeaderHeight { got, expected }
                 if got == LC_CONTRACT_HEIGHT && expected == LC_CONTRACT_HEIGHT + 1
         );
     }
@@ -1164,7 +1179,7 @@ mod tests {
             .await
             .unwrap();
 
-        // Peer catchup finds no root above the lc_contract_state, as when the prover is not lagging.
+        // Peer catchup finds no root above the LC contract state, as when the prover keeps up.
         assert_eq!(current, EpochNumber::new(N));
         for epoch in (N - 3)..=(N + 1) {
             assert!(has_table(&coordinator, epoch), "epoch {epoch}");
@@ -1207,7 +1222,7 @@ mod tests {
             .await
             .unwrap_err();
 
-        assert_matches!(err, StartupCatchupError::EpochRootInvalid { .. });
+        assert_matches!(err, LcContractProofError::EpochRootInvalid { .. });
     }
 
     /// A verification failure is retried, not read as the tip, and the retry completes the catchup.
@@ -1250,7 +1265,7 @@ mod tests {
             .await
             .unwrap_err();
 
-        assert_matches!(err, StartupCatchupError::LcContractRootMismatch { .. });
+        assert_matches!(err, LcContractProofError::RootMismatch { .. });
     }
 
     /// An epoch root the peer cannot serve at first must be retried, not read as the tip.
@@ -1288,12 +1303,17 @@ mod tests {
             .await
             .unwrap_err();
 
+        let StartupCatchupError::DeadlineExceeded {
+            stage: Stage::LcContractCatchup,
+            source,
+            ..
+        } = err
+        else {
+            panic!("expected the LC contract catchup deadline, got {err:?}");
+        };
         assert_matches!(
-            err,
-            StartupCatchupError::DeadlineExceeded {
-                stage: Stage::LcContractCatchup,
-                ..
-            }
+            source.downcast_ref::<LcContractProofError>(),
+            Some(LcContractProofError::HeaderFetch(_))
         );
     }
 
@@ -1419,7 +1439,7 @@ mod tests {
             .await
             .unwrap_err();
 
-        assert_matches!(err, StartupCatchupError::EpochRootInvalid { .. });
+        assert_matches!(err, LcContractProofError::EpochRootInvalid { .. });
     }
 
     /// A restart after an interrupted LC contract catchup holds a lone table at the start of the
@@ -1453,8 +1473,8 @@ mod tests {
         }
     }
 
-    /// Peers that agree on the tip and an uncapped median peer tip epoch end peer catchup there, without
-    /// a probe past it, even though the store holds a later epoch.
+    /// Peers that agree on the tip and an uncapped median peer tip epoch end peer catchup there,
+    /// without a probe past it, even though the store holds a later epoch.
     #[test_log::test(tokio::test)]
     async fn peer_catchup_stops_at_the_highest_tip() {
         let (client, lc_contract_state) = chain().await;
@@ -1493,7 +1513,8 @@ mod tests {
         assert!(started.elapsed() < PARAMS.step_timeout);
     }
 
-    /// A held epoch without its root, above the rooted ones, does not move where peer catchup starts.
+    /// A held epoch without its root, above the rooted ones, does not move where peer catchup
+    /// starts.
     #[test_log::test(tokio::test)]
     async fn rootless_top_epoch_does_not_raise_the_start() {
         let (client, lc_contract_state) = chain().await;
@@ -1554,6 +1575,51 @@ mod tests {
 
         assert_eq!(current, EpochNumber::new(N));
         assert!(started.elapsed() <= deadline);
+    }
+
+    /// LC contract catchup fills fresh storage, then no peer reports a height: startup ends at
+    /// the LC contract epoch, without peer catchup.
+    #[test_log::test(tokio::test(start_paused = true))]
+    async fn lc_contract_catchup_then_no_peer_height_skips_peer_catchup() {
+        let (client, lc_contract_state) = chain().await;
+        let store = SeededStore::for_chain(&client, (N - 3)..=(N + 2)).await;
+        let coordinator = coordinator(store.clone());
+        client.fail_block_heights(usize::MAX).await;
+
+        let current = run_catchup(&coordinator, Some(lc_contract_state), &[client], PARAMS)
+            .await
+            .unwrap();
+
+        assert_eq!(current, EpochNumber::new(N));
+        for epoch in (N - 3)..=(N + 1) {
+            assert!(has_table(&coordinator, epoch), "epoch {epoch}");
+        }
+        assert!(!store.loaded(N + 2));
+    }
+
+    /// A spent deadline fails the peer height read instead of reading as no peer answering.
+    #[test_log::test(tokio::test)]
+    async fn spent_deadline_fails_the_peer_height_read() {
+        let (client, _) = chain().await;
+        let coordinator = fresh_coordinator(&client).await;
+        let peers = peer_list(&[client]);
+        let catchup = StartupCatchup {
+            coordinator: &coordinator,
+            state_peers: &peers,
+            params: &PARAMS,
+            blocks_per_epoch: EPOCH_HEIGHT,
+            deadline: Instant::now(),
+        };
+
+        let err = catchup.read_peer_block_heights().await.unwrap_err();
+
+        assert_matches!(
+            err,
+            StartupCatchupError::DeadlineExceeded {
+                stage: Stage::PeerHeights,
+                ..
+            }
+        );
     }
 
     /// A peer ahead of the median extends peer catchup, best-effort, to the epoch of its tip.
@@ -1617,7 +1683,8 @@ mod tests {
         assert!(!has_table(&coordinator, N - 3));
     }
 
-    /// An lc_contract_state read that keeps failing is retried until the deadline, not read as no lc_contract_state.
+    /// An LC contract state read that keeps failing is retried until the deadline, not read as no
+    /// LC contract state.
     #[test_log::test(tokio::test)]
     async fn lc_contract_state_failure_aborts_at_the_deadline() {
         let (client, _) = chain().await;
