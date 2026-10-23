@@ -127,7 +127,7 @@ pub struct NetworkParams {
     pub private_state_key: StateSignKey,
     pub config_peers: Option<Vec<Url>>,
     pub catchup: CatchupParams,
-    /// Startup stake-table catchup (`bootstrap_epoch_window`).
+    /// Startup stake-table catchup (`catch_up_cliquenet_stake_tables`).
     pub bootstrap: BootstrapParams,
     /// The address to advertise as our public API's URL
     pub public_api_url: Option<Url>,
@@ -737,8 +737,8 @@ where
 }
 
 /// Scans the whole L1 contract history when nothing is persisted yet, keeping every
-/// `bootstrap_epoch_window` step bounded to one epoch instead of loading that scan onto
-/// the first step, which silently downgrades the node to a stale epoch window when it
+/// `catch_up_cliquenet_stake_tables` step bounded to one epoch instead of loading that scan onto
+/// the first step, which silently leaves the node with stale cliquenet stake tables when it
 /// exceeds its timeout. Untimed: an unreachable L1 panics after
 /// `l1_events_max_retry_duration`.
 pub(crate) async fn prefetch_stake_table_events(

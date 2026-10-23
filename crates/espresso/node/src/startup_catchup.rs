@@ -1,12 +1,13 @@
 //! Startup stake-table catchup for new-protocol nodes.
 //!
-//! Cliquenet only connects to validators in the current epoch's stake table
-//! window (`N-1`, `N`, `N+1`). On a fresh-join or cold-restart node, no
-//! consensus messages can be received until those stake tables are populated,
-//! so the existing reactive catchup (triggered by an unknown-epoch proposal)
-//! never fires.
+//! Cliquenet only connects to validators in the stake tables of epochs `N-1`, `N` and `N+1`, where
+//! `N` is the current epoch. "The stake tables cliquenet connects to" in this module means those
+//! three. On a fresh-join or cold-restart node, no consensus messages can be received until those
+//! stake tables are populated, so the existing reactive catchup (triggered by an unknown-epoch
+//! proposal) never fires.
 //!
-//! [`bootstrap_epoch_window`] observes what the node knows, plans the catchup and executes it:
+//! [`catch_up_cliquenet_stake_tables`] observes what the node knows, plans the catchup and executes
+//! it:
 //!
 //! 1. From storage: `reload_stake` put the stored epochs in memory before this module runs.
 //!    Nothing is fetched for them.
@@ -25,7 +26,8 @@
 //! Called from validator boot (`SequencerContext::init`), follower boot (`init_with_source`) and the
 //! follower mid-run skip-ahead (`Follower::catch_up_skipped_epochs`, without metrics).
 //! `init_node_state` runs `reload_stake` first. The returned current epoch `N` goes to
-//! `coordinator_network.apply_epoch`, which dials the cliquenet window before consensus starts.
+//! `coordinator_network.apply_epoch`, which dials the validators of those stake tables before consensus
+//! starts.
 
 use std::{collections::BTreeSet, ops::RangeInclusive, time::Duration};
 
@@ -68,8 +70,7 @@ macro_rules! milestone {
     };
 }
 
-/// Populate the membership with stake tables for every epoch up through `N+1` (where `N` is the
-/// current epoch). Returns `N`.
+/// Catches up the stake tables of `N-1`, `N`, `N+1`, the epochs cliquenet connects to. Returns `N`.
 ///
 /// `read_anchor` returns the light-client finalized state, or `LightClientStateSol::default()`
 /// when there is none. Its failures are retried until the deadline. `metrics` is `Some` at boot:
@@ -77,7 +78,7 @@ macro_rules! milestone {
 ///
 /// Preconditions: `reload_stake` should have run before this: it populates the membership from
 /// local persistence, so those epochs are taken from storage.
-pub(crate) async fn bootstrap_epoch_window<C: Client, Fut>(
+pub(crate) async fn catch_up_cliquenet_stake_tables<C: Client, Fut>(
     coordinator: &EpochMembershipCoordinator<SeqTypes>,
     epoch_height: u64,
     read_anchor: impl Fn() -> Fut,
@@ -111,7 +112,7 @@ where
         metrics,
         current_epoch = %current,
         duration_ms = started.elapsed().as_millis() as u64,
-        "epoch window ready",
+        "cliquenet stake tables ready",
     );
     Ok(current)
 }
@@ -129,7 +130,7 @@ pub struct BootstrapParams {
 
 /// Gauges of the boot-time catchup, in epochs.
 pub(crate) struct BootstrapMetrics {
-    /// Current epoch `N` once the window is ready.
+    /// Current epoch `N` once the stake tables cliquenet connects to are ready.
     window_epoch: Box<dyn Gauge>,
     /// Epoch of the light-client finalized header `F`.
     anchor_epoch: Box<dyn Gauge>,
@@ -215,7 +216,8 @@ impl<C: Client> Bootstrap<'_, C> {
         Ok(point)
     }
 
-    /// Plan from `point`, run light-client catchup and peer catchup, and prepare the window.
+    /// Plan from `point`, run light-client catchup and peer catchup, and prepare the epochs
+    /// cliquenet connects to.
     ///
     /// A light-client catchup slower than `step_timeout` leaves the block heights stale: they are
     /// read again and the peer catchup is planned anew. Returns the current epoch `N`.
@@ -242,7 +244,8 @@ impl<C: Client> Bootstrap<'_, C> {
             },
             None => plan.highest_held_epoch,
         };
-        self.prepare_window(point.first_epoch, highest_epoch).await
+        self.prepare_cliquenet_epochs(point.first_epoch, highest_epoch)
+            .await
     }
 }
 
@@ -326,8 +329,9 @@ impl StartingPoint {
     /// epochs seeded from genesis.
     ///
     /// `block_reward(n)` and `block_reward(n+1)` need the stake table of three epochs earlier, and
-    /// the rest is the window. `None` when `F` is before the first epoch's end, so there is no root
-    /// to prove. Every root in the range is below `F`: the root of `e-2` lies in epoch `e-2 < n`.
+    /// the rest are the stake tables cliquenet connects to. `None` when `F` is before the first
+    /// epoch's end, so there is no root to
+    /// prove. Every root in the range is below `F`: the root of `e-2` lies in epoch `e-2 < n`.
     fn light_client_epochs(&self) -> Option<RangeInclusive<EpochNumber>> {
         let n = self.finalized_epoch().u64();
         let start = n.saturating_sub(3).max(*self.first_epoch + 2);
@@ -591,7 +595,7 @@ impl<C: Client> Bootstrap<'_, C> {
                 },
                 Err(err) if required => return Err(err),
                 Err(err) if err.is::<Elapsed>() => {
-                    tracing::warn!(%next, %err, "bootstrap: peer catchup timed out; proceeding with a possibly stale epoch window");
+                    tracing::warn!(%next, %err, "bootstrap: peer catchup timed out; proceeding with possibly stale cliquenet stake tables");
                     break;
                 },
                 Err(err) => {
@@ -607,7 +611,7 @@ impl<C: Client> Bootstrap<'_, C> {
 impl<C: Client> Bootstrap<'_, C> {
     /// Check the stake tables of `highest_epoch - 1` and `highest_epoch` and prepare the DRBs of
     /// `N-1`, `N` and `N+1`. Returns the current epoch `N = highest_epoch - 1`.
-    async fn prepare_window(
+    async fn prepare_cliquenet_epochs(
         &self,
         first_epoch: EpochNumber,
         highest_epoch: EpochNumber,
@@ -1143,7 +1147,7 @@ mod tests {
         params: BootstrapParams,
     ) -> anyhow::Result<EpochNumber> {
         let metrics = BootstrapMetrics::new(&NoMetrics);
-        bootstrap_epoch_window(
+        catch_up_cliquenet_stake_tables(
             coordinator,
             EPOCH_HEIGHT,
             || async { anchor.clone().context("no anchor") },
@@ -1571,7 +1575,7 @@ mod tests {
         let reads = AtomicUsize::new(0);
         let height_requests = AtomicUsize::new(0);
 
-        bootstrap_epoch_window(
+        catch_up_cliquenet_stake_tables(
             &coordinator,
             EPOCH_HEIGHT,
             || async {
@@ -1724,7 +1728,7 @@ mod tests {
             ..PARAMS
         };
 
-        let current = bootstrap_epoch_window(
+        let current = catch_up_cliquenet_stake_tables(
             &coordinator,
             EPOCH_HEIGHT,
             || async { Ok(anchor.clone()) },
@@ -1803,7 +1807,7 @@ mod tests {
         let reads = AtomicUsize::new(0);
         let metrics = BootstrapMetrics::new(&NoMetrics);
 
-        let current = bootstrap_epoch_window(
+        let current = catch_up_cliquenet_stake_tables(
             &coordinator,
             EPOCH_HEIGHT,
             || async {

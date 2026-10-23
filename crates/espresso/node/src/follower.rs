@@ -70,7 +70,9 @@ use crate::{
     apply_genesis_overrides,
     context::TaskList,
     init_node_state, load_or_fetch_network_config,
-    startup_catchup::{BootstrapMetrics, BootstrapParams, bootstrap_epoch_window, query_clients},
+    startup_catchup::{
+        BootstrapMetrics, BootstrapParams, catch_up_cliquenet_stake_tables, query_clients,
+    },
     state_signature::StateSignatureMemStorage,
 };
 
@@ -262,7 +264,7 @@ where
     .await;
     let peers = query_clients(&params.upstreams);
     let replaying = replay.is_some();
-    bootstrap_epoch_window(
+    catch_up_cliquenet_stake_tables(
         &coordinator,
         epoch_height,
         || l1_anchor(&node_state, replaying),
@@ -768,7 +770,7 @@ impl<P: SequencerPersistence> Follower<P> {
             ?skipped,
             "skipped epoch roots whose stake tables are missing; catching up from peers"
         );
-        let current_epoch = bootstrap_epoch_window(
+        let current_epoch = catch_up_cliquenet_stake_tables(
             &self.coordinator,
             self.epoch_height,
             || l1_anchor(&self.node_state, self.replaying),

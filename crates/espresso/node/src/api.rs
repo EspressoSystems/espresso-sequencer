@@ -6109,7 +6109,7 @@ mod test {
     /// other; nodes 2 through 5 are plain validators. Once the network decides
     /// past epoch seven, node 1 is taken down and started again on an empty
     /// database: no consensus state, no archive, no merklized state. To recover
-    /// it has to bootstrap its stake-table window, resync consensus, backfill
+    /// it has to catch up its stake tables, resync consensus, backfill
     /// the chain it lost from node 0 (including the new protocol's cert2
     /// finality certificates), and resume proposing.
     #[test_log::test(tokio::test(flavor = "multi_thread"))]
@@ -6577,7 +6577,7 @@ mod test {
         }
     }
 
-    /// A validator that restarts on an empty database catches up its stake-table window from the L1
+    /// A validator that restarts on an empty database catches up its stake tables from the L1
     /// light client anchor instead of from peers epoch by epoch, and goes on to propose again.
     ///
     /// Six nodes run the new protocol. Once the network is past epoch twelve, the light client
@@ -6739,7 +6739,7 @@ mod test {
             .find_map(|line| line.strip_prefix("consensus_bootstrap_window_epoch "))
             .context("window epoch gauge not exported")?
             .parse()?;
-        // The window is the anchor's, with nothing below it caught up from peers.
+        // The current epoch is the anchor's, with nothing below it caught up from peers.
         let membership = node.node_state().coordinator.membership().clone();
         for epoch in (anchor_epoch - 3)..=(anchor_epoch + 1) {
             assert!(
@@ -6759,7 +6759,7 @@ mod test {
             exported.contains(&format!("consensus_bootstrap_anchor_epoch {anchor_epoch}")),
             "{exported}"
         );
-        // Peer catchup above the anchor may advance the window past it.
+        // Peer catchup above the anchor may advance the current epoch past it.
         assert!(window_epoch >= anchor_epoch, "{exported}");
 
         node.start_consensus().await;

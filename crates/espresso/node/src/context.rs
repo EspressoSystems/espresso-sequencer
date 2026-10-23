@@ -66,7 +66,9 @@ use crate::{
         network::Sender as RequestResponseSender,
         recipient_source::RecipientSource,
     },
-    startup_catchup::{BootstrapMetrics, BootstrapParams, bootstrap_epoch_window, query_clients},
+    startup_catchup::{
+        BootstrapMetrics, BootstrapParams, catch_up_cliquenet_stake_tables, query_clients,
+    },
     state_signature::{self, DecidedLeaf, StateSignatureMemStorage, StateSigner},
 };
 pub(crate) type ConsensusNode<P> = Node<P>;
@@ -182,7 +184,7 @@ where
         let mut coordinator_network = coordinator_network(upgrade_lock.clone()).await?;
 
         let peers = query_clients(&state_peers);
-        let current_epoch = bootstrap_epoch_window(
+        let current_epoch = catch_up_cliquenet_stake_tables(
             &membership_coordinator,
             epoch_height,
             || instance_state.finalized_light_client_state(),
@@ -193,7 +195,7 @@ where
         .await
         .context("startup stake-table catchup failed")?;
 
-        // For cliquenet this dials the N-1/N/N+1 epoch window before consensus starts.
+        // For cliquenet this dials the stake tables of N-1, N and N+1 before consensus starts.
         if let Err(err) = coordinator_network.apply_epoch(current_epoch, &membership_coordinator) {
             tracing::warn!(%current_epoch, %err, "coordinator network apply_epoch failed at startup");
         }
