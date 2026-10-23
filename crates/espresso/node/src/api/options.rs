@@ -20,7 +20,8 @@ use super::{
     ApiState, StorageState,
     context::ApiContext,
     data_source::{
-        NodeStateDataSource, Provider, PruningDataSource, SequencerDataSource, provider,
+        DataSourceOptions, NodeStateDataSource, Provider, PruningDataSource, SequencerDataSource,
+        provider,
     },
     fs, sql,
     sql::ArchiveStateGc,
@@ -143,7 +144,7 @@ impl Options {
     /// that consensus will populuate metrics that can then be read and served by the API.
     pub async fn serve<C, F>(mut self, init_context: F) -> anyhow::Result<C>
     where
-        C: ApiContext,
+        C: ApiContext + Clone,
         F: FnOnce(
             Box<dyn Metrics>,
             Box<dyn ApiSink>,
@@ -250,24 +251,24 @@ impl Options {
 
         let ctx = init_context(metrics, consumer, storage.clone()).await?;
         send_ctx
-            .send(ctx.clone())
+            .send(Box::new(ctx.clone()))
             .ok()
             .context("API server exited without receiving context")?;
         Ok(ctx.with_task_list(tasks))
     }
 
-    async fn init_with_query_module_fs<C: ApiContext>(
+    async fn init_with_query_module_fs(
         &self,
         query_opt: Query,
         mod_opt: persistence::fs::Options,
-        state: ApiState<C>,
+        state: ApiState,
         tasks: &mut TaskList,
     ) -> anyhow::Result<(
         Box<dyn Metrics>,
         Box<dyn ApiSink>,
         Option<RequestResponseStorage>,
     )> {
-        let light_client_db = query_opt.light_client_db();
+        let light_client_db = mod_opt.light_client_db(&query_opt)?;
         let ds = <fs::DataSource as SequencerDataSource>::create(
             mod_opt,
             provider(
@@ -320,11 +321,11 @@ impl Options {
         ))
     }
 
-    async fn init_with_query_module_sql<C: ApiContext>(
+    async fn init_with_query_module_sql(
         self,
         query_opt: Query,
         mod_opt: persistence::sql::Options,
-        state: ApiState<C>,
+        state: ApiState,
         tasks: &mut TaskList,
     ) -> anyhow::Result<(
         Box<dyn Metrics>,
@@ -340,7 +341,7 @@ impl Options {
             .with_block_provider(db_provider.clone())
             .with_vid_common_provider(db_provider);
         // If that fails, fetch missing data from peers.
-        let light_client_db = query_opt.light_client_db();
+        let light_client_db = mod_opt.light_client_db(&query_opt)?;
         let light_client = Arc::new(LightClientProvider::new(
             query_opt.peers,
             state.clone(),
@@ -486,14 +487,14 @@ pub struct Query {
     #[clap(flatten)]
     pub light_client_db: LightClientSqliteOptions,
 
-    /// Node storage directory. When `--light-client-db-path` is unset, the light client database
+    /// Node storage directory. A SQLite light client database without `--light-client-db-path`
     /// is kept under it, so the stake tables it verified survive a restart.
     #[clap(long, env = "ESPRESSO_NODE_STORAGE_PATH")]
     pub storage_path: Option<PathBuf>,
 }
 
 impl Query {
-    pub fn light_client_db(&self) -> LightClientSqliteOptions {
+    pub fn sqlite_light_client_db(&self) -> LightClientSqliteOptions {
         let lc_path = self.light_client_db.lc_path.clone().or_else(|| {
             self.storage_path
                 .as_ref()
@@ -536,10 +537,7 @@ pub struct LightClient;
 /// Returns the metrics handle plus the wrapped query data source shared by the axum server and
 /// update loops.
 #[allow(clippy::type_complexity)]
-fn init_query_data_source<C: ApiContext, D>(
-    ds: D,
-    state: ApiState<C>,
-) -> (Box<dyn Metrics>, Arc<StorageState<C, D>>)
+fn init_query_data_source<D>(ds: D, state: ApiState) -> (Box<dyn Metrics>, Arc<StorageState<D>>)
 where
     D: SequencerDataSource + CatchupStorage + PruningDataSource + Send + Sync + 'static,
 {

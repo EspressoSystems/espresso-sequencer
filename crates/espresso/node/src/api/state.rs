@@ -2198,6 +2198,7 @@ impl From<crate::options::PublicNodeConfig> for proto::RuntimeConfigResponse {
             identity,
             catchup_base_timeout: _,
             local_catchup_timeout: _,
+            http_catchup_delay: _,
             bootstrap_epoch_catchup_timeout: _,
             catchup_backoff: _,
             follower,
@@ -2614,10 +2615,9 @@ pub(crate) trait SubmitDataSourceErased {
 }
 
 #[async_trait]
-impl<C, D> SubmitDataSourceErased
-    for hotshot_query_service::data_source::ExtensibleDataSource<D, crate::api::ApiState<C>>
+impl<D> SubmitDataSourceErased
+    for hotshot_query_service::data_source::ExtensibleDataSource<D, crate::api::ApiState>
 where
-    C: crate::api::context::ApiContext,
     D: Send + Sync,
 {
     async fn submit_erased(
@@ -2629,12 +2629,9 @@ where
 }
 
 // Bare mode (no query/status API) has no `ExtensibleDataSource` wrapper: the app state is
-// `ApiState<C>` directly, so it needs its own erased forwarding impl.
+// `ApiState` directly, so it needs its own erased forwarding impl.
 #[async_trait]
-impl<C> SubmitDataSourceErased for crate::api::ApiState<C>
-where
-    C: crate::api::context::ApiContext,
-{
+impl SubmitDataSourceErased for crate::api::ApiState {
     async fn submit_erased(
         &self,
         tx: espresso_types::Transaction,
@@ -2686,10 +2683,9 @@ pub(crate) trait StateSignatureDataSourceErased {
 }
 
 #[async_trait]
-impl<C, D> StateSignatureDataSourceErased
-    for hotshot_query_service::data_source::ExtensibleDataSource<D, crate::api::ApiState<C>>
+impl<D> StateSignatureDataSourceErased
+    for hotshot_query_service::data_source::ExtensibleDataSource<D, crate::api::ApiState>
 where
-    C: crate::api::context::ApiContext,
     D: Send + Sync,
 {
     async fn get_state_signature_erased(
@@ -2701,12 +2697,9 @@ where
 }
 
 // Bare mode (no query/status API) has no `ExtensibleDataSource` wrapper: the app state is
-// `ApiState<C>` directly, so it needs its own erased forwarding impl.
+// `ApiState` directly, so it needs its own erased forwarding impl.
 #[async_trait]
-impl<C> StateSignatureDataSourceErased for crate::api::ApiState<C>
-where
-    C: crate::api::context::ApiContext,
-{
+impl StateSignatureDataSourceErased for crate::api::ApiState {
     async fn get_state_signature_erased(
         &self,
         height: u64,

@@ -166,12 +166,9 @@ test *args:
     just nextest --features embedded-db  {{args}}
     just nextest {{args}}
 
-# These tests stand up whole multi-node networks inline on a single libtest
-# thread, which leaves the largest of them a few KB under the 2 MiB default
-# stack. 4 MiB gives them roughly 2x headroom instead.
 test-slow *args:
     @echo 'Only slow tests are included. Use `test` for those deemed not slow. Or `test-all` for all tests.'
-    RUST_MIN_STACK=4194304 cargo nextest run --profile slow --locked -p slow-tests --verbose {{args}}
+    cargo nextest run --profile slow --locked -p slow-tests --verbose {{args}}
 
 build-dev-node *args:
     cargo build -p espresso-dev-node {{args}}
@@ -303,17 +300,17 @@ release-cut version="" source_ref="main":
 release-tag branch tag="":
     gh workflow run tag-release.yml --ref {{branch}} -f tag={{tag}}
 
-# Turn the pre-release for a tag into a release operators may deploy, and mark it latest.
-release-publish tag:
-    gh release edit {{tag}} --prerelease=false --latest
+# Preview the release edits and tracker comment of `/publish <tag> <network>` without writing to GitHub.
+release-publish-preview tag network:
+    scripts/release publish --dry-run --comment "/publish {{tag}} {{network}}"
 
 # Render the release tracker body for a version without writing to GitHub.
 release-body version:
     scripts/release refresh --dry-run --version {{version}}
 
 # generate rust bindings for contracts
-VERSIONED := "LightClient(Arbitrum)?(V\\d+)?(Mock)?|PlonkVerifier(V\\d+)?|StakeTable(V\\d+)?|EspToken(V\\d+)?|RewardClaim(V\\d+)?"
-EXACT := "FeeContract|ERC1967Proxy|OpsTimelock|SafeExitTimelock|OwnableUpgradeable|AccessControlUpgradeable|IRewardClaim|IPlonkVerifier"
+VERSIONED := "LightClient(V\\d+)?(Mock)?|PlonkVerifier(V\\d+)?|StakeTable(V\\d+)?|EspToken(V\\d+)?|RewardClaim(V\\d+)?"
+EXACT := "FeeContract|ERC1967Proxy|OpsTimelock|SafeExitTimelock|OwnableUpgradeable|AccessControlUpgradeable"
 REGEXP := "^(" + VERSIONED + "|" + EXACT + ")$"
 gen-bindings:
     # Update the git submodules

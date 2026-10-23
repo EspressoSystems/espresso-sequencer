@@ -25,7 +25,7 @@ use anyhow::{Context, bail, ensure};
 use async_trait::async_trait;
 use espresso_types::{
     Certificate2, Header, SeqTypes,
-    traits::{PersistenceOptions, SequencerPersistence},
+    traits::{PersistenceOptions, SequencerPersistence, StateCertPersistence},
 };
 use futures::FutureExt;
 use hotshot_query_service::{
@@ -317,6 +317,7 @@ fn replay_params(own_url: url::Url) -> FollowerParams {
             backoff: Default::default(),
             base_timeout: Duration::from_secs(2),
             local_timeout: Duration::from_secs(5),
+            http_delay: Duration::ZERO,
         },
         bootstrap_epoch_catchup_timeout: Duration::from_secs(30),
         options: FollowerOptions {

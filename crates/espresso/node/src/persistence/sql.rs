@@ -22,7 +22,9 @@ use espresso_types::{
     NetworkConfig, Payload, PubKey, Ratio, RegisteredValidatorMap, StakeTableHash, parse_duration,
     parse_size,
     traits::{EventsPersistenceRead, MembershipPersistence, StakeTuple},
-    v0::traits::{EventConsumer, PersistenceOptions, SequencerPersistence, StateCatchup},
+    v0::traits::{
+        EventConsumer, PersistenceOptions, SequencerPersistence, StateCatchup, StateCertPersistence,
+    },
     v0_3::{
         AuthenticatedValidator, EventKey, IndexedStake, RegisteredValidator, RewardAmount,
         StakeTableEvent,
@@ -938,11 +940,10 @@ impl PersistenceOptions for Options {
     }
 
     async fn reset(self) -> anyhow::Result<()> {
-        SqlStorage::connect(
-            Config::try_from(&self)?.reset_schema(),
-            StorageConnectionType::Sequencer,
-        )
-        .await?;
+        let config = Config::try_from(&self)?;
+        #[cfg(not(feature = "embedded-db"))]
+        light_client::storage::LightClientPostgresOptions::reset(config.connect_options()).await?;
+        SqlStorage::connect(config.reset_schema(), StorageConnectionType::Sequencer).await?;
         Ok(())
     }
 }
@@ -2474,6 +2475,60 @@ impl SequencerPersistence for Persistence {
         Ok(Some(cert))
     }
 
+    async fn load_start_epoch_info(&self) -> anyhow::Result<Vec<InitializerEpochInfo<SeqTypes>>> {
+        let rows = self
+            .db
+            .read()
+            .await?
+            .fetch_all(
+                query("SELECT * from epoch_drb_and_root ORDER BY epoch DESC LIMIT $1")
+                    .bind(RECENT_STAKE_TABLES_LIMIT as i64),
+            )
+            .await?;
+
+        // reverse the rows vector to return the most recent epochs, but in ascending order
+        rows.into_iter()
+            .rev()
+            .map(|row| {
+                let epoch: i64 = row.try_get("epoch")?;
+                let drb_result: Option<Vec<u8>> = row.try_get("drb_result")?;
+                let block_header: Option<Vec<u8>> = row.try_get("block_header")?;
+                if let Some(drb_result) = drb_result {
+                    let drb_result_array = drb_result
+                        .try_into()
+                        .or_else(|_| bail!("invalid drb result"))?;
+                    let block_header: Option<<SeqTypes as NodeType>::BlockHeader> = block_header
+                        .map(|data| bincode::deserialize(&data))
+                        .transpose()?;
+                    Ok(Some(InitializerEpochInfo::<SeqTypes> {
+                        epoch: EpochNumber::new(epoch as u64),
+                        drb_result: drb_result_array,
+                        block_header,
+                    }))
+                } else {
+                    // Right now we skip the epoch_drb_and_root row if there is no drb result.
+                    // This seems reasonable based on the expected order of events, but please double check!
+                    Ok(None)
+                }
+            })
+            .filter_map(|e| match e {
+                Err(v) => Some(Err(v)),
+                Ok(Some(v)) => Some(Ok(v)),
+                Ok(None) => None,
+            })
+            .collect()
+    }
+
+    fn enable_metrics(&mut self, metrics: &dyn Metrics) {
+        self.internal_metrics = PersistenceMetricsValue::new(metrics);
+
+        #[cfg(feature = "embedded-db")]
+        self.probe.register(&*metrics.subgroup("disk".into()));
+    }
+}
+
+#[async_trait]
+impl StateCertPersistence for Persistence {
     async fn get_state_cert_by_epoch(
         &self,
         epoch: u64,
@@ -2534,57 +2589,6 @@ impl SequencerPersistence for Persistence {
             tx.commit().await
         })
         .await
-    }
-
-    async fn load_start_epoch_info(&self) -> anyhow::Result<Vec<InitializerEpochInfo<SeqTypes>>> {
-        let rows = self
-            .db
-            .read()
-            .await?
-            .fetch_all(
-                query("SELECT * from epoch_drb_and_root ORDER BY epoch DESC LIMIT $1")
-                    .bind(RECENT_STAKE_TABLES_LIMIT as i64),
-            )
-            .await?;
-
-        // reverse the rows vector to return the most recent epochs, but in ascending order
-        rows.into_iter()
-            .rev()
-            .map(|row| {
-                let epoch: i64 = row.try_get("epoch")?;
-                let drb_result: Option<Vec<u8>> = row.try_get("drb_result")?;
-                let block_header: Option<Vec<u8>> = row.try_get("block_header")?;
-                if let Some(drb_result) = drb_result {
-                    let drb_result_array = drb_result
-                        .try_into()
-                        .or_else(|_| bail!("invalid drb result"))?;
-                    let block_header: Option<<SeqTypes as NodeType>::BlockHeader> = block_header
-                        .map(|data| bincode::deserialize(&data))
-                        .transpose()?;
-                    Ok(Some(InitializerEpochInfo::<SeqTypes> {
-                        epoch: EpochNumber::new(epoch as u64),
-                        drb_result: drb_result_array,
-                        block_header,
-                    }))
-                } else {
-                    // Right now we skip the epoch_drb_and_root row if there is no drb result.
-                    // This seems reasonable based on the expected order of events, but please double check!
-                    Ok(None)
-                }
-            })
-            .filter_map(|e| match e {
-                Err(v) => Some(Err(v)),
-                Ok(Some(v)) => Some(Ok(v)),
-                Ok(None) => None,
-            })
-            .collect()
-    }
-
-    fn enable_metrics(&mut self, metrics: &dyn Metrics) {
-        self.internal_metrics = PersistenceMetricsValue::new(metrics);
-
-        #[cfg(feature = "embedded-db")]
-        self.probe.register(&*metrics.subgroup("disk".into()));
     }
 }
 
@@ -4113,5 +4117,60 @@ mod postgres_tests {
 
         let latest = storage.load_latest_acted_view().await.unwrap();
         assert_eq!(latest, Some(ViewNumber::new(19)));
+    }
+
+    #[test_log::test(tokio::test(flavor = "multi_thread"))]
+    async fn test_light_client_shares_the_node_database() {
+        use hotshot_query_service::availability::LeafId;
+        use light_client::storage::Storage as _;
+
+        use crate::api::{data_source::DataSourceOptions as _, options::Query};
+
+        let tmp = Persistence::tmp_storage().await;
+        let mut opt = Persistence::options(&tmp);
+        let persistence = opt.create().await.unwrap();
+
+        let db = opt
+            .light_client_db(&Query::default())
+            .unwrap()
+            .connect()
+            .await
+            .unwrap();
+        let leaf = light_client::testing::leaf_chain(0..1, versions::EPOCH_VERSION)
+            .await
+            .remove(0);
+        db.insert_leaf(leaf.clone()).await.unwrap();
+        assert_eq!(
+            db.leaf_upper_bound(LeafId::Number(0)).await.unwrap(),
+            Some(leaf)
+        );
+
+        let (leaves,): (i64,) = sqlx::query_as("SELECT count(*) FROM light_client.leaf")
+            .fetch_one(&persistence.db.pool())
+            .await
+            .unwrap();
+        assert_eq!(leaves, 1);
+    }
+
+    #[test_log::test(tokio::test(flavor = "multi_thread"))]
+    async fn test_reset_drops_light_client_cache() {
+        use light_client::storage::Storage as _;
+
+        use crate::api::{data_source::DataSourceOptions as _, options::Query};
+
+        let tmp = Persistence::tmp_storage().await;
+        let opt = Persistence::options(&tmp);
+        let light_client = || opt.light_client_db(&Query::default()).unwrap().connect();
+        let leaf = light_client::testing::leaf_chain(0..1, versions::EPOCH_VERSION)
+            .await
+            .remove(0);
+        let db = light_client().await.unwrap();
+        db.insert_leaf(leaf).await.unwrap();
+        drop(db);
+
+        opt.clone().reset().await.unwrap();
+
+        let db = light_client().await.unwrap();
+        assert_eq!(db.block_height().await.unwrap(), 0);
     }
 }
