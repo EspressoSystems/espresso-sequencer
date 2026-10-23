@@ -199,15 +199,6 @@ impl EpochCommittee {
 }
 
 impl EpochCommittees {
-    /// Whether `epoch` holds everything a refetch of its epoch root supplies: the header and the
-    /// stake table hash. The reward can stay `None` when the input it derives from is missing.
-    pub fn has_epoch_root(&self, epoch: EpochNumber) -> bool {
-        self.inner
-            .read()
-            .epoch_committee(epoch)
-            .is_some_and(|committee| committee.has_root())
-    }
-
     /// In-memory epochs whose committee holds the epoch root header and the stake table hash.
     pub fn epochs_with_root(&self) -> BTreeSet<EpochNumber> {
         let inner = self.inner.read();
