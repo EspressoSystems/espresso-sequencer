@@ -14,7 +14,7 @@
 //!    epoch roots below `F` are fetched with Merkle proofs against `F` for the epochs of
 //!    `epoch(F)-3 ..= epoch(F)+1` that storage lacks. Failures are retried until the deadline.
 //!    Missing epochs without state peers fail at once.
-//! 3. Peer catchup: from the highest epoch with a stake table, one epoch at a time, derived from
+//! 3. Peer catchup: from the highest epoch with an epoch root, one epoch at a time, derived from
 //!    QC-verified leaves. Steps up to the epoch of the median peer's chain tip are retried until the
 //!    deadline. Above it, up to the epoch of the highest reported tip, the first failure marks the
 //!    live tip and peer catchup stops there. Without state peers, or on a chain of no blocks, peer
@@ -188,6 +188,7 @@ impl<C: Client> Bootstrap<'_, C> {
         let first_epoch = membership
             .first_epoch()
             .context("first_epoch not seeded; genesis stake table missing")?;
+        // Epochs added after this read (mid-run reactive catchup) are fetched again, harmlessly.
         let stored_epochs = membership.epochs_with_root();
 
         let anchor_read = retry(self.deadline, "reading the anchor", 1, |_, remaining| {
@@ -219,20 +220,27 @@ impl<C: Client> Bootstrap<'_, C> {
         Ok(point)
     }
 
-    /// The block heights the peers report, each read bounded by `step_timeout`.
+    /// The block heights the peers report, each read bounded by `step_timeout` and the deadline.
     ///
     /// Empty only without peers. With peers, up to `PEER_HEIGHT_ATTEMPTS` passes run with backoff
-    /// until one peer answers, and the last pass fails the call.
+    /// until one peer answers. The last pass, or the deadline, fails the call.
     async fn read_peer_block_heights(&self) -> anyhow::Result<Vec<u64>> {
         if self.peers.is_empty() {
             return Ok(vec![]);
         }
         let mut backoff = INITIAL_BACKOFF;
         for attempt in 1..=PEER_HEIGHT_ATTEMPTS {
+            let remaining = self.deadline.saturating_duration_since(Instant::now());
+            ensure!(
+                !remaining.is_zero(),
+                "bootstrap deadline exceeded while reading the peer block heights: no state peer \
+                 reported a block height"
+            );
+            let bound = self.params.step_timeout.min(remaining);
             let heights = join_all(
                 self.peers
                     .iter()
-                    .map(|(_, peer)| timeout(self.params.step_timeout, peer.block_height())),
+                    .map(|(_, peer)| timeout(bound, peer.block_height())),
             )
             .await;
             let heights: Vec<u64> = heights
@@ -244,7 +252,8 @@ impl<C: Client> Bootstrap<'_, C> {
             }
             tracing::warn!(attempt, "bootstrap: no state peer reported a block height");
             if attempt < PEER_HEIGHT_ATTEMPTS {
-                sleep(backoff).await;
+                let remaining = self.deadline.saturating_duration_since(Instant::now());
+                sleep(backoff.min(remaining)).await;
                 backoff = (backoff * 2).min(MAX_BACKOFF);
             }
         }
@@ -265,7 +274,9 @@ impl<C: Client> Bootstrap<'_, C> {
             self.catch_up_from_light_client(catchup).await?;
             if started.elapsed() > self.params.step_timeout {
                 point.peer_block_heights = self.read_peer_block_heights().await?;
-                peer_catchup = point.plan().peer_catchup;
+                let replan = point.plan();
+                self.log_plan(&point, &replan);
+                peer_catchup = replan.peer_catchup;
             }
         }
 
@@ -285,8 +296,8 @@ impl<C: Client> Bootstrap<'_, C> {
         if let (Some(metrics), Some(epoch)) = (self.metrics, median_tip_epoch) {
             metrics.peer_target_epoch.set(epoch.u64() as usize);
         }
-        let capped = plan
-            .peer_catchup
+        let capped = point
+            .peer_catchup()
             .zip(median_tip_epoch)
             .filter(|(catchup, uncapped)| catchup.median_tip_epoch < *uncapped);
         if let Some((catchup, uncapped)) = capped {
@@ -347,8 +358,8 @@ impl<C: Client> Bootstrap<'_, C> {
         .await
     }
 
-    /// Derive the stake table of one epoch at a time above `start`, the highest epoch with one.
-    /// Returns the highest epoch with a stake table when peer catchup ends.
+    /// Derive the stake table of one epoch at a time above `start`, the highest epoch with an epoch
+    /// root. Returns the highest epoch reached when peer catchup ends.
     ///
     /// Steps `catchup` requires are retried until the deadline. Above them, the first step peers
     /// cannot serve marks the live tip, and reaching the highest tip epoch ends peer catchup.
@@ -372,7 +383,8 @@ impl<C: Client> Bootstrap<'_, C> {
             };
             let required = catchup.required(next);
             let step = if required {
-                let what = format!("peer catchup of epoch {next} below the median tip");
+                let what =
+                    format!("peer catchup of epoch {next} up to the epoch after the median tip");
                 retry(self.deadline, &what, 1, derive).await
             } else {
                 derive(0, step_timeout).await
@@ -555,8 +567,8 @@ impl StartingPoint {
 struct CatchupPlan {
     /// `None`: storage holds the light-client epochs, or there are none.
     light_client_catchup: Option<LightClientCatchup>,
-    /// Highest epoch with a stake table once light-client catchup ran: the highest of the stored
-    /// and the fetched epochs, else `first_epoch + 1`.
+    /// Where peer catchup starts: the highest of the stored rooted epochs and the fetched epochs,
+    /// else `first_epoch + 1`.
     highest_held_epoch: EpochNumber,
     /// `None`: no usable peer block height, or the highest peer tip is already held.
     peer_catchup: Option<PeerCatchup>,
@@ -648,7 +660,7 @@ impl PeerCatchup {
         epoch <= self.median_tip_epoch + 1
     }
 
-    /// Whether peer catchup ends with `highest_held` as the highest epoch with a stake table.
+    /// Whether peer catchup ends with `highest_held` as the highest epoch reached.
     fn reached(&self, highest_held: EpochNumber) -> bool {
         highest_held > self.highest_tip_epoch
     }
@@ -759,10 +771,6 @@ mod tests {
         }
     }
 
-    fn epoch_list(epochs: &[EpochNumber]) -> Vec<u64> {
-        epochs.iter().map(|epoch| epoch.u64()).collect()
-    }
-
     /// Light-client catchup of every light-client epoch over the chain of `chain()`.
     fn catchup_for(state: &LightClientStateSol) -> LightClientCatchup {
         StartingPoint {
@@ -832,6 +840,8 @@ mod tests {
     #[case::restart_stale_storage(77, &[3, 4], &[78], Some(&[5, 6, 7, 8, 9][..]), 9, None)]
     #[case::restart_partial_storage(77, &[5, 6, 7], &[78], Some(&[8, 9][..]), 9, None)]
     #[case::restart_ahead_of_anchor(77, &[5, 6, 7, 8, 9, 10, 11], &[98], None, 11, None)]
+    #[case::stored_above_with_gap(77, &[5, 6, 7, 8, 9, 12], &[78], None, 12, None)]
+    #[case::finalized_at_root_boundary(75, &[], &[78], Some(&[5, 6, 7, 8, 9][..]), 9, None)]
     #[case::no_anchor(0, &[3, 4], &[88], None, 4, Some((9, 9)))]
     #[case::no_anchor_fresh(0, &[], &[88], None, 2, Some((9, 9)))]
     #[case::pre_pos_anchor(10, &[], &[88], None, 2, Some((9, 9)))]
@@ -857,7 +867,7 @@ mod tests {
 
         let missing = plan
             .light_client_catchup
-            .map(|catchup| epoch_list(&catchup.missing_epochs));
+            .map(|catchup| epoch_numbers(&catchup.missing_epochs));
         assert_eq!(missing.as_deref(), light_client_epochs);
         assert_eq!(plan.highest_held_epoch.u64(), highest_held_epoch);
         let peer_tip_epochs_planned = plan.peer_catchup.map(|catchup| {
@@ -1392,22 +1402,6 @@ mod tests {
         assert_eq!(client.header_requests().await, before);
     }
 
-    /// A light-client catchup slower than `step_timeout` completes: only the fetch is bounded by it.
-    #[test_log::test(tokio::test(start_paused = true))]
-    async fn light_client_catchup_slower_than_the_step_timeout_completes() {
-        let (client, anchor) = chain().await;
-        let mut store = SeededStore::for_chain(&client, (N - 3)..=(N + 1)).await;
-        store.slow = Some((N + 1, PARAMS.step_timeout * 2));
-        let coordinator = coordinator(store);
-        hold(&coordinator, (N - 3)..=N).await;
-
-        bootstrap(&coordinator, Some(anchor), &[client], PARAMS)
-            .await
-            .unwrap();
-
-        assert!(has_epoch_root(&coordinator, N + 1));
-    }
-
     /// A failure below the epoch the peers' chain tip needs is retried, not read as the tip.
     #[test_log::test(tokio::test)]
     async fn peer_catchup_retries_below_the_median_tip() {
@@ -1553,7 +1547,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(current, EpochNumber::new(N + 1));
-        assert!(started.elapsed() < Duration::from_secs(PARAMS.step_timeout.as_secs()));
+        assert!(started.elapsed() < PARAMS.step_timeout);
     }
 
     /// The peer heights are read while the anchor read is still retrying.
@@ -1585,17 +1579,23 @@ mod tests {
         assert!(height_requests.load(Ordering::Relaxed) > 0);
     }
 
-    /// A light-client catchup slower than `step_timeout` leaves the heights stale, so they are read
-    /// again.
+    /// A light-client catchup slower than `step_timeout` completes, as only the fetch is bounded by
+    /// it, and leaves the heights stale: they are read again and the plan follows them.
     #[test_log::test(tokio::test(start_paused = true))]
     async fn slow_light_client_catchup_rereads_peer_heights() {
         let (client, anchor) = chain().await;
-        let mut store = SeededStore::for_chain(&client, (N - 3)..=(N + 1)).await;
+        let mut store = SeededStore::for_chain(&client, (N - 3)..=(N + 2)).await;
         store.slow = Some((N + 1, PARAMS.step_timeout * 2));
         let coordinator = coordinator(store);
         hold(&coordinator, (N - 3)..=N).await;
+        let advance = client.clone();
+        tokio::spawn(async move {
+            sleep(PARAMS.step_timeout).await;
+            // Tip in epoch `N + 1`: peer catchup must now derive `N + 2`.
+            advance.mock_block_height(88).await;
+        });
 
-        bootstrap(
+        let current = bootstrap(
             &coordinator,
             Some(anchor),
             std::slice::from_ref(&client),
@@ -1604,7 +1604,29 @@ mod tests {
         .await
         .unwrap();
 
+        assert_eq!(current, EpochNumber::new(N + 1));
+        assert!(has_epoch_root(&coordinator, N + 1));
         assert_eq!(client.block_height_requests().await, 2);
+    }
+
+    /// The height reads stop at the deadline, even with passes and backoff left.
+    #[test_log::test(tokio::test(start_paused = true))]
+    async fn peer_height_reads_stop_at_the_deadline() {
+        let (client, anchor) = chain().await;
+        client.fail_block_heights(usize::MAX).await;
+        let coordinator = fresh_coordinator(&client).await;
+        let params = BootstrapParams {
+            deadline: Duration::from_millis(1500),
+            ..PARAMS
+        };
+        let started = Instant::now();
+
+        let err = bootstrap(&coordinator, Some(anchor), &[client], params)
+            .await
+            .unwrap_err();
+
+        assert!(format!("{err:#}").contains("deadline exceeded"), "{err:#}");
+        assert!(started.elapsed() <= params.deadline);
     }
 
     /// A held epoch without its root, above the rooted ones, does not move where peer catchup starts.

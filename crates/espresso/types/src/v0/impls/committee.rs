@@ -150,6 +150,7 @@ struct EpochCommittee {
 }
 
 impl EpochCommittee {
+    /// Holds the epoch root header and the stake table hash.
     fn has_root(&self) -> bool {
         self.header.is_some() && self.stake_table_hash.is_some()
     }
