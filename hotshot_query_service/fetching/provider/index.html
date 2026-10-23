@@ -8,7 +8,7 @@ failures in the local storage medium.</p>
 <p>In any case, the query service is able to fetch missing data asynchronously and out of
 chronological order, and pending <a href="../../availability/enum.Fetch.html" title="enum hotshot_query_service::availability::Fetch"><code>Fetch</code></a> requests for the missing
 data will resolve as soon as the data is available. Data can be fetched from any external data
-availability service, including the HotShot CDN, the data availability committee which is
+availability service, including the data availability committee which is
 responsible for providing a particular payload, or another instance of this same query service.</p>
 <p>This module defines an abstract interface <a href="trait.Provider.html" title="trait hotshot_query_service::fetching::provider::Provider"><code>Provider</code></a>, which allows data to be fetched from any
 data availability provider, as well as various implementations for different data sources,

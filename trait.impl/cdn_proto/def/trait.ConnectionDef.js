@@ -1,9 +1,0 @@
-(function() {
-    const implementors = Object.fromEntries([["espresso_node",[["impl&lt;TYPES: <a class=\"trait\" href=\"hotshot_types/traits/node_implementation/trait.NodeType.html\" title=\"trait hotshot_types::traits::node_implementation::NodeType\">NodeType</a>&gt; ConnectionDef for <a class=\"struct\" href=\"espresso_node/network/cdn/struct.BrokerDef.html\" title=\"struct espresso_node::network::cdn::BrokerDef\">BrokerDef</a>&lt;TYPES&gt;",0],["impl&lt;TYPES: <a class=\"trait\" href=\"hotshot_types/traits/node_implementation/trait.NodeType.html\" title=\"trait hotshot_types::traits::node_implementation::NodeType\">NodeType</a>&gt; ConnectionDef for <a class=\"struct\" href=\"espresso_node/network/cdn/struct.ClientDef.html\" title=\"struct espresso_node::network::cdn::ClientDef\">ClientDef</a>&lt;TYPES&gt;",0],["impl&lt;TYPES: <a class=\"trait\" href=\"hotshot_types/traits/node_implementation/trait.NodeType.html\" title=\"trait hotshot_types::traits::node_implementation::NodeType\">NodeType</a>&gt; ConnectionDef for <a class=\"struct\" href=\"espresso_node/network/cdn/struct.UserDefQuic.html\" title=\"struct espresso_node::network::cdn::UserDefQuic\">UserDefQuic</a>&lt;TYPES&gt;",0],["impl&lt;TYPES: <a class=\"trait\" href=\"hotshot_types/traits/node_implementation/trait.NodeType.html\" title=\"trait hotshot_types::traits::node_implementation::NodeType\">NodeType</a>&gt; ConnectionDef for <a class=\"struct\" href=\"espresso_node/network/cdn/struct.UserDefTcp.html\" title=\"struct espresso_node::network::cdn::UserDefTcp\">UserDefTcp</a>&lt;TYPES&gt;",0]]]]);
-    if (window.register_implementors) {
-        window.register_implementors(implementors);
-    } else {
-        window.pending_implementors = implementors;
-    }
-})()
-//{"start":59,"fragment_lengths":[1524]}
