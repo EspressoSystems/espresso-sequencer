@@ -1,6 +1,6 @@
 use std::{cmp::max, fs, path::PathBuf, process::ExitCode, sync::Arc, time::Duration};
 
-use anyhow::{Context, Result, ensure};
+use anyhow::{Context, Result};
 use clap::Parser;
 use espresso_node::{
     api::{data_source::SequencerDataSource, sql::postgres::DataSource},
@@ -175,12 +175,11 @@ async fn run() -> Result<()> {
 
     // Initialize query service.
     let provider = AnyProvider::default().with_provider(lc.clone());
-    ensure!(
-        !opt.ds_opt.embedded_db,
+    let ds_opt = sql::postgres::Options::try_from(opt.ds_opt).context(
         "the light client query service stores data in Postgres only; unset \
-         ESPRESSO_NODE_EMBEDDED_DB"
-    );
-    let ds = DataSource::create(sql::postgres::Options(opt.ds_opt), provider, false)
+         ESPRESSO_NODE_EMBEDDED_DB",
+    )?;
+    let ds = DataSource::create(ds_opt, provider, false)
         .await
         .context("connecting to API data source")?;
 

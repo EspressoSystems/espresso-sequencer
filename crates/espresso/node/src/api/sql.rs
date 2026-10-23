@@ -83,11 +83,11 @@ impl DataSourceOptions for Options {
     type DataSource = DataSource;
 
     fn enable_query_module(&self, opt: options::Options, query: Query) -> options::Options {
-        opt.query_sql(query, self.0.clone())
+        opt.query_sql(query, self.clone().into_inner())
     }
 
     fn light_client_db(&self, query: &Query) -> anyhow::Result<LightClientDbOptions> {
-        Ok(Db::light_client_db(&Config::try_from(&self.0)?, query))
+        Ok(Db::light_client_db(&Config::try_from(&**self)?, query))
     }
 }
 
@@ -99,7 +99,7 @@ impl SequencerDataSource for DataSource {
         let fetch_limit = opt.fetch_rate_limit;
         let active_fetch_delay = opt.active_fetch_delay;
         let chunk_fetch_delay = opt.chunk_fetch_delay;
-        let mut cfg = Config::try_from(&opt.0)?;
+        let mut cfg = Config::try_from(&*opt)?;
 
         if reset {
             cfg = cfg.reset_schema();
@@ -149,7 +149,7 @@ impl SequencerDataSource for DataSource {
 pub(in crate::api) async fn init_query_module(
     api: &options::Options,
     query_opt: Query,
-    mod_opt: SqlOptions,
+    mod_opt: Options,
     state: ApiState,
     tasks: &mut TaskList,
 ) -> anyhow::Result<(
@@ -161,7 +161,6 @@ pub(in crate::api) async fn init_query_module(
 
     // Use the database itself as a fetching provider: sometimes we can fetch data that is
     // missing from the query service from ephemeral consensus storage.
-    let mod_opt = Options(mod_opt);
     let db_provider = mod_opt.clone().create().await?;
     provider = provider
         .with_block_provider(db_provider.clone())
@@ -199,7 +198,7 @@ pub(in crate::api) async fn init_query_module(
         };
         tasks.spawn(
             "archive state garbage collector",
-            ArchiveStateGc::new(&mod_opt.0).run(inner_storage.clone(), get_node_state),
+            ArchiveStateGc::new(&mod_opt).run(inner_storage.clone(), get_node_state),
         );
     }
 
@@ -2164,7 +2163,7 @@ pub(crate) mod impl_testable_data_source {
         }
 
         fn persistence_options(storage: &Self::Storage) -> Self::Options {
-            Options(tmp_options(storage))
+            Options::try_from(tmp_options(storage)).unwrap()
         }
 
         fn leaf_only_ds_options(
@@ -2190,7 +2189,7 @@ pub(crate) mod impl_testable_data_source {
         }
 
         fn sql_persistence_options(opt: SqlOptions) -> Self::Options {
-            Options(opt)
+            Options::try_from(opt).unwrap()
         }
 
         async fn connect(

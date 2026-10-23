@@ -96,11 +96,10 @@ impl TryFrom<&SqlOptions> for Config {
             None => Self::default(),
         };
 
-        if let Some(pool) = opt
-            .pool
-            .clone()
-            .and_then(|pool| sqlx::Pool::<Db>::try_from(pool).ok())
-        {
+        if let Some(pool) = opt.pool.clone() {
+            let pool = sqlx::Pool::<Db>::try_from(pool)
+                .ok()
+                .context("the connection pool is for the other SQL backend")?;
             cfg = cfg.pool(pool);
         }
 
@@ -133,9 +132,28 @@ impl TryFrom<&SqlOptions> for Config {
     }
 }
 
-/// [`SqlOptions`] for persistence on this backend.
+/// [`SqlOptions`] for persistence on this backend, built by
+/// [`SqlOptions::into_backend`](super::super::Options::into_backend) or checked with `try_from`.
 #[derive(Clone, Debug, Deref, DerefMut)]
-pub struct Options(pub SqlOptions);
+pub struct Options(pub(in crate::persistence::sql) SqlOptions);
+
+impl Options {
+    pub fn into_inner(self) -> SqlOptions {
+        self.0
+    }
+}
+
+impl TryFrom<SqlOptions> for Options {
+    type Error = anyhow::Error;
+
+    fn try_from(opt: SqlOptions) -> anyhow::Result<Options> {
+        anyhow::ensure!(
+            opt.embedded_db == (Db::KIND == DbKind::Sqlite),
+            "the SQL options select the other backend"
+        );
+        Ok(Options(opt))
+    }
+}
 
 #[async_trait]
 impl PersistenceOptions for Options {
