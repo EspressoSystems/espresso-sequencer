@@ -912,11 +912,13 @@ async def apply(
             status, f"{what} failed: invalid actions. [run]({run_url})"
         )
         raise
+    # A cancelled run was superseded; its partial actions would duplicate the next run's.
+    actions = [] if run_result == "cancelled" else record.actions
     head_sha = record.head_sha
-    if head_sha is None and any(isinstance(a, InlineComment) for a in record.actions):
+    if head_sha is None and any(isinstance(a, InlineComment) for a in actions):
         head_sha = await gh.head_sha(tgt.number)
     skipped = []
-    for action in record.actions:
+    for action in actions:
         try:
             await post(gh, job, tgt, head_sha, action)
         except Exception as e:  # noqa: BLE001 best effort: any failure skips this action only

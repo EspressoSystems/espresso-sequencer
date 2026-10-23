@@ -1017,12 +1017,14 @@ def test_github_error_skips_only_that_action():
     ]
 
 
-@pytest.mark.parametrize("outcome", ["failure", "cancelled"])
-def test_failed_run_posts_partial_record(outcome):
+@pytest.mark.parametrize(
+    "outcome,posted", [("failure", [("reply", (7, 5, "r"))]), ("cancelled", [])]
+)
+def test_failed_run_posts_partial_record_unless_cancelled(outcome, posted):
     gh = FakeGitHub()
     rec = record([cg.Reply(5, "r")], footer=None)
     assert do_apply(gh, rec, run_result=outcome) == 1
-    assert gh.posted == [("reply", (7, 5, "r"))]
+    assert gh.posted == posted
     assert gh.edits == [
         (STATUS, f"{HEADER}\n\nsum\n\nReview incomplete: {outcome}. [run](http://run)")
     ]
