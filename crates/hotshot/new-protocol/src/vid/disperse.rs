@@ -2,7 +2,7 @@ use std::{
     collections::BTreeMap,
     mem,
     ops::Range,
-    sync::{Arc, LazyLock},
+    sync::{Arc, LazyLock, Mutex},
 };
 
 use hotshot_types::{
@@ -22,6 +22,7 @@ use hotshot_utils::anytrace::{self, Wrap};
 use rayon::prelude::*;
 use tokio::task::{AbortHandle, JoinSet};
 use tracing::{error, warn};
+use vid::avidm_gf2::namespaced::NsDispersal;
 
 use crate::{
     coordinator::metrics::{Measurement, finish_measurement},
@@ -38,7 +39,27 @@ pub struct VidDisperseRequest<T: NodeType> {
     pub block: T::BlockPayload,
     pub metadata: <T::BlockPayload as BlockPayload<T>>::Metadata,
     pub payload_commitment: VidCommitment2,
+    /// Benchmark only: the leader's dispersal of every namespace, made with the block commitment
+    /// (`ESPRESSO_BENCH_SINGLE_ENCODE`), so the shares are sent without encoding again.
+    pub precomputed: Option<BenchDispersals>,
 }
+
+/// Namespace dispersals the block builder already computed, compared by their commits.
+#[derive(Clone, Debug)]
+pub struct BenchDispersals(pub Vec<NsDispersal>);
+
+impl PartialEq for BenchDispersals {
+    fn eq(&self, other: &Self) -> bool {
+        let commits = |d: &Self| {
+            d.0.iter()
+                .map(|dispersal| dispersal.commit)
+                .collect::<Vec<_>>()
+        };
+        commits(self) == commits(other)
+    }
+}
+
+impl Eq for BenchDispersals {}
 
 pub struct VidDisperseOutput {
     pub view: ViewNumber,
@@ -175,6 +196,16 @@ fn handle_vid_disperse_request<T: NodeType>(
         .map_err(|err| VidDisperseError::Sign(err.into()))?;
 
     let num_namespaces = params.ns_table.len();
+    let precomputed: Option<Vec<Mutex<Option<NsDispersal>>>> = vid_disperse_request
+        .precomputed
+        .filter(|dispersals| dispersals.0.len() == num_namespaces)
+        .map(|dispersals| {
+            dispersals
+                .0
+                .into_iter()
+                .map(|d| Mutex::new(Some(d)))
+                .collect()
+        });
 
     // Coalesce namespaces into size-balanced buckets, roughly one per core,
     // but never below the minimum size, so a block of many tiny namespaces
@@ -195,14 +226,20 @@ fn handle_vid_disperse_request<T: NodeType>(
             let mut pieces = vec![Vec::new(); params.recipients.len()];
 
             for &ns_index in bucket {
-                let dispersal = AvidmGf2Scheme::ns_disperse_one(
-                    &params.param,
-                    &params.weights,
-                    &params.payload[params.ns_table[ns_index].clone()],
-                    ns_index,
-                )
-                .wrap()
-                .map_err(VidDisperseError::Vid)?;
+                let precomputed = precomputed
+                    .as_ref()
+                    .and_then(|dispersals| dispersals[ns_index].lock().ok()?.take());
+                let dispersal = match precomputed {
+                    Some(dispersal) => dispersal,
+                    None => AvidmGf2Scheme::ns_disperse_one(
+                        &params.param,
+                        &params.weights,
+                        &params.payload[params.ns_table[ns_index].clone()],
+                        ns_index,
+                    )
+                    .wrap()
+                    .map_err(VidDisperseError::Vid)?,
+                };
 
                 let ns_payload_byte_len = dispersal.payload_byte_len;
                 let ns_commit = dispersal.commit;

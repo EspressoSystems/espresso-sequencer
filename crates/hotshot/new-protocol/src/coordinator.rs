@@ -67,8 +67,8 @@ use crate::{
     storage::{NewProtocolStorage, Storage},
     upgrade::UpgradeProtocol,
     vid::{
-        ObtainedPayload, PinnedBy, VidDisperseRequest, VidDisperser, VidFragmentAccumulator,
-        VidReconstructor, expected_vid_param,
+        BenchDispersals, ObtainedPayload, PinnedBy, VidDisperseRequest, VidDisperser,
+        VidFragmentAccumulator, VidReconstructor, expected_vid_param,
     },
     vote::{EpochRootTally, SimpleTally, UpgradeTally, VoteCollector},
 };
@@ -154,6 +154,10 @@ pub struct Coordinator<T: NodeType, S> {
     server: Server<T>,
     #[builder(skip)]
     da_payloads: BTreeMap<(ViewNumber, VidCommitment2), PendingDa<T>>,
+    /// Benchmark only: dispersals the block builder computed (`ESPRESSO_BENCH_SINGLE_ENCODE`),
+    /// held until consensus asks to disperse that block.
+    #[builder(skip)]
+    bench_dispersals: BTreeMap<(ViewNumber, VidCommitment2), BenchDispersals>,
     metrics: Option<metrics::Metrics>,
     #[builder(default)]
     participation: ParticipationTracker<T>,
@@ -660,13 +664,17 @@ where
                     }
                 },
                 Some(item) = self.block_builder.next() => match item {
-                    Ok(block) => {
+                    Ok(mut block) => {
                         self.state_manager.request_header(HeaderRequest::from(&block));
                         let epoch = block.epoch;
                         let manifest = block.manifest.clone();
                         // Retain the payload until consensus proposes this exact block
                         // (cf. PersistProposal):
                         if let VidCommitment::V2(commit) = block.payload_commitment {
+                            if let Some(dispersals) = block.dispersals.take() {
+                                self.bench_dispersals
+                                    .insert((block.view, commit), BenchDispersals(dispersals));
+                            }
                             self.da_payloads.insert(
                                 (block.view, commit),
                                 PendingDa {
@@ -818,12 +826,14 @@ where
                 payload_commitment,
             } => {
                 debug!(%node, %view, %epoch, "request vid disperse");
+                let precomputed = self.bench_dispersals.remove(&(view, payload_commitment));
                 self.vid_disperser.request_vid_disperse(VidDisperseRequest {
                     view,
                     epoch,
                     block: payload,
                     metadata,
                     payload_commitment,
+                    precomputed,
                 });
             },
             ConsensusOutput::RequestDrbResult(epoch) => {
@@ -2212,6 +2222,7 @@ where
                     .gc(view.saturating_sub(VID_RECONSTRUCT_GC_MARGIN).into());
                 let vc = VidCommitment2::default();
                 self.da_payloads = self.da_payloads.split_off(&(view, vc));
+                self.bench_dispersals = self.bench_dispersals.split_off(&(view, vc));
                 self.payload_txn_bytes = self.payload_txn_bytes.split_off(&(decide_floor + 1));
             },
             GcScope::Timeout(view) => {

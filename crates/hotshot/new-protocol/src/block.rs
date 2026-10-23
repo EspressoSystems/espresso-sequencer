@@ -2,7 +2,7 @@ use std::{
     collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     num::{NonZeroU64, NonZeroUsize},
     panic::resume_unwind,
-    sync::Arc,
+    sync::{Arc, LazyLock},
     time::Duration,
 };
 
@@ -10,8 +10,8 @@ use committable::{Commitment, Committable};
 use hotshot_types::{
     consensus::PayloadWithMetadata,
     data::{
-        EpochNumber, Leaf2, VidCommitment, ViewNumber, vid_commitment,
-        vid_disperse::vid_total_weight,
+        EpochNumber, Leaf2, VidCommitment, VidCommitment2, VidDisperse2, ViewNumber,
+        vid_commitment, vid_disperse::vid_total_weight,
     },
     epoch_membership::EpochMembershipCoordinator,
     message::UpgradeLock,
@@ -22,14 +22,18 @@ use hotshot_types::{
         signature_key::BuilderSignatureKey,
     },
     utils::BuilderCommitment,
+    vid::avidm_gf2::AvidmGf2Scheme,
 };
-use rayon::prelude::{IntoParallelRefIterator as _, ParallelIterator as _};
+use rayon::prelude::{
+    IndexedParallelIterator as _, IntoParallelRefIterator as _, ParallelIterator as _,
+};
 use tokio::{
     task::{AbortHandle, JoinSet, spawn_blocking},
     time::sleep,
 };
 use tracing::{debug_span, error, warn};
-use versions::{NO_BUILDER_COMMITMENT_VERSION, Version};
+use versions::{NEW_PROTOCOL_VERSION, NO_BUILDER_COMMITMENT_VERSION, Version};
+use vid::avidm_gf2::namespaced::NsDispersal;
 
 use crate::{
     consensus::ConsensusInput,
@@ -81,6 +85,8 @@ pub struct BlockBuilderOutput<T: NodeType> {
     pub builder_fee: BuilderFee<T>,
     pub payload_commitment: VidCommitment,
     pub manifest: DedupManifest<T>,
+    /// Benchmark only: every namespace already dispersed, with `ESPRESSO_BENCH_SINGLE_ENCODE`.
+    pub dispersals: Option<Vec<NsDispersal>>,
 }
 
 /// Commitments the leader computes for a block it built.
@@ -139,6 +145,110 @@ pub fn block_commitments<T: NodeType>(
         builder_commitment,
         hashes,
     }
+}
+
+/// Benchmark only: the leader takes a block's transaction hashes from its pool, which hashed each
+/// transaction when it arrived, instead of hashing the payload again.
+static REUSE_TX_HASHES: LazyLock<bool> =
+    LazyLock::new(|| std::env::var_os("ESPRESSO_BENCH_REUSE_TX_HASHES").is_some());
+
+/// Benchmark only: the leader disperses every namespace while it computes the block commitment,
+/// so the disperser sends those shares instead of encoding the payload a second time.
+static SINGLE_ENCODE: LazyLock<bool> =
+    LazyLock::new(|| std::env::var_os("ESPRESSO_BENCH_SINGLE_ENCODE").is_some());
+
+/// [`block_commitments`] with the benchmark shortcuts above. The pooled hashes stand in only when
+/// the payload kept every pooled transaction. Without dispersals (before the new protocol, or on
+/// failure) the commitment comes from [`vid_commitment`] as usual.
+fn bench_block_commitments<T: NodeType>(
+    payload: &PayloadWithMetadata<T>,
+    total_weight: usize,
+    version: Version,
+    pooled_hashes: &[Commitment<T::Transaction>],
+    membership: &EpochMembershipCoordinator<T>,
+    epoch: EpochNumber,
+) -> (BlockCommitments<T>, Option<Vec<NsDispersal>>) {
+    let payload_bytes = payload.payload.encode();
+    let reuse_hashes = *REUSE_TX_HASHES
+        && payload.payload.num_transactions(&payload.metadata) == pooled_hashes.len();
+    let (hashes, (payload_commitment, dispersals)) = rayon::join(
+        || {
+            if reuse_hashes {
+                pooled_hashes.to_vec()
+            } else {
+                payload.payload.transaction_commitments(&payload.metadata)
+            }
+        },
+        || {
+            let dispersed = (*SINGLE_ENCODE && version >= NEW_PROTOCOL_VERSION)
+                .then(|| disperse_namespaces(payload, membership, epoch))
+                .flatten();
+            match dispersed {
+                Some((commit, dispersals)) => (VidCommitment::V2(commit), Some(dispersals)),
+                None => {
+                    let commit = vid_commitment(
+                        payload_bytes.as_ref(),
+                        payload.metadata.encode().as_ref(),
+                        total_weight,
+                        version,
+                    );
+                    (commit, None)
+                },
+            }
+        },
+    );
+    let builder_commitment = if version >= NO_BUILDER_COMMITMENT_VERSION {
+        BuilderCommitment::empty()
+    } else {
+        payload.payload.builder_commitment(&payload.metadata)
+    };
+    let commitments = BlockCommitments {
+        block_size: payload_bytes.len() as u64,
+        payload_commitment,
+        builder_commitment,
+        hashes,
+    };
+    (commitments, dispersals)
+}
+
+/// Every namespace's dispersal as the disperser computes it, and the block commitment folded
+/// from their commits.
+fn disperse_namespaces<T: NodeType>(
+    payload: &PayloadWithMetadata<T>,
+    membership: &EpochMembershipCoordinator<T>,
+    epoch: EpochNumber,
+) -> Option<(VidCommitment2, Vec<NsDispersal>)> {
+    let params = VidDisperse2::<T>::disperse_params(
+        &payload.payload,
+        membership,
+        Some(epoch),
+        &payload.metadata,
+    )
+    .inspect_err(|err| warn!(%err, "bench: no dispersal parameters"))
+    .ok()?;
+    let dispersals = params
+        .ns_table
+        .par_iter()
+        .enumerate()
+        .map(|(ns_index, range)| {
+            AvidmGf2Scheme::ns_disperse_one(
+                &params.param,
+                &params.weights,
+                &params.payload[range.clone()],
+                ns_index,
+            )
+        })
+        .collect::<Result<Vec<_>, _>>()
+        .inspect_err(|err| warn!(%err, "bench: dispersal failed"))
+        .ok()?;
+    let commits: Vec<_> = dispersals
+        .iter()
+        .map(|dispersal| dispersal.commit)
+        .collect();
+    let commit = AvidmGf2Scheme::aggregate_commit(&commits)
+        .inspect_err(|err| warn!(%err, "bench: commitment failed"))
+        .ok()?;
+    Some((commit, dispersals))
 }
 
 /// Room in a forwarded message for everything but the transactions.
@@ -206,6 +316,21 @@ const fn retry_entry_overhead<T: NodeType>() -> u64 {
     2 * (map + order) as u64
 }
 
+/// Transactions taken from the pool for one view, with the hashes the pool keyed them by.
+struct PooledBlock<T: NodeType> {
+    txs: Arc<Vec<T::Transaction>>,
+    hashes: Arc<Vec<Commitment<T::Transaction>>>,
+}
+
+impl<T: NodeType> Clone for PooledBlock<T> {
+    fn clone(&self) -> Self {
+        Self {
+            txs: Arc::clone(&self.txs),
+            hashes: Arc::clone(&self.hashes),
+        }
+    }
+}
+
 pub struct BlockBuilder<T: NodeType> {
     instance: Arc<T::InstanceState>,
     membership: EpochMembershipCoordinator<T>,
@@ -230,8 +355,9 @@ pub struct BlockBuilder<T: NodeType> {
     /// disperses a block as soon as it is built, and peers keep one share per
     /// leader and view, so a second block for the view is votable only if its
     /// payload is the same. It is the same whenever the new parent does not
-    /// change how the payload is built.
-    view_transactions: BTreeMap<ViewNumber, Arc<Vec<T::Transaction>>>,
+    /// change how the payload is built. Kept with the hashes the pool keyed
+    /// them by.
+    view_transactions: BTreeMap<ViewNumber, PooledBlock<T>>,
     tasks: JoinSet<Result<BlockBuilderOutput<T>, BlockError>>,
 }
 
@@ -272,7 +398,10 @@ impl<T: NodeType> BlockBuilder<T> {
             return;
         };
         let epoch = request.epoch;
-        let txs = self.transactions_for(view);
+        let PooledBlock {
+            txs,
+            hashes: pooled_hashes,
+        } = self.transactions_for(view);
         let instance = self.instance.clone();
         let membership = self.membership.clone();
 
@@ -300,8 +429,19 @@ impl<T: NodeType> BlockBuilder<T> {
                 vid_total_weight(target_mem.stake_table(), Some(epoch))
             };
             let commitments = spawn_blocking(move || {
-                let commitments = block_commitments(&payload, total_weight, version);
-                (payload, commitments)
+                let (commitments, dispersals) = if *REUSE_TX_HASHES || *SINGLE_ENCODE {
+                    bench_block_commitments(
+                        &payload,
+                        total_weight,
+                        version,
+                        &pooled_hashes,
+                        &membership,
+                        epoch,
+                    )
+                } else {
+                    (block_commitments(&payload, total_weight, version), None)
+                };
+                (payload, commitments, dispersals)
             });
             let (
                 payload,
@@ -311,6 +451,7 @@ impl<T: NodeType> BlockBuilder<T> {
                     builder_commitment,
                     hashes,
                 },
+                dispersals,
             ) = match commitments.await {
                 Ok(out) => out,
                 Err(e) if e.is_panic() => resume_unwind(e.into_panic()),
@@ -343,22 +484,31 @@ impl<T: NodeType> BlockBuilder<T> {
                 builder_fee,
                 payload_commitment,
                 manifest,
+                dispersals,
             })
         });
         self.calculations.insert((view, parent_commitment), handle);
     }
 
-    fn transactions_for(&mut self, view: ViewNumber) -> Arc<Vec<T::Transaction>> {
-        if let Some(txs) = self.view_transactions.get(&view) {
-            return Arc::clone(txs);
+    fn transactions_for(&mut self, view: ViewNumber) -> PooledBlock<T> {
+        if let Some(pooled) = self.view_transactions.get(&view) {
+            return pooled.clone();
         }
-        let txs = Arc::new(self.take_block(view));
-        self.view_transactions.insert(view, Arc::clone(&txs));
-        txs
+        let (txs, hashes) = self.take_block_with_hashes(view);
+        let pooled = PooledBlock {
+            txs: Arc::new(txs),
+            hashes: Arc::new(hashes),
+        };
+        self.view_transactions.insert(view, pooled.clone());
+        pooled
     }
 
-    /// Removes up to one block of pooled transactions, those sent for the earliest views first.
-    fn take_block(&mut self, view: ViewNumber) -> Vec<T::Transaction> {
+    /// Removes up to one block of pooled transactions, those sent for the earliest views first,
+    /// with their hashes.
+    fn take_block_with_hashes(
+        &mut self,
+        view: ViewNumber,
+    ) -> (Vec<T::Transaction>, Vec<Commitment<T::Transaction>>) {
         let max_bytes = self.block_size(view);
         let mut bytes = 0;
         let mut taken = Vec::new();
@@ -370,13 +520,14 @@ impl<T: NodeType> BlockBuilder<T> {
             bytes += size;
             taken.push(*hash);
         }
-        taken
-            .into_iter()
+        let txs = taken
+            .iter()
             .map(|hash| {
-                self.remove_pooled(&hash)
+                self.remove_pooled(hash)
                     .expect("hashes come from the pool's own order")
             })
-            .collect()
+            .collect();
+        (txs, taken)
     }
 
     fn remove_pooled(&mut self, hash: &Commitment<T::Transaction>) -> Option<T::Transaction> {
@@ -660,7 +811,7 @@ impl<T: NodeType> BlockBuilder<T> {
 
     #[cfg(test)]
     pub(crate) fn drain(&mut self, view: ViewNumber) -> Vec<T::Transaction> {
-        self.take_block(view)
+        self.take_block_with_hashes(view).0
     }
 }
 
