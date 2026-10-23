@@ -444,6 +444,8 @@ struct InnerTestClient {
     fail_header_proofs: bool,
     /// Number of upcoming `block_height` requests to fail, like a peer that does not answer.
     failing_block_heights: usize,
+    /// Number of `block_height` requests served, failed ones included.
+    block_height_requests: usize,
 }
 
 impl InnerTestClient {
@@ -899,6 +901,11 @@ impl TestClient {
         self.inner.lock().await.failing_block_heights = count;
     }
 
+    /// Number of `block_height` requests so far.
+    pub async fn block_height_requests(&self) -> usize {
+        self.inner.lock().await.block_height_requests
+    }
+
     /// Number of header and header proof requests so far.
     pub async fn header_requests(&self) -> usize {
         self.inner.lock().await.header_requests
@@ -927,6 +934,7 @@ impl TestClient {
 impl Client for TestClient {
     async fn block_height(&self) -> Result<u64> {
         let mut inner = self.inner.lock().await;
+        inner.block_height_requests += 1;
         if inner.failing_block_heights > 0 {
             inner.failing_block_heights -= 1;
             bail!("block height unavailable");

@@ -24,7 +24,10 @@ use std::{ops::RangeInclusive, time::Duration};
 
 use anyhow::{Context, anyhow, bail, ensure};
 use espresso_types::{Header, SeqTypes};
-use futures::future::{join_all, try_join_all};
+use futures::{
+    future::{join_all, try_join_all},
+    try_join,
+};
 use hotshot_contract_adapter::{sol_types::LightClientStateSol, u256_to_field};
 use hotshot_query_service::node::BlockId;
 use hotshot_types::{
@@ -157,11 +160,12 @@ where
         .context("first_epoch not seeded; genesis stake table missing")?;
 
     let deadline = Instant::now() + params.deadline;
-    let anchor = retry(deadline, "reading the anchor", 1, |_, remaining| {
+    let read_anchor = retry(deadline, "reading the anchor", 1, |_, remaining| {
         let read = timeout(params.step_timeout.min(remaining), fetch_anchor());
         async move { read.await.context("attempt timed out")? }
-    })
-    .await?;
+    });
+    let (anchor, mut heights) =
+        try_join!(read_anchor, read_peer_heights(peers, params.step_timeout))?;
     milestone!(params, finalized_height = anchor.height, "anchor read");
     if params.boot {
         let anchor_epoch = epoch_from_block_number(anchor.height, epoch_height);
@@ -170,6 +174,7 @@ where
 
     let range = install_range(anchor.height, epoch_height, first_epoch);
     if let Some(range) = &range {
+        let installing = Instant::now();
         install_window(
             coordinator,
             peers,
@@ -180,11 +185,15 @@ where
             params,
         )
         .await?;
+        // The heights are older than the install took, so the tip may have moved.
+        if installing.elapsed() > params.step_timeout {
+            heights = read_peer_heights(peers, params.step_timeout).await?;
+        }
     }
 
     // An anchor with an empty range vouches for nothing, so it does not cap the target.
     let anchor = range.is_some().then_some(&anchor);
-    let target = walk_target(peers, anchor, epoch_height, params, metrics).await?;
+    let target = walk_target(heights, anchor, epoch_height, params, metrics);
     let current = walk_to_tip(coordinator, first_epoch, target, deadline, params).await?;
     if params.boot {
         metrics.window_epoch.set(current.u64() as usize);
@@ -385,22 +394,16 @@ fn verify_anchor_header(header: &Header, anchor: &TrustedAnchor) -> anyhow::Resu
 }
 
 /// The epoch whose stake table the window needs for the chain tip the peers report, capped by the
-/// anchor, and the epoch of the highest tip. `None` without peers or when the chain is empty.
-///
-/// With peers, the heights are read up to `PEER_HEIGHT_ATTEMPTS` times until one answers within
-/// `step_timeout`, and startup fails if none does.
-async fn walk_target<C: Client>(
-    peers: &[(Url, C)],
+/// anchor, and the epoch of the highest tip. `None` without heights or when the chain is empty.
+fn walk_target(
+    heights: Vec<u64>,
     anchor: Option<&TrustedAnchor>,
     epoch_height: u64,
     params: &BootstrapParams,
     metrics: &BootstrapMetrics,
-) -> anyhow::Result<Option<WalkTarget>> {
-    let heights = read_peer_heights(peers, params.step_timeout).await?;
+) -> Option<WalkTarget> {
     let max_height = heights.iter().max().copied();
-    let Some(peer_target) = target_epoch(heights, epoch_height) else {
-        return Ok(None);
-    };
+    let peer_target = target_epoch(heights, epoch_height)?;
     if params.boot {
         metrics.peer_target_epoch.set(peer_target.u64() as usize);
     }
@@ -412,15 +415,16 @@ async fn walk_target<C: Client>(
             "bootstrap: peers report a chain tip past the anchor's window; capping the walk target"
         );
     }
-    Ok(max_height.and_then(|height| {
-        Some(WalkTarget {
-            required: target,
-            stop: epoch_needing(height, epoch_height)?,
-        })
-    }))
+    Some(WalkTarget {
+        required: target,
+        stop: epoch_needing(max_height?, epoch_height)?,
+    })
 }
 
 /// The block heights the peers report, empty only without peers.
+///
+/// With peers, the heights are read up to `PEER_HEIGHT_ATTEMPTS` times until one answers within
+/// `step_timeout`, and startup fails if none does.
 async fn read_peer_heights<C: Client>(
     peers: &[(Url, C)],
     step_timeout: Duration,
@@ -1348,6 +1352,57 @@ mod tests {
 
         assert_eq!(current, EpochNumber::new(N + 1));
         assert!(started.elapsed() < Duration::from_secs(PARAMS.step_timeout.as_secs()));
+    }
+
+    /// The peer heights are read while the anchor read is still retrying.
+    #[test_log::test(tokio::test(start_paused = true))]
+    async fn peer_heights_are_read_during_the_anchor_read() {
+        let (client, anchor) = chain().await;
+        let coordinator = fresh_coordinator(&client).await;
+        let reads = AtomicUsize::new(0);
+        let height_requests = AtomicUsize::new(0);
+
+        bootstrap_epoch_window(
+            &coordinator,
+            EPOCH_HEIGHT,
+            || async {
+                if reads.fetch_add(1, Ordering::Relaxed) == 0 {
+                    bail!("L1 not ready");
+                }
+                height_requests.store(client.block_height_requests().await, Ordering::Relaxed);
+                Ok(anchor)
+            },
+            &peer_list(std::slice::from_ref(&client)),
+            &PARAMS,
+            &BootstrapMetrics::new(&NoMetrics),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(reads.load(Ordering::Relaxed), 2);
+        assert!(height_requests.load(Ordering::Relaxed) > 0);
+    }
+
+    /// A light-client catchup slower than `step_timeout` leaves the heights stale, so they are read
+    /// again.
+    #[test_log::test(tokio::test(start_paused = true))]
+    async fn slow_light_client_catchup_rereads_peer_heights() {
+        let (client, anchor) = chain().await;
+        let mut store = SeededStore::for_chain(&client, (N - 3)..=(N + 1)).await;
+        store.slow = Some((N + 1, PARAMS.step_timeout * 2));
+        let coordinator = coordinator(store);
+        hold(&coordinator, (N - 3)..=N).await;
+
+        bootstrap(
+            &coordinator,
+            Some(anchor),
+            std::slice::from_ref(&client),
+            PARAMS,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(client.block_height_requests().await, 2);
     }
 
     /// A held epoch without its root, above the rooted ones, does not move the walk's start.
