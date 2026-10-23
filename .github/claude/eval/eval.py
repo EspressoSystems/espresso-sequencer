@@ -43,6 +43,7 @@ EMPTY_COMMENTS = {"comments": [], "reviewThreads": []}
 CURRENT_PR: contextvars.ContextVar[int | None] = contextvars.ContextVar(
     "current_pr", default=None
 )
+log = logging.getLogger("claude-eval")
 STALE = ("actions.json", "actions.json.part", "is-backport", "pr.diff")
 
 
@@ -58,6 +59,8 @@ def main() -> None:
         report = "\n".join(section(pr, cases[pr], out / str(pr)) for pr in prs)
         (out / "report.md").write_text(f"# Review eval, model {args.model}\n\n{report}")
         print(f"report: {out / 'report.md'}")
+        if raised := [pr for pr in prs if exit_code(out / str(pr)).startswith("error")]:
+            raise SystemExit(f"cases raised: {raised}, see their log.txt")
 
 
 async def evaluate(
@@ -264,6 +267,9 @@ async def review(
     root.addHandler(handler)
     try:
         code = await cg.amain(args, gh, env, cg.sdk_runner, wt / "tmp")
+    except Exception as e:  # one broken case must not cancel the others
+        log.exception("review raised")
+        code = f"error: {e!r}"
     finally:
         root.removeHandler(handler)
         handler.close()
@@ -271,6 +277,10 @@ async def review(
     record = wt / "tmp" / "actions.json"
     if record.exists():
         shutil.copy(record, pr_out / "actions.json")
+
+
+def exit_code(pr_out: Path) -> str:
+    return (pr_out / "exit").read_text().strip()
 
 
 def load_record(pr_out: Path) -> cg.Record | None:
@@ -303,7 +313,7 @@ def unjudged(record: cg.Record) -> list[cg.Candidate]:
 
 
 def result_line(pr: int, pr_out: Path) -> str:
-    code = (pr_out / "exit").read_text().strip()
+    code = exit_code(pr_out)
     record = load_record(pr_out)
     if record is None:
         return f"{pr}: exit={code} no actions.json"
