@@ -154,6 +154,9 @@ class ReadOnlyGitHub:
     async def head_sha(self, pr: int) -> str:
         return await self.inner.head_sha(pr)
 
+    async def pr_payload(self, pr: int) -> dict:
+        return await self.inner.pr_payload(pr)
+
     async def thread(self, thread_id: str) -> cg.Thread:
         raise ReadOnly("thread: GraphQL, only apply needs it")
 
