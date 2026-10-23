@@ -70,7 +70,8 @@ Review whether tests are adequate, not whether they pass.
 - Severity:
   - **blocking**: security, consensus or protocol correctness, data loss or state not persisted, breaking
     API/serialization/upgrade/config compatibility. A write the existing path performs and the new path skips or can
-    skip is blocking, even if a restart or later catchup would repair it.
+    skip is blocking, even if a restart or later catchup would repair it. Also blocking: a secret leaving the host, a
+    task that stalls or retries forever, unbounded memory growth, a node that cannot restart.
   - **should fix**: bugs, missing tests for changed behavior, missing operator note, a storage backend left out.
   - **concern**: design or architecture trade-off.
   - **nit**: small cleanup.
