@@ -183,10 +183,7 @@ impl NodeState {
             blockCommRoot: U256::ZERO,
         };
         if self.chain_config.stake_table_contract.is_none() {
-            tracing::info!(
-                target: "announce::bootstrap",
-                "no stake table contract in the chain config; anchor height 0"
-            );
+            tracing::debug!("no stake table contract in the chain config; anchor height 0");
             return Ok(genesis);
         }
         // The L1 client learns the finalized block asynchronously after start.
@@ -207,8 +204,7 @@ impl NodeState {
             .await
             .context("reading the light client code")?;
         if code.is_empty() {
-            tracing::info!(
-                target: "announce::bootstrap",
+            tracing::debug!(
                 %address,
                 l1_block = finalized,
                 "light client not deployed at the finalized L1 block; anchor height 0"

@@ -158,7 +158,8 @@ pub struct Options {
     /// Peer nodes use to fetch missing state
     ///
     /// A node joining a running network needs at least one peer that serves the light-client
-    /// module (query module with SQL storage). Without one, startup fails.
+    /// module (query module with SQL storage). Without one, startup fails, unless local storage
+    /// already holds the anchor's window.
     #[clap(long, env = "ESPRESSO_NODE_STATE_PEERS", value_delimiter = ',')]
     #[derivative(Debug(format_with = "fmt_urls"))]
     pub state_peers: Vec<Url>,
@@ -204,8 +205,8 @@ pub struct Options {
     #[clap(long, env = "ESPRESSO_NODE_BOOTSTRAP_EPOCH_CATCHUP_TIMEOUT", default_value = "30s", value_parser = parse_duration)]
     pub bootstrap_epoch_catchup_timeout: Duration,
 
-    /// How long startup retries before giving up, for the install (anchor read, epoch roots and their
-    /// install) and again for the walk toward the chain tip the state peers report.
+    /// How long startup retries before giving up, in total for the anchor read, the install and the
+    /// walk toward the chain tip the state peers report.
     ///
     /// At the deadline the node exits with an error.
     #[clap(long, env = "ESPRESSO_NODE_BOOTSTRAP_DEADLINE", default_value = "15m", value_parser = parse_duration)]

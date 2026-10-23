@@ -195,6 +195,17 @@ impl EpochCommittee {
 }
 
 impl EpochCommittees {
+    /// Whether `epoch` holds everything a refetch of its epoch root supplies: the header and the
+    /// stake table hash. The reward can stay `None` when the input it derives from is missing.
+    pub fn has_epoch_root(&self, epoch: EpochNumber) -> bool {
+        self.inner
+            .read()
+            .epoch_committee(epoch)
+            .is_some_and(|committee| {
+                committee.header.is_some() && committee.stake_table_hash.is_some()
+            })
+    }
+
     pub fn epoch_height(&self) -> BlockNumber {
         self.epoch_height
     }
@@ -304,7 +315,7 @@ impl EpochCommittees {
         // Return early if previous epoch is not the first two epochs
         // and we don't have the stake table.
         if previous_epoch > first_epoch + 1 && self.snapshot(previous_epoch.into()).is_none() {
-            debug!(?previous_epoch, "missing stake table for previous epoch");
+            warn!(?previous_epoch, "missing stake table for previous epoch");
             return Ok(None);
         }
 
@@ -551,15 +562,9 @@ impl EpochCommittees {
             },
         }
 
+        let persistence = self.fetcher.persistence.lock().await;
         // Load the `limit` latest stored stake tables
-        let loaded_stake = match self
-            .fetcher
-            .persistence
-            .lock()
-            .await
-            .load_latest_stake(limit)
-            .await
-        {
+        let loaded_stake = match persistence.load_latest_stake(limit).await {
             Ok(Some(loaded)) => loaded,
             Ok(None) => {
                 warn!("No stake table history found in persistence!");
@@ -572,7 +577,14 @@ impl EpochCommittees {
         };
 
         for (epoch, (validators, block_reward), stake_table_hash) in loaded_stake {
-            let committee = EpochCommittee::new(validators, block_reward, stake_table_hash, None);
+            let header = match persistence.load_epoch_root(epoch).await {
+                Ok(header) => header,
+                Err(err) => {
+                    warn!(%err, "failed to load epoch root for epoch {epoch} from persistence");
+                    None
+                },
+            };
+            let committee = EpochCommittee::new(validators, block_reward, stake_table_hash, header);
             self.inner
                 .write()
                 .put_epoch_committee(epoch, Arc::new(committee));

@@ -9,12 +9,16 @@
 //! [`bootstrap_epoch_window`] populates the window in two stages:
 //!
 //! 1. Install: the L1 light-client contract vouches for a finalized header `F`. The epoch roots below
-//!    `F` are fetched with Merkle proofs against `F` and installed directly. Failures to read the
-//!    anchor or fetch the roots are retried until the deadline. A non-empty install range without
-//!    state peers fails at once.
+//!    `F` are fetched with Merkle proofs against `F` and installed directly, except for epochs the
+//!    membership already holds. Failures to read the anchor, fetch the roots or install them are
+//!    retried until the deadline. Missing epochs without state peers fail at once.
 //! 2. Walk: from the highest known epoch, one epoch at a time. The walk targets the epoch the peers'
-//!    chain tip needs, and a failure below it is retried until the deadline. Without a target, or
-//!    past it, the first failure marks the live tip.
+//!    chain tip needs, and a failure below it is retried until the deadline. Above it, up to the
+//!    epoch the highest reported tip needs, the first failure marks the live tip, and the walk
+//!    stops there without probing further. Without any reported height, the first failure marks
+//!    the live tip.
+//!
+//! Both stages share one deadline.
 
 use std::{ops::RangeInclusive, time::Duration};
 
@@ -57,12 +61,21 @@ macro_rules! milestone {
     };
 }
 
+/// Where the walk must reach and where it may stop probing.
+#[derive(Clone, Copy, Debug)]
+struct WalkTarget {
+    /// Steps below it are retried until the deadline.
+    required: EpochNumber,
+    /// Stop without probing once reached. At least `required`.
+    stop: EpochNumber,
+}
+
 #[derive(Clone, Copy, Debug)]
 pub struct BootstrapParams {
     /// Bound on a single `wait_for_stake_table` call during the walk.
     pub step_timeout: Duration,
-    /// How long the install, and separately the walk toward the peers' chain tip, may keep
-    /// retrying before startup gives up.
+    /// How long the install and the walk toward the peers' chain tip may keep retrying, together,
+    /// before startup gives up.
     pub deadline: Duration,
     /// Set for the call at boot only. Mid-run, milestones log at debug and the gauges stay.
     pub boot: bool,
@@ -98,6 +111,7 @@ impl From<LightClientStateSol> for TrustedAnchor {
 pub(crate) struct BootstrapMetrics {
     window_epoch: Box<dyn Gauge>,
     anchor_epoch: Box<dyn Gauge>,
+    peer_target_epoch: Box<dyn Gauge>,
 }
 
 impl BootstrapMetrics {
@@ -105,6 +119,7 @@ impl BootstrapMetrics {
         Self {
             window_epoch: metrics.create_gauge("bootstrap_window_epoch".into(), None),
             anchor_epoch: metrics.create_gauge("bootstrap_anchor_epoch".into(), None),
+            peer_target_epoch: metrics.create_gauge("bootstrap_peer_target_epoch".into(), None),
         }
     }
 }
@@ -153,11 +168,6 @@ where
 
     let range = install_range(anchor.height, epoch_height, first_epoch);
     if let Some(range) = &range {
-        ensure!(
-            !peers.is_empty(),
-            "finalized height {} needs a state peer serving the light-client module",
-            anchor.height
-        );
         install_window(
             coordinator,
             peers,
@@ -172,8 +182,8 @@ where
 
     // An anchor with an empty range vouches for nothing, so it does not cap the target.
     let anchor = range.is_some().then_some(&anchor);
-    let target = walk_target(peers, anchor, epoch_height, params.step_timeout).await;
-    let current = walk_to_tip(coordinator, first_epoch, target, params).await?;
+    let target = walk_target(peers, anchor, epoch_height, params, metrics).await;
+    let current = walk_to_tip(coordinator, first_epoch, target, deadline, params).await?;
     if params.boot {
         metrics.window_epoch.set(current.u64() as usize);
     }
@@ -192,7 +202,7 @@ pub(crate) fn query_clients(urls: &[Url]) -> Vec<(Url, QueryServiceClient)> {
         .collect()
 }
 
-/// Install the `range` of epochs the `anchor` determines. Epochs already stored are a no-op.
+/// Install the epochs of `range` the membership does not hold yet. Without any, no peer is needed.
 async fn install_window<C: Client>(
     coordinator: &EpochMembershipCoordinator<SeqTypes>,
     peers: &[(Url, C)],
@@ -202,31 +212,61 @@ async fn install_window<C: Client>(
     deadline: Instant,
     params: &BootstrapParams,
 ) -> anyhow::Result<()> {
+    let membership = coordinator.membership();
+    let missing: Vec<u64> = epochs(range)
+        .filter(|epoch| !membership.has_epoch_root(EpochNumber::new(*epoch)))
+        .collect();
+    if missing.is_empty() {
+        return Ok(());
+    }
+    ensure!(
+        !peers.is_empty(),
+        "finalized height {} needs a state peer serving the light-client module",
+        anchor.height
+    );
     milestone!(
         params,
         finalized_height = anchor.height,
-        epochs = ?(range.start().u64()..=range.end().u64()),
-        highest_known = ?coordinator.membership().highest_known_epoch().map(|e| e.u64()),
+        epochs = ?missing,
+        highest_known = ?membership.highest_known_epoch().map(|e| e.u64()),
         "installing the anchor window",
     );
 
-    let fetch = fetch_epoch_roots(peers, anchor, range, epoch_height, deadline, params);
-    let headers = fetch.await?;
-    // The install can fetch a chain config or L1 events without a bound of its own. Cancelling it
-    // leaves at most a lone stake table, which the next boot installs again.
-    let install = async {
-        for header in headers {
-            let height = header.height();
-            coordinator
-                .add_epoch_root(header)
-                .await
-                .map_err(|err| anyhow!("installing the epoch root at {height}: {err}"))?;
-        }
-        anyhow::Ok(())
-    };
-    timeout_at(deadline, install)
-        .await
-        .context("bootstrap deadline exceeded while installing the epoch roots")?
+    // Peers rotate between attempts. Only the fetch is bounded by `step_timeout`: the install can
+    // scan L1 events for longer, and cancelling it would restart that scan.
+    let missing = &missing;
+    retry(
+        deadline,
+        "installing the anchor window",
+        peers.len(),
+        |attempt, remaining| async move {
+            let (url, peer) = &peers[attempt % peers.len()];
+            let headers = timeout(
+                params.step_timeout.min(remaining),
+                fetch_roots_from(peer, anchor, missing, epoch_height),
+            )
+            .await
+            .context("attempt timed out")?
+            .with_context(|| format!("peer {url}"))?;
+            timeout_at(deadline, async {
+                for header in headers {
+                    let height = header.height();
+                    coordinator
+                        .add_epoch_root(header)
+                        .await
+                        .map_err(|err| anyhow!("installing the epoch root at {height}: {err}"))?;
+                }
+                anyhow::Ok(())
+            })
+            .await
+            .context("install timed out")?
+        },
+    )
+    .await
+}
+
+fn epochs(range: &RangeInclusive<EpochNumber>) -> RangeInclusive<u64> {
+    range.start().u64()..=range.end().u64()
 }
 
 /// The epochs whose stake tables the install covers: `n-3 ..= n+1` for `n = epoch(F)`, clamped to
@@ -243,35 +283,6 @@ fn install_range(
     let n = epoch_from_block_number(anchor_height, epoch_height);
     let start = n.saturating_sub(3).max(*first_epoch + 2);
     (start <= n + 1).then(|| EpochNumber::new(start)..=EpochNumber::new(n + 1))
-}
-
-/// Fetch and verify the epoch roots of `range` from the peers in rotation, backing off after each
-/// full pass, until `deadline`. One attempt is bounded by `step_timeout`, so a slow peer does not
-/// starve the others.
-async fn fetch_epoch_roots<C: Client>(
-    peers: &[(Url, C)],
-    anchor: &TrustedAnchor,
-    range: &RangeInclusive<EpochNumber>,
-    epoch_height: u64,
-    deadline: Instant,
-    params: &BootstrapParams,
-) -> anyhow::Result<Vec<Header>> {
-    debug_assert!(!peers.is_empty());
-    retry(
-        deadline,
-        "installing the anchor window",
-        peers.len(),
-        |attempt, remaining| async move {
-            let (url, peer) = &peers[attempt % peers.len()];
-            let fetch = fetch_roots_from(peer, anchor, range, epoch_height);
-            let fetch = timeout(params.step_timeout.min(remaining), fetch);
-            fetch
-                .await
-                .context("attempt timed out")?
-                .with_context(|| format!("peer {url}"))
-        },
-    )
-    .await
 }
 
 /// Run `attempt` with its index and the time left until it succeeds, backing off after every
@@ -314,15 +325,15 @@ async fn retry<T, Fut: Future<Output = anyhow::Result<T>>>(
     }
 }
 
-/// Fetch the epoch roots of `range` from one `peer`, in ascending order. The proofs are fetched
-/// concurrently, once the anchor header is verified.
+/// Fetch the roots deriving the stake tables of `wanted` from one `peer`, in the given order. The
+/// proofs are fetched concurrently, once the anchor header is verified.
 ///
 /// Every header is verified against header `F` of the anchor, which is itself verified against
 /// the anchor's commitment, so a lying peer fails here and nothing it cannot prove gets installed.
 async fn fetch_roots_from<C: Client>(
     peer: &C,
     anchor: &TrustedAnchor,
-    range: &RangeInclusive<EpochNumber>,
+    wanted: &[u64],
     epoch_height: u64,
 ) -> anyhow::Result<Vec<Header>> {
     let header = peer
@@ -332,25 +343,23 @@ async fn fetch_roots_from<C: Client>(
     verify_anchor_header(&header, anchor)?;
     let root = header.block_merkle_tree_root();
 
-    try_join_all(
-        (range.start().u64()..=range.end().u64()).map(|epoch| async move {
-            // The root of epoch `e - 2` derives the stake table of epoch `e`.
-            let height = root_block_in_epoch(epoch - 2, epoch_height);
-            let proof = peer
-                .header_proof(anchor.height, BlockId::Number(height as usize))
-                .await
-                .with_context(|| format!("fetching the epoch root at height {height}"))?;
-            let header = proof
-                .verify(root)
-                .with_context(|| format!("verifying the epoch root at height {height}"))?;
-            ensure!(
-                header.height() == height,
-                "peer returned height {} for the epoch root at {height}",
-                header.height()
-            );
-            Ok(header)
-        }),
-    )
+    try_join_all(wanted.iter().map(|&epoch| async move {
+        // The root of epoch `e - 2` derives the stake table of epoch `e`.
+        let height = root_block_in_epoch(epoch - 2, epoch_height);
+        let proof = peer
+            .header_proof(anchor.height, BlockId::Number(height as usize))
+            .await
+            .with_context(|| format!("fetching the epoch root at height {height}"))?;
+        let header = proof
+            .verify(root)
+            .with_context(|| format!("verifying the epoch root at height {height}"))?;
+        ensure!(
+            header.height() == height,
+            "peer returned height {} for the epoch root at {height}",
+            header.height()
+        );
+        Ok(header)
+    }))
     .await
 }
 
@@ -373,18 +382,19 @@ fn verify_anchor_header(header: &Header, anchor: &TrustedAnchor) -> anyhow::Resu
     Ok(())
 }
 
-/// The epoch whose stake table the window needs for the chain tip the peers report, or `None` when
-/// no peer answers within `step_timeout`.
+/// The epoch whose stake table the window needs for the chain tip the peers report, capped by the
+/// anchor, and the epoch of the highest tip, or `None` when no peer answers within `step_timeout`.
 async fn walk_target<C: Client>(
     peers: &[(Url, C)],
     anchor: Option<&TrustedAnchor>,
     epoch_height: u64,
-    step_timeout: Duration,
-) -> Option<EpochNumber> {
+    params: &BootstrapParams,
+    metrics: &BootstrapMetrics,
+) -> Option<WalkTarget> {
     let heights = join_all(
         peers
             .iter()
-            .map(|(_, peer)| timeout(step_timeout, peer.block_height())),
+            .map(|(_, peer)| timeout(params.step_timeout, peer.block_height())),
     )
     .await;
     let heights: Vec<u64> = heights
@@ -396,67 +406,98 @@ async fn walk_target<C: Client>(
             "bootstrap: no state peer reported a block height; walking without a target"
         );
     }
-    target_epoch(heights, anchor, epoch_height)
+    let max_height = heights.iter().max().copied();
+    let peer_target = target_epoch(heights, epoch_height)?;
+    if params.boot {
+        metrics.peer_target_epoch.set(peer_target.u64() as usize);
+    }
+    let target = cap_target(peer_target, anchor, epoch_height);
+    if target < peer_target {
+        tracing::warn!(
+            %peer_target,
+            %target,
+            "bootstrap: peers report a chain tip past the anchor's window; capping the walk target"
+        );
+    }
+    Some(WalkTarget {
+        required: target,
+        stop: epoch_needing(max_height?, epoch_height)?,
+    })
 }
 
-/// `epoch(tip) + 1` for the median of the reported chain heights, which the epoch root of
-/// `epoch(tip) - 1` derives. With an anchor, at most `TARGET_SLACK` epochs past its window, so a
-/// few lying peers cannot hold the walk. The median of an even count is the lower one.
-fn target_epoch(
-    mut heights: Vec<u64>,
+/// `epoch(tip) + 1` for the median of the reported chain heights. The median of an even count is
+/// the lower one.
+fn target_epoch(mut heights: Vec<u64>, epoch_height: u64) -> Option<EpochNumber> {
+    heights.sort_unstable();
+    epoch_needing(
+        *heights.get(heights.len().checked_sub(1)? / 2)?,
+        epoch_height,
+    )
+}
+
+/// `epoch(tip) + 1` for a chain of `height` blocks: the epoch the root of `epoch(tip) - 1` derives.
+fn epoch_needing(height: u64, epoch_height: u64) -> Option<EpochNumber> {
+    let tip = height.checked_sub(1)?;
+    Some(EpochNumber::new(
+        epoch_from_block_number(tip, epoch_height) + 1,
+    ))
+}
+
+/// With an anchor, `target` at most `TARGET_SLACK` epochs past its window, so a few lying peers
+/// cannot hold the walk.
+fn cap_target(
+    target: EpochNumber,
     anchor: Option<&TrustedAnchor>,
     epoch_height: u64,
-) -> Option<EpochNumber> {
-    heights.sort_unstable();
-    let tip = heights
-        .get(heights.len().checked_sub(1)? / 2)?
-        .checked_sub(1)?;
-    let target = epoch_from_block_number(tip, epoch_height) + 1;
-    let cap = anchor
-        .map(|anchor| epoch_from_block_number(anchor.height, epoch_height) + 1 + TARGET_SLACK);
-    Some(EpochNumber::new(cap.map_or(target, |cap| target.min(cap))))
+) -> EpochNumber {
+    anchor.map_or(target, |anchor| {
+        let cap = epoch_from_block_number(anchor.height, epoch_height) + 1 + TARGET_SLACK;
+        target.min(EpochNumber::new(cap))
+    })
 }
 
 /// Walk forward from the highest known epoch. Each step drives `add_epoch_root` through the
 /// existing catchup machinery, persisting the new stake table.
 ///
-/// Steps below the `target` are retried until the deadline. From the target up, the first step
-/// that peers cannot serve marks the live tip.
+/// Steps below the required target are retried until the deadline. From there up, the first step
+/// that peers cannot serve marks the live tip, and reaching `stop` ends the walk without probing.
+/// Without a target, the first failure marks the live tip.
 async fn walk_to_tip(
     coordinator: &EpochMembershipCoordinator<SeqTypes>,
     first_epoch: EpochNumber,
-    target: Option<EpochNumber>,
+    target: Option<WalkTarget>,
+    deadline: Instant,
     params: &BootstrapParams,
 ) -> anyhow::Result<EpochNumber> {
     let membership = coordinator.membership();
-    // Catchup resumes from the latest consecutive pair of stake tables we
-    // hold, so a gap near the tip is bridged by the step that runs into it
-    // rather than having to be found here.
+    // When a step runs, catchup resumes from the latest consecutive pair of stake tables we
+    // hold, so a gap near the tip is bridged by that step rather than found here.
     let mut highest = membership.highest_known_epoch().unwrap_or(first_epoch + 1);
 
     milestone!(
         params,
         %first_epoch,
         starting_from = %highest,
-        target = ?target.map(|e| e.u64()),
+        target = ?target.map(|t| t.required.u64()),
+        stop = ?target.map(|t| t.stop.u64()),
         "bootstrap: walking forward",
     );
 
-    let deadline = Instant::now() + params.deadline;
     let step_timeout = params.step_timeout;
     loop {
+        if target.is_some_and(|t| highest >= t.stop) {
+            break;
+        }
         let next = highest + 1;
         let derive = move |_, bound: Duration| async move {
-            let step = timeout(
-                step_timeout.min(bound),
-                coordinator.wait_for_stake_table(next),
-            );
+            let bound = step_timeout.min(bound);
+            let step = timeout(bound, coordinator.wait_for_stake_table(next));
             step.await
-                .context(format!("timed out after {}s", step_timeout.as_secs()))?
+                .with_context(|| format!("timed out after {bound:?}"))?
                 .map(drop)
                 .map_err(|err| anyhow!("{err:#}"))
         };
-        let below_target = target.is_some_and(|target| highest < target);
+        let below_target = target.is_some_and(|target| highest < target.required);
         let step = if below_target {
             let what = format!("deriving epoch {next} below the chain tip's epoch");
             retry(deadline, &what, 1, derive).await
@@ -492,8 +533,10 @@ async fn walk_to_tip(
         membership.snapshot(highest).is_some(),
         "missing stake table for next epoch {highest} after bootstrap"
     );
-    for epoch in [current, highest] {
-        prepare_drb(coordinator, epoch, params.step_timeout).await;
+    // `current - 1` is skipped when seeded from genesis, which already has its DRB.
+    let previous = current.checked_sub(1).filter(|e| *e > *first_epoch + 1);
+    for epoch in previous.into_iter().chain([*current, *highest]) {
+        prepare_drb(coordinator, EpochNumber::new(epoch), params.step_timeout).await;
     }
     Ok(current)
 }
@@ -563,8 +606,8 @@ mod tests {
         boot: true,
     };
 
-    fn epochs(range: RangeInclusive<EpochNumber>) -> RangeInclusive<u64> {
-        range.start().u64()..=range.end().u64()
+    fn epoch_list(range: RangeInclusive<EpochNumber>) -> Vec<u64> {
+        epochs(&range).collect()
     }
 
     #[rstest]
@@ -586,7 +629,8 @@ mod tests {
         #[case] expected: Option<RangeInclusive<u64>>,
     ) {
         // `first_epoch = 1` seeds epochs 1 and 2.
-        let range = install_range(anchor_height, epoch_height, EpochNumber::new(1)).map(epochs);
+        let range = install_range(anchor_height, epoch_height, EpochNumber::new(1))
+            .map(|range| epochs(&range));
         assert_eq!(range, expected);
     }
 
@@ -594,15 +638,15 @@ mod tests {
     #[test]
     fn install_range_covers_reward_inputs() {
         let range = install_range(ANCHOR_HEIGHT, EPOCH_HEIGHT, EpochNumber::new(FIRST_EPOCH));
-        let range = epochs(range.unwrap());
+        let range = epoch_list(range.unwrap());
         assert!(range.contains(&(N - 3)));
-        assert_eq!(*range.end(), N + 1);
+        assert_eq!(range.last(), Some(&(N + 1)));
     }
 
     #[test]
     fn install_range_roots_precede_the_anchor() {
         let range = install_range(ANCHOR_HEIGHT, EPOCH_HEIGHT, EpochNumber::new(FIRST_EPOCH));
-        for epoch in epochs(range.unwrap()) {
+        for epoch in epoch_list(range.unwrap()) {
             assert!(root_block_in_epoch(epoch - 2, EPOCH_HEIGHT) < ANCHOR_HEIGHT);
         }
     }
@@ -645,18 +689,32 @@ mod tests {
         assert!(format!("{err:#}").contains("height"), "{err:#}");
     }
 
-    /// Stands in for the node's database: it holds a stake table and DRB result for each epoch the
-    /// test lets it answer for, with the hash a verified epoch root header commits to.
+    /// Stands in for the node's database: it holds a stake table, DRB result and epoch root header
+    /// for each epoch the test lets it answer for, with the hash a verified epoch root header
+    /// commits to.
     #[derive(Clone, Debug, Default)]
-    struct SeededStore(Arc<std::sync::Mutex<HashMap<u64, StakeTuple>>>);
+    struct SeededStore {
+        tables: Arc<std::sync::Mutex<HashMap<u64, StakeTuple>>>,
+        roots: Arc<std::sync::Mutex<HashMap<u64, Header>>>,
+        /// An epoch whose `load_stake` takes the given time.
+        slow: Option<(u64, Duration)>,
+        /// The epochs `load_stake` was asked for.
+        asked: Arc<std::sync::Mutex<Vec<u64>>>,
+    }
 
     impl SeededStore {
+        /// Whether `load_stake` was asked for `epoch`.
+        fn loaded(&self, epoch: u64) -> bool {
+            self.asked.lock().unwrap().contains(&epoch)
+        }
+
         async fn for_chain(client: &TestClient, epochs: RangeInclusive<u64>) -> Self {
             let validators: AuthenticatedValidatorMap = (0..4)
                 .map(|_| random_validator())
                 .map(|validator| (validator.account, validator))
                 .collect();
             let mut tables = HashMap::new();
+            let mut headers = HashMap::new();
             for epoch in epochs {
                 // The root of epoch `e - 1` commits to the stake table of epoch `e`.
                 let root = root_block_in_epoch(epoch - 1, EPOCH_HEIGHT);
@@ -665,35 +723,57 @@ mod tests {
                     epoch,
                     (validators.clone(), Some(RewardAmount::default()), hash),
                 );
+                // The root of epoch `e - 2` is the one `add_epoch_root` installs `e` from.
+                let root = root_block_in_epoch(epoch - 2, EPOCH_HEIGHT);
+                headers.insert(epoch, client.header(root).await.unwrap());
             }
-            Self(Arc::new(std::sync::Mutex::new(tables)))
+            Self {
+                tables: Arc::new(std::sync::Mutex::new(tables)),
+                roots: Arc::new(std::sync::Mutex::new(headers)),
+                slow: None,
+                asked: Arc::default(),
+            }
         }
     }
 
     #[async_trait]
     impl MembershipPersistence for SeededStore {
         async fn load_stake(&self, epoch: EpochNumber) -> anyhow::Result<Option<StakeTuple>> {
-            Ok(self.0.lock().unwrap().get(&epoch.u64()).cloned())
+            self.asked.lock().unwrap().push(epoch.u64());
+            if let Some((slow, delay)) = self.slow
+                && slow == epoch.u64()
+            {
+                sleep(delay).await;
+            }
+            Ok(self.tables.lock().unwrap().get(&epoch.u64()).cloned())
         }
 
         async fn load_latest_stake(
             &self,
             _limit: u64,
         ) -> anyhow::Result<Option<Vec<IndexedStake>>> {
-            Ok(None)
+            let tables = self.tables.lock().unwrap();
+            let stakes = tables
+                .iter()
+                .map(|(epoch, (validators, reward, hash))| {
+                    let stake = (validators.clone(), *reward);
+                    (EpochNumber::new(*epoch), stake, *hash)
+                })
+                .collect();
+            Ok(Some(stakes))
         }
 
         async fn load_drb_result(&self, epoch: EpochNumber) -> anyhow::Result<Option<DrbResult>> {
             Ok(self
-                .0
+                .tables
                 .lock()
                 .unwrap()
                 .contains_key(&epoch.u64())
                 .then_some([0; 32]))
         }
 
-        async fn load_epoch_root(&self, _epoch: EpochNumber) -> anyhow::Result<Option<Header>> {
-            Ok(None)
+        async fn load_epoch_root(&self, epoch: EpochNumber) -> anyhow::Result<Option<Header>> {
+            Ok(self.roots.lock().unwrap().get(&epoch.u64()).cloned())
         }
 
         async fn store_epoch_root(&self, _: EpochNumber, _: Header) -> anyhow::Result<()> {
@@ -754,6 +834,18 @@ mod tests {
     /// A real `EpochCommittees` and coordinator over `store`, seeded like a fresh node. No peer
     /// serves epoch roots, so the walk ends at the first epoch above the installed ones.
     fn coordinator(store: SeededStore) -> EpochMembershipCoordinator<SeqTypes> {
+        coordinator_over(committees(store))
+    }
+
+    fn coordinator_over(committees: EpochCommittees) -> EpochMembershipCoordinator<SeqTypes> {
+        EpochMembershipCoordinator::new(
+            committees,
+            EPOCH_HEIGHT,
+            &TestStorage::<SeqTypes>::default(),
+        )
+    }
+
+    fn committees(store: SeededStore) -> EpochCommittees {
         let fetcher = Fetcher::new(
             Arc::new(MockStateCatchup::default()),
             Arc::new(AsyncMutex::new(store)),
@@ -774,11 +866,7 @@ mod tests {
         let committees =
             EpochCommittees::new_stake(peers.clone(), peers, None, fetcher, EPOCH_HEIGHT);
         committees.set_first_epoch(EpochNumber::new(FIRST_EPOCH), [0u8; 32]);
-        EpochMembershipCoordinator::new(
-            committees,
-            EPOCH_HEIGHT,
-            &TestStorage::<SeqTypes>::default(),
-        )
+        committees
     }
 
     async fn fresh_coordinator(client: &TestClient) -> EpochMembershipCoordinator<SeqTypes> {
@@ -857,7 +945,7 @@ mod tests {
         let first_root = root_block_in_epoch(range.start().u64() - 2, EPOCH_HEIGHT);
         client.return_invalid_proof(first_root as usize).await;
 
-        let err = fetch_roots_from(&client, &anchor, &range, EPOCH_HEIGHT)
+        let err = fetch_roots_from(&client, &anchor, &epoch_list(range), EPOCH_HEIGHT)
             .await
             .unwrap_err();
 
@@ -902,7 +990,7 @@ mod tests {
             ..anchor
         };
 
-        let err = fetch_roots_from(&client, &anchor, &range.unwrap(), EPOCH_HEIGHT)
+        let err = fetch_roots_from(&client, &anchor, &epoch_list(range.unwrap()), EPOCH_HEIGHT)
             .await
             .unwrap_err();
 
@@ -947,20 +1035,55 @@ mod tests {
         assert!(format!("{err:#}").contains("deadline exceeded"), "{err:#}");
     }
 
-    /// Storage already holding the whole range is installed again: `add_epoch_root` returns early
-    /// for it, but the roots are still fetched and verified.
-    #[test_log::test(tokio::test)]
-    async fn restart_reinstalls_the_window() {
-        let (client, anchor) = chain().await;
-        let coordinator = coordinator(SeededStore::for_chain(&client, (N - 4)..=(N + 1)).await);
-        for epoch in [N - 4, N - 3] {
-            assert!(
-                coordinator
-                    .membership()
-                    .load_stake_table(EpochNumber::new(epoch))
-                    .await
-            );
+    /// Hold `epochs` in the membership, as `load_stake_table` leaves them.
+    async fn hold(coordinator: &EpochMembershipCoordinator<SeqTypes>, epochs: RangeInclusive<u64>) {
+        for epoch in epochs {
+            let loaded = coordinator
+                .membership()
+                .load_stake_table(EpochNumber::new(epoch))
+                .await;
+            assert!(loaded, "epoch {epoch}");
         }
+    }
+
+    fn has_epoch_root(coordinator: &EpochMembershipCoordinator<SeqTypes>, epoch: u64) -> bool {
+        coordinator
+            .membership()
+            .has_epoch_root(EpochNumber::new(epoch))
+    }
+
+    /// After a restart `reload_stake` holds the epochs, so no working peer is needed.
+    #[test_log::test(tokio::test)]
+    async fn restart_skips_the_installed_window() {
+        let (client, anchor) = chain().await;
+        let store = SeededStore::for_chain(&client, (N - 4)..=(N + 1)).await;
+        let mut committees = committees(store);
+        committees.reload_stake(10).await;
+        let coordinator = coordinator_over(committees);
+        client.forget_leaf(ANCHOR_HEIGHT as usize).await;
+        let before = client.header_requests().await;
+
+        let no_peers = bootstrap(&coordinator, Some(anchor), &[], PARAMS).await;
+        let failing = bootstrap(
+            &coordinator,
+            Some(anchor),
+            std::slice::from_ref(&client),
+            PARAMS,
+        )
+        .await;
+
+        assert_eq!(no_peers.unwrap(), EpochNumber::new(N));
+        assert_eq!(failing.unwrap(), EpochNumber::new(N));
+        assert_eq!(client.header_requests().await, before);
+    }
+
+    /// Only the epochs the membership lacks are fetched: the anchor header and one proof each.
+    #[test_log::test(tokio::test)]
+    async fn only_missing_epochs_are_fetched() {
+        let (client, anchor) = chain().await;
+        let coordinator = coordinator(SeededStore::for_chain(&client, (N - 3)..=(N + 1)).await);
+        hold(&coordinator, (N - 3)..=(N - 1)).await;
+        let missing = [N, N + 1];
         let before = client.header_requests().await;
 
         let current = bootstrap(
@@ -973,10 +1096,79 @@ mod tests {
         .unwrap();
 
         assert_eq!(current, EpochNumber::new(N));
-        for epoch in (N - 4)..=(N + 1) {
-            assert!(has_table(&coordinator, epoch), "epoch {epoch}");
+        assert!(has_table(&coordinator, N + 1));
+        let anchor_header = 1;
+        assert_eq!(
+            client.header_requests().await - before,
+            anchor_header + missing.len()
+        );
+    }
+
+    /// A held epoch without its epoch root header is fetched again.
+    #[test_log::test(tokio::test)]
+    async fn incomplete_entry_is_reinstalled() {
+        let (client, anchor) = chain().await;
+        let store = SeededStore::for_chain(&client, (N - 3)..=(N + 1)).await;
+        store.roots.lock().unwrap().remove(&(N + 1));
+        let coordinator = coordinator(store);
+        hold(&coordinator, (N - 3)..=(N + 1)).await;
+        assert!(has_table(&coordinator, N + 1));
+        assert!(!has_epoch_root(&coordinator, N + 1));
+        let missing = [N + 1];
+        let before = client.header_requests().await;
+
+        bootstrap(
+            &coordinator,
+            Some(anchor),
+            std::slice::from_ref(&client),
+            PARAMS,
+        )
+        .await
+        .unwrap();
+
+        assert!(has_epoch_root(&coordinator, N + 1));
+        let anchor_header = 1;
+        assert_eq!(
+            client.header_requests().await - before,
+            anchor_header + missing.len()
+        );
+    }
+
+    /// After a fresh join the first epochs hold no reward, which a refetch cannot supply, so they
+    /// are not fetched again.
+    #[test_log::test(tokio::test)]
+    async fn epoch_without_reward_is_not_refetched() {
+        let (client, anchor) = chain().await;
+        let store = SeededStore::for_chain(&client, (N - 3)..=(N + 1)).await;
+        for table in store.tables.lock().unwrap().values_mut() {
+            table.1 = None;
         }
-        assert!(client.header_requests().await > before);
+        let coordinator = coordinator(store);
+        hold(&coordinator, (N - 3)..=(N + 1)).await;
+        assert!(has_epoch_root(&coordinator, N + 1));
+        let before = client.header_requests().await;
+
+        bootstrap(&coordinator, Some(anchor), &[], PARAMS)
+            .await
+            .unwrap();
+
+        assert_eq!(client.header_requests().await, before);
+    }
+
+    /// An install slower than `step_timeout` completes: only the fetch is bounded by it.
+    #[test_log::test(tokio::test(start_paused = true))]
+    async fn install_slower_than_the_step_timeout_completes() {
+        let (client, anchor) = chain().await;
+        let mut store = SeededStore::for_chain(&client, (N - 3)..=(N + 1)).await;
+        store.slow = Some((N + 1, PARAMS.step_timeout * 2));
+        let coordinator = coordinator(store);
+        hold(&coordinator, (N - 3)..=N).await;
+
+        bootstrap(&coordinator, Some(anchor), &[client], PARAMS)
+            .await
+            .unwrap();
+
+        assert!(has_epoch_root(&coordinator, N + 1));
     }
 
     /// A failure below the epoch the peers' chain tip needs is retried, not read as the tip.
@@ -984,7 +1176,7 @@ mod tests {
     async fn walk_retries_failures_below_the_target() {
         let (client, _) = chain().await;
         let store = SeededStore::for_chain(&client, (N - 4)..=(N + 1)).await;
-        let withheld = store.0.lock().unwrap().remove(&(N - 1)).unwrap();
+        let withheld = store.tables.lock().unwrap().remove(&(N - 1)).unwrap();
         let coordinator = coordinator(store.clone());
         for epoch in [N - 4, N - 3] {
             coordinator
@@ -994,7 +1186,7 @@ mod tests {
         }
         tokio::spawn(async move {
             tokio::time::sleep(Duration::from_millis(100)).await;
-            store.0.lock().unwrap().insert(N - 1, withheld);
+            store.tables.lock().unwrap().insert(N - 1, withheld);
         });
 
         let current = bootstrap(
@@ -1014,7 +1206,7 @@ mod tests {
     async fn walk_below_the_target_fails_at_the_deadline() {
         let (client, _) = chain().await;
         let store = SeededStore::for_chain(&client, (N - 4)..=(N + 1)).await;
-        store.0.lock().unwrap().remove(&(N - 1));
+        store.tables.lock().unwrap().remove(&(N - 1));
         let coordinator = coordinator(store);
         for epoch in [N - 4, N - 3] {
             coordinator
@@ -1049,7 +1241,7 @@ mod tests {
             .return_invalid_proof(root_block_in_epoch(N - 3, EPOCH_HEIGHT) as usize)
             .await;
 
-        let err = fetch_roots_from(&client, &anchor, &range, EPOCH_HEIGHT)
+        let err = fetch_roots_from(&client, &anchor, &epoch_list(range), EPOCH_HEIGHT)
             .await
             .unwrap_err();
 
@@ -1092,18 +1284,57 @@ mod tests {
         assert!(client.header_requests().await > before);
     }
 
-    /// When the prover lags, the chain runs past the anchor's window and the walk continues there.
+    /// Peers that agree on the tip and an uncapped target end the walk at the target, without a
+    /// probe past it, even though the store holds a later epoch.
     #[test_log::test(tokio::test)]
-    async fn walk_continues_above_the_window() {
+    async fn honest_walk_stops_at_the_target() {
         let (client, anchor) = chain().await;
-        let coordinator = coordinator(SeededStore::for_chain(&client, (N - 3)..=(N + 2)).await);
+        client.mock_block_height(ANCHOR_HEIGHT + 1).await;
+        let store = SeededStore::for_chain(&client, (N - 3)..=(N + 2)).await;
+        let coordinator = coordinator(store.clone());
 
         let current = bootstrap(&coordinator, Some(anchor), &[client], PARAMS)
             .await
             .unwrap();
 
+        assert_eq!(current, EpochNumber::new(N));
+        assert!(!store.loaded(N + 2));
+    }
+
+    /// A lying high peer does not fail the walk: epochs above the median's target are best-effort.
+    #[test_log::test(tokio::test)]
+    async fn lying_high_peer_does_not_fail_the_walk() {
+        let (client, anchor) = chain().await;
+        client.mock_block_height(ANCHOR_HEIGHT + 1).await;
+        let (liar, _) = chain().await;
+        liar.mock_block_height(98).await;
+        let coordinator = coordinator(SeededStore::for_chain(&client, (N - 3)..=(N + 2)).await);
+        let started = Instant::now();
+
+        let current = bootstrap(&coordinator, Some(anchor), &[client, liar], PARAMS)
+            .await
+            .unwrap();
+
         assert_eq!(current, EpochNumber::new(N + 1));
-        assert!(has_table(&coordinator, N + 2));
+        assert!(started.elapsed() < Duration::from_secs(PARAMS.step_timeout.as_secs()));
+    }
+
+    /// A peer ahead of the median extends the walk, best-effort, to the epoch of its tip.
+    #[test_log::test(tokio::test)]
+    async fn walk_continues_to_the_highest_peer() {
+        let (client, anchor) = chain().await;
+        client.mock_block_height(ANCHOR_HEIGHT + 1).await;
+        let (ahead, _) = chain().await;
+        ahead.mock_block_height(98).await;
+        let store = SeededStore::for_chain(&client, (N - 3)..=(N + 3)).await;
+        let coordinator = coordinator(store.clone());
+
+        let current = bootstrap(&coordinator, Some(anchor), &[client, ahead], PARAMS)
+            .await
+            .unwrap();
+
+        assert_eq!(current, EpochNumber::new(N + 2));
+        assert!(!store.loaded(N + 4));
     }
 
     /// The follower's mid-run call installs the window without boot milestones.
@@ -1243,22 +1474,25 @@ mod tests {
             height: ANCHOR_HEIGHT,
             block_comm_root: CircuitField::from(0u64),
         };
-        let target = target_epoch(heights.to_vec(), anchored.then_some(&anchor), EPOCH_HEIGHT);
+        let target = target_epoch(heights.to_vec(), EPOCH_HEIGHT)
+            .map(|target| cap_target(target, anchored.then_some(&anchor), EPOCH_HEIGHT));
         assert_eq!(target.map(|e| e.u64()), expected);
     }
 
-    /// A peer that reports a huge chain cannot hold the walk past the anchor's slack.
+    /// A peer that reports a huge chain cannot make the walk require more than the anchor's slack.
+    /// Past it the walk is best-effort and ends at the first epoch peers cannot serve.
     #[test_log::test(tokio::test)]
     async fn huge_peer_height_is_clamped_by_the_anchor() {
         let (client, anchor) = chain().await;
         client.mock_block_height(10_000).await;
-        let coordinator =
-            coordinator(SeededStore::for_chain(&client, (N - 3)..=(N + 1 + TARGET_SLACK)).await);
+        let store = SeededStore::for_chain(&client, (N - 3)..=(N + 1 + TARGET_SLACK)).await;
+        let coordinator = coordinator(store.clone());
 
         let current = bootstrap(&coordinator, Some(anchor), &[client], PARAMS)
             .await
             .unwrap();
 
         assert_eq!(current, EpochNumber::new(N + TARGET_SLACK));
+        assert!(store.loaded(N + 2 + TARGET_SLACK));
     }
 }
