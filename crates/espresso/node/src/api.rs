@@ -64,10 +64,8 @@ use self::data_source::{
     HotShotConfigDataSource, NodeKeysDataSource, NodePublicKeys, NodeStateDataSource,
     StateSignatureDataSource,
 };
-#[cfg(any(test, feature = "testing"))]
-use crate::SequencerContext;
 use crate::{
-    SeqTypes, SequencerApiVersion,
+    SeqTypes,
     api::{
         context::{ApiContext, ConsensusSource, NodeLightClient},
         data_source::TokenDataSource,
@@ -84,13 +82,19 @@ use crate::{
     },
     state_cert::{StateCertFetchError, validate_state_cert},
 };
+#[cfg(any(test, feature = "testing"))]
+use crate::{SequencerApiVersion, SequencerContext};
 
 pub mod context;
 pub mod data_source;
 pub mod fs;
 pub mod light_client;
 pub mod options;
-pub mod sql;
+/// The query service over a SQL database, with one module per backend.
+pub mod sql {
+    pub mod postgres;
+    pub mod sqlite;
+}
 pub mod state;
 pub mod unlock_schedule;
 mod update;
@@ -3010,7 +3014,8 @@ mod api_tests {
 
     #[rstest_reuse::template]
     #[rstest::rstest]
-    #[case(PhantomData::<crate::api::sql::DataSource>)]
+    #[case(PhantomData::<crate::api::sql::postgres::DataSource>)]
+    #[case(PhantomData::<crate::api::sql::sqlite::DataSource>)]
     #[case(PhantomData::<crate::api::fs::DataSource>)]
     #[test_log::test(tokio::test(flavor = "multi_thread"))]
     pub fn testable_sequencer_data_source<D: TestableSequencerDataSource>(
@@ -3587,10 +3592,10 @@ mod test {
         },
         data_source::{
             Transaction as _, VersionedDataSource,
-            sql::Config,
+            sql::postgres::{Config, SqlStorage},
             storage::{
-                MerklizedStateHeightStorage, NodeStorage, SerializableRetry, SqlStorage,
-                StorageConnectionType, UpdateAvailabilityStorage, pruning::PrunedHeightStorage,
+                MerklizedStateHeightStorage, NodeStorage, SerializableRetry, StorageConnectionType,
+                UpdateAvailabilityStorage, pruning::PrunedHeightStorage,
             },
         },
         explorer::TransactionSummariesResponse,
@@ -3648,7 +3653,7 @@ mod test {
 
     use self::{
         data_source::{SequencerDataSource, testing::TestableSequencerDataSource},
-        sql::DataSource as SqlDataSource,
+        sql::postgres::DataSource as SqlDataSource,
     };
     use super::*;
 
@@ -3676,7 +3681,7 @@ mod test {
         CatchupParams, L1Params,
         api::{
             options::Query,
-            sql::{impl_testable_data_source::tmp_options, reconstruct_state},
+            sql::postgres::{impl_testable_data_source::tmp_options, reconstruct_state},
             test_helpers::STAKE_TABLE_CAPACITY_FOR_TEST,
         },
         catchup::{NullStateCatchup, StatePeers},
@@ -4218,9 +4223,13 @@ mod test {
             // the late node for the same database.
             let mut opt = tmp_options(&dbs[LATE]);
             opt.disable_proactive_fetching = true;
-            let ds = SqlDataSource::create(opt, Default::default(), false)
-                .await
-                .unwrap();
+            let ds = SqlDataSource::create(
+                persistence::sql::postgres::Options::try_from(opt).unwrap(),
+                Default::default(),
+                false,
+            )
+            .await
+            .unwrap();
             let mut tx = ds.write().await.unwrap();
             for leaf in &leaves {
                 tx.insert_leaf(leaf).await.unwrap();
@@ -5885,11 +5894,11 @@ mod test {
         params: FollowerParams,
         l1_params: L1Params,
     ) -> anyhow::Result<(
-        FollowerContext<persistence::sql::Persistence>,
+        FollowerContext<persistence::sql::postgres::Persistence>,
         Client<ClientErr, SequencerApiVersion>,
     )> {
         let port = reserve_tcp_port().expect("No ports free for query service");
-        let mut db = tmp_options(storage);
+        let mut db = persistence::sql::postgres::Options::try_from(tmp_options(storage))?;
         let persistence = db.create().await?;
         let handle = Options::with_port(port)
             .query_sql(
@@ -5897,7 +5906,7 @@ mod test {
                     peers: params.upstreams.clone(),
                     ..Default::default()
                 },
-                db,
+                db.into_inner(),
             )
             .catchup(Default::default())
             .light_client(Default::default())
@@ -5923,7 +5932,7 @@ mod test {
     }
 
     async fn assert_follows_to(
-        follower: &FollowerContext<persistence::sql::Persistence>,
+        follower: &FollowerContext<persistence::sql::postgres::Persistence>,
         follower_client: &Client<ClientErr, SequencerApiVersion>,
         tip: u64,
     ) -> anyhow::Result<()> {
@@ -6195,7 +6204,7 @@ mod test {
                                 .init_node(
                                     1,
                                     genesis_state,
-                                    db,
+                                    persistence::sql::postgres::Options::try_from(db).unwrap(),
                                     Some(StatePeers::<SequencerApiVersion>::from_urls(
                                         vec![peer_url],
                                         Default::default(),
@@ -8355,7 +8364,7 @@ mod test {
         wait_until_block_height(&client, "fee-state/block-height", from_height).await;
 
         let ds = SqlStorage::connect(
-            Config::try_from(&node_0_persistence).unwrap(),
+            Config::try_from(&*node_0_persistence).unwrap(),
             StorageConnectionType::Sequencer,
         )
         .await
@@ -11791,9 +11800,9 @@ mod test {
         // port before the replacement node binds the same address.
         network.peers.remove(0).shut_down().await;
 
-        let new_storage: hotshot_query_service::data_source::sql::testing::TmpDb =
+        let new_storage: hotshot_query_service::data_source::sql::postgres::testing::TmpDb =
             SqlDataSource::create_storage().await;
-        let new_persistence: persistence::sql::Options =
+        let new_persistence: persistence::sql::postgres::Options =
             <SqlDataSource as TestableSequencerDataSource>::persistence_options(&new_storage);
 
         let node_0_port = reserve_tcp_port().expect("OS should have ephemeral ports available");

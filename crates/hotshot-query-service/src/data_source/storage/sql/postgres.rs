@@ -18,17 +18,43 @@ use anyhow::Context as _;
 use futures::{FutureExt as _, stream::TryStreamExt};
 use hotshot_types::traits::node_implementation::NodeType;
 use sqlx::{
-    Row as _,
-    pool::PoolOptions,
+    Executor as _, Row as _,
+    pool::{Pool, PoolOptions},
     postgres::{PgConnectOptions, PgRow, PgSslMode},
-    query,
 };
 
-use super::{
-    Backend, Config, Db, DbKind, Migration, QueryBuilder, StateQueries, Transaction, Write,
-    queries::state::Node, release_only_idle,
-};
+pub type Db = sqlx::Postgres;
+
+#[path = "../sql.rs"]
+mod imp;
+
+use imp::queries::state::Node;
+pub use imp::*;
+
 use crate::{QueryError, QueryResult, include_migrations, merklized_state::MerklizedState};
+
+/// Drop connections that come back to the pool with a transaction still open.
+///
+/// In sqlx 0.8.6, a `begin()` cancelled mid-flight can return its connection to the pool inside
+/// a transaction that sqlx does not know about.
+pub fn release_only_idle(pool: PoolOptions<sqlx::Postgres>) -> PoolOptions<sqlx::Postgres> {
+    // TODO(abdul): remove once a sqlx release includes launchbadge/sqlx#4394.
+    // With no transaction open, this query starts its own, so both timestamps are the same.
+    // Keep `raw_sql`. A normal query is sent in several messages and Postgres moves
+    // `statement_timestamp()` forward on each one, so the timestamps would always differ.
+    pool.after_release(|conn, _| {
+        async move {
+            let row = conn
+                .fetch_one(sqlx::raw_sql(
+                    "SELECT transaction_timestamp() <> statement_timestamp()",
+                ))
+                .await?;
+            let in_transaction: bool = row.try_get(0)?;
+            Ok(!in_transaction)
+        }
+        .boxed()
+    })
+}
 
 impl Backend for Db {
     type ConnectOptions = PgConnectOptions;
@@ -64,6 +90,77 @@ impl Backend for Db {
             .boxed()
         });
         release_only_idle(pool)
+    }
+
+    fn log_conflict_sessions(pool: Pool<Db>, op: &'static str) {
+        tokio::spawn(async move {
+            match sqlx::query(
+                "SELECT pid, COALESCE(state, 'unknown') AS state, left(COALESCE(query, ''), 200) \
+                 AS query FROM pg_stat_activity WHERE pid != pg_backend_pid() AND state IS \
+                 DISTINCT FROM 'idle' AND usename = current_user",
+            )
+            .fetch_all(&pool)
+            .await
+            {
+                Ok(rows) if rows.is_empty() => {
+                    tracing::warn!(op, "serialization conflict: no other non-idle DB sessions");
+                },
+                Ok(rows) => {
+                    for row in &rows {
+                        let pid: i32 = row.try_get("pid").unwrap_or(-1);
+                        let state: String = row.try_get("state").unwrap_or_default();
+                        let query_text: String = row.try_get("query").unwrap_or_default();
+                        tracing::warn!(
+                            op,
+                            pid,
+                            state,
+                            "serialization conflict: concurrent session: {query_text}",
+                        );
+                    }
+                },
+                Err(e) => {
+                    tracing::error!(op, "failed to query pg_stat_activity: {e:#}");
+                },
+            }
+
+            // Log SSI predicate locks held by all non-idle sessions
+            match sqlx::query(
+                "SELECT l.pid, l.locktype, CASE WHEN l.relation IS NOT NULL THEN c.relname ELSE \
+                 NULL END AS relation, l.page, l.tuple, left(COALESCE(a.query, ''), 100) AS query \
+                 FROM pg_locks l JOIN pg_stat_activity a ON a.pid = l.pid LEFT JOIN pg_class c ON \
+                 c.oid = l.relation WHERE l.mode = 'SIReadLock' AND a.state IS DISTINCT FROM \
+                 'idle' AND l.pid != pg_backend_pid() ORDER BY l.pid, c.relname",
+            )
+            .fetch_all(&pool)
+            .await
+            {
+                Ok(rows) if rows.is_empty() => {
+                    tracing::warn!(op, "serialization conflict: no SIReadLocks held");
+                },
+                Ok(rows) => {
+                    for row in &rows {
+                        let pid: i32 = row.try_get("pid").unwrap_or(-1);
+                        let locktype: String = row.try_get("locktype").unwrap_or_default();
+                        let relation: Option<String> = row.try_get("relation").unwrap_or(None);
+                        let page: Option<i32> = row.try_get("page").unwrap_or(None);
+                        let tuple: Option<i16> = row.try_get("tuple").unwrap_or(None);
+                        let query_text: String = row.try_get("query").unwrap_or_default();
+                        tracing::warn!(
+                            op,
+                            pid,
+                            locktype,
+                            relation,
+                            page,
+                            tuple,
+                            "serialization conflict: SIReadLock: {query_text}",
+                        );
+                    }
+                },
+                Err(e) => {
+                    tracing::warn!(op, "failed to query pg_locks: {e:#}");
+                },
+            }
+        });
     }
 }
 
@@ -291,10 +388,17 @@ impl Config {
 
 #[cfg(all(any(test, feature = "testing"), not(target_os = "windows")))]
 pub(super) mod tmp_db {
-    use super::super::{
-        Config,
-        testing::{TmpPostgres, test_migrations},
+    use std::{
+        env,
+        process::{Child, Command, Stdio},
+        time::Duration,
     };
+
+    use test_utils::reserve_tcp_port;
+    use tokio::time::timeout;
+
+    use super::{Config, testing::test_migrations};
+    use crate::testing::sleep;
 
     #[derive(Debug)]
     pub struct TmpDb {
@@ -325,6 +429,141 @@ pub(super) mod tmp_db {
                 .migrations(test_migrations())
         }
     }
+
+    /// A throwaway Postgres server with user `postgres` and trust auth, removed on drop.
+    ///
+    /// Available whichever database the query service is built for, for crates that keep data of
+    /// their own in Postgres.
+    #[derive(Debug)]
+    pub struct TmpPostgres {
+        host: String,
+        port: u16,
+        data_dir: std::path::PathBuf,
+        postgres: Option<Child>,
+    }
+
+    impl TmpPostgres {
+        pub async fn init() -> Self {
+            let port = reserve_tcp_port().unwrap();
+            let host = "127.0.0.1".to_string();
+
+            // initdb requires an empty target; clear any dir left by a crashed run
+            // that reused this (recycled) ephemeral port.
+            let data_dir = env::temp_dir().join(format!("espresso-tmpdb-{port}"));
+            let _ = std::fs::remove_dir_all(&data_dir);
+
+            let output = Command::new("initdb")
+                .arg("-D")
+                .arg(&data_dir)
+                .args(["-U", "postgres", "--auth=trust"])
+                .output()
+                .expect("initdb failed to run; is postgres installed and on PATH?");
+            assert!(
+                output.status.success(),
+                "initdb failed for {data_dir:?}: {}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+
+            let mut db = Self {
+                host,
+                port,
+                data_dir,
+                postgres: None,
+            };
+
+            db.start().await;
+            db
+        }
+
+        pub fn host(&self) -> String {
+            self.host.clone()
+        }
+
+        pub fn port(&self) -> u16 {
+            self.port
+        }
+
+        fn stop(&mut self) {
+            let Some(mut postgres) = self.postgres.take() else {
+                return;
+            };
+            tracing::info!(port = self.port, "stopping postgres");
+            // Fast shutdown (SIGINT to the postmaster) releases the datadir before
+            // Drop removes it; fall back to SIGKILL if pg_ctl is unavailable.
+            let stopped = Command::new("pg_ctl")
+                .arg("-D")
+                .arg(&self.data_dir)
+                .args(["stop", "-m", "fast", "-w"])
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status()
+                .map(|status| status.success())
+                .unwrap_or(false);
+            if !stopped {
+                let _ = postgres.kill();
+            }
+            let _ = postgres.wait();
+        }
+
+        async fn start(&mut self) {
+            tracing::info!(port = self.port, "starting postgres");
+            let postgres = Command::new("postgres")
+                .arg("-D")
+                .arg(&self.data_dir)
+                .args(["-p", &self.port.to_string()])
+                .args(["-h", &self.host])
+                // Keep the unix socket inside the data dir instead of a shared /tmp.
+                .arg("-k")
+                .arg(&self.data_dir)
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .spawn()
+                .expect("failed to start postgres; is it installed and on PATH?");
+            self.postgres = Some(postgres);
+
+            self.wait_for_ready().await;
+        }
+
+        async fn wait_for_ready(&self) {
+            let timeout_duration = Duration::from_secs(
+                env::var("SQL_TMP_DB_CONNECT_TIMEOUT")
+                    .unwrap_or("60".to_string())
+                    .parse()
+                    .expect("SQL_TMP_DB_CONNECT_TIMEOUT must be an integer number of seconds"),
+            );
+
+            if let Err(err) = timeout(timeout_duration, async {
+                while !Command::new("pg_isready")
+                    .args(["-h", &self.host])
+                    .args(["-p", &self.port.to_string()])
+                    .args(["-U", "postgres"])
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::null())
+                    .status()
+                    .map(|status| status.success())
+                    .unwrap_or(false)
+                {
+                    tracing::warn!("database is not ready");
+                    sleep(Duration::from_secs(1)).await;
+                }
+            })
+            .await
+            {
+                panic!(
+                    "failed to connect to TmpDb within configured timeout {timeout_duration:?}: \
+                     {err:#}\n{}",
+                    "Consider increasing the timeout by setting SQL_TMP_DB_CONNECT_TIMEOUT"
+                );
+            }
+        }
+    }
+
+    impl Drop for TmpPostgres {
+        fn drop(&mut self) {
+            self.stop();
+            let _ = std::fs::remove_dir_all(&self.data_dir);
+        }
+    }
 }
 
 #[cfg(all(test, not(target_os = "windows")))]
@@ -334,7 +573,8 @@ mod test {
     use futures::FutureExt as _;
     use sqlx::{Connection as _, Executor as _, Row as _};
 
-    use super::super::{Config, SqlStorage, StorageConnectionType, testing::TmpDb};
+    use super::{Config, SqlStorage, testing::TmpDb};
+    use crate::data_source::storage::StorageConnectionType;
 
     #[test]
     fn test_config_from_str() {

@@ -10,12 +10,13 @@ on:
   issues:
     types: [opened]
 
-# Both jobs run .github/claude from the default branch head. For review events GitHub loads this
+# All jobs run .github/claude from the default branch head. For review events GitHub loads this
 # file and claude-job.yml from the PR merge commit; same-repo PR authors already have write access.
 jobs:
   mention:
     if: |
       (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude') &&
+        !startsWith(github.event.comment.body, '/review') &&
         contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association)) ||
       (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude') &&
         contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association)) ||
@@ -32,6 +33,23 @@ jobs:
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
     with:
       job: mention
+
+  # `/review` on a PR re-runs the runbook review on the current head.
+  review:
+    if: |
+      github.event_name == 'issue_comment' &&
+      github.event.issue.pull_request &&
+      startsWith(github.event.comment.body, '/review') &&
+      contains(fromJSON('["OWNER", "MEMBER"]'), github.event.comment.author_association)
+    uses: ./.github/workflows/claude-job.yml
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    secrets:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+    with:
+      job: review
 
   # `/code-review [low|medium|high|xhigh|max] [opus|sonnet|haiku|fable|claude-<id>]` on a PR runs
   # the built-in Claude Code review. Defaults: high, opus.

@@ -5815,7 +5815,7 @@ mod tests {
             "config",
         ]);
         let mut cfg = PublicNodeConfig::new(&opt, &opt.modules(), &test_genesis());
-        // Set directly: the follower module needs storage-sql, whose args differ under embedded-db.
+        // Set directly: the follower module needs storage-sql.
         cfg.follower = Some(FollowerConfig {
             poll_interval: Duration::from_millis(2500),
             max_blocks_per_poll: 17,
@@ -5994,9 +5994,6 @@ mod tests {
         );
     }
 
-    // Postgres only, as in `options.rs`: storage-sql under embedded-db needs a `--path` that is
-    // irrelevant here.
-    #[cfg(not(feature = "embedded-db"))]
     #[tokio::test]
     async fn sql_storage_settings_are_served_in_full() {
         use proto::config_service_server::ConfigService as _;
