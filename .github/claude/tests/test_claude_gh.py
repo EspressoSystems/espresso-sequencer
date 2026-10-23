@@ -37,6 +37,11 @@ SHA = "abcdef123456"
 HEADER = "### Review of #7 at abcdef1"
 BASE = "0123base"
 SERVER = create_sdk_mcp_server("gh", tools=[])
+SAME_REPO_PR = {
+    "head": {"repo": {"full_name": "o/r"}},
+    "base": {"repo": {"full_name": "o/r"}},
+    "user": {"login": "alice"},
+}
 
 
 @dataclass
@@ -51,6 +56,7 @@ class FakeGitHub:
     live_diffs: int = 0
     compares: list[tuple[str, str]] = field(default_factory=list)
     edit_max: int | None = None  # edits longer than this raise
+    pr: dict = field(default_factory=lambda: dict(SAME_REPO_PR))
 
     async def pr_diff(self, pr: int) -> str:
         self.live_diffs += 1
@@ -71,6 +77,9 @@ class FakeGitHub:
     async def head_sha(self, pr: int) -> str:
         self.head_fetches += 1
         return "fetched"
+
+    async def pr_payload(self, pr: int) -> dict:
+        return self.pr
 
     async def inline_comment(
         self, pr: int, path: str, line: int, body: str, sha: str
@@ -1135,8 +1144,36 @@ def test_start_review_names_head_and_code_review_is_generic():
 
 def test_start_review_from_comment_has_no_head():
     gh = FakeGitHub()
-    asyncio.run(cg.start(gh, "review", "issue_comment", CODE_REVIEW_EVENT, RUN))
+    asyncio.run(cg.start(gh, "review", "issue_comment", REVIEW_COMMENT_EVENT, RUN))
     assert gh.posted == [("comment", (7, "Reviewing… [run](http://run)"))]
+
+
+def test_start_rejected_review_comment_posts_nothing():
+    gh = FakeGitHub(pr={**SAME_REPO_PR, "head": {"repo": None}})
+    with pytest.raises(SystemExit, match="same-repo"):
+        asyncio.run(cg.start(gh, "review", "issue_comment", REVIEW_COMMENT_EVENT, RUN))
+    assert gh.posted == []
+
+
+@pytest.mark.parametrize(
+    "body,pr,error",
+    [
+        ("/review", {}, None),
+        ("/review\r\n", {}, None),
+        ("/review\nmore text", {}, None),
+        ("  /review  ", {}, None),
+        ("/review foo", {}, "bare"),
+        ("/Review", {}, "bare"),
+        ("/reviewed", {}, "bare"),
+        ("", {}, "bare"),
+        ("/review", {"head": {"repo": {"full_name": "x/r"}}}, "same-repo"),
+        ("/review", {"head": {"repo": None}}, "same-repo"),
+        ("/review", {"user": {"login": "dependabot[bot]"}}, "same-repo"),
+    ],
+)
+def test_review_comment_error(body, pr, error):
+    msg = cg.review_comment_error(body, {**SAME_REPO_PR, **pr})
+    assert msg is None if error is None else error in str(msg)
 
 
 def test_start_prints_only_the_comment_id(capsys):
@@ -1263,6 +1300,7 @@ CODE_REVIEW_EVENT = {
     "repository": {"full_name": "o/r"},
     "issue": {"number": 7, "pull_request": {}},
 }
+REVIEW_COMMENT_EVENT = {**CODE_REVIEW_EVENT, "comment": {"body": "/review"}}
 WRITES_AND_NOTES = {"inline_comment", "reply", "comment", "resolve_thread"} | NOTES
 
 

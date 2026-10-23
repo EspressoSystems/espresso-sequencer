@@ -212,6 +212,7 @@ class GitHub(Protocol):
     async def pr_view(self, pr: int) -> str: ...
     async def issue_view(self, number: int) -> str: ...
     async def head_sha(self, pr: int) -> str: ...
+    async def pr_payload(self, pr: int) -> dict: ...
     async def inline_comment(
         self, pr: int, path: str, line: int, body: str, sha: str
     ) -> None: ...
@@ -339,6 +340,21 @@ def github_error(e: Exception) -> str:
     ]
     parts = [str(resp.status_code), body.get("message", ""), *details]
     return " ".join(p for p in parts if p)[:300]
+
+
+def review_comment_error(body: str, pr: Mapping) -> str | None:
+    words = (body.splitlines() or [""])[0].split()
+    if words != ["/review"]:
+        return f"expected a bare /review, got: {' '.join(words)}"
+    head = pr["head"]["repo"]
+    # Same scope as the PR-open review: the review job may resolve threads.
+    if (
+        head is None
+        or head["full_name"] != pr["base"]["repo"]["full_name"]
+        or "dependabot" in pr["user"]["login"]
+    ):
+        return "/review runs on same-repo, non-Dependabot PRs only; use /code-review"
+    return None
 
 
 def check_body(body: str, secrets: Mapping[str, str]) -> None:
@@ -757,6 +773,12 @@ class GitHubKit:
         )
         return resp.parsed_data.head.sha
 
+    async def pr_payload(self, pr: int) -> dict:
+        resp = await self.gh.arequest(
+            "GET", f"/repos/{self.owner}/{self.name}/pulls/{pr}"
+        )
+        return resp.json()
+
     async def inline_comment(
         self, pr: int, path: str, line: int, body: str, sha: str
     ) -> None:
@@ -835,6 +857,10 @@ async def start(
 ) -> Posted:
     n = target(event).number
     if job == "review":
+        if "pull_request" not in event:
+            err = review_comment_error(event["comment"]["body"], await gh.pr_payload(n))
+            if err:
+                raise SystemExit(f"::error::{err}")
         # A /review comment event has no pull_request: head not known yet.
         sha = (
             f" {event['pull_request']['head']['sha'][:7]}"

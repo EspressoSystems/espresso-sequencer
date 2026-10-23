@@ -33,29 +33,6 @@ jobs:
       comment-id: ${{ steps.start.outputs.comment-id }}
       ref: ${{ steps.ref.outputs.ref }}
     steps:
-      # Here, not in run: a rejected comment must not join run's group and cancel a review.
-      - name: Check /review comment
-        if: inputs.job == 'review' && github.event_name == 'issue_comment'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ github.event.issue.number }}
-          BODY: ${{ github.event.comment.body }}
-        run: |
-          set -euo pipefail
-          read -r cmd extra <<< "$(head -n1 <<< "$BODY" | tr -d '\r')"
-          if [[ "$cmd" != /review || -n "${extra:-}" ]]; then
-            echo "::error::expected a bare /review, got: $cmd ${extra:-}"
-            exit 1
-          fi
-          pr=$(gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" \
-            --json isCrossRepository,author -q '"\(.isCrossRepository) \(.author.login)"')
-          read -r cross author <<< "$pr"
-          # Same scope as the PR-open review: the review job may resolve threads.
-          if [[ "$cross" != false || "$author" == *dependabot* ]]; then
-            echo "::error::/review runs on same-repo, non-Dependabot PRs only; use /code-review"
-            exit 1
-          fi
-
       - name: Resolve ref
         id: ref
         env:
