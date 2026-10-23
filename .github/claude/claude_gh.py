@@ -66,7 +66,9 @@ log = logging.getLogger("claude-gh")
 BUILTIN = ["Read", "Grep", "Glob"]
 # Deny rules need one entry per tool; this keeps /proc/*/environ (tokens) unreadable.
 DISALLOWED = ["Read(//proc/**)", "Grep(//proc/**)", "Glob(//proc/**)"]
-BOTS = {"github-actions", "claude"}
+# Other workflows also post as github-actions; only bodies starting with MARKER are ours.
+# Must match scripts/fetch-pr-team-comments.
+MARKER = "<!-- claude-gh -->"
 WRITES = {"inline_comment", "reply", "comment", "resolve_thread"}
 JOB_WRITES = {
     "review": WRITES,
@@ -98,7 +100,7 @@ READS = {"pr_diff", "pr_view", "issue_view"}
 # In-process bookkeeping: recorded on the Record, never posted as an action.
 NOTES = {"candidate", "verdict"}
 JOB_NOTES = {"review": NOTES, "mention": set(), "code-review": NOTES}
-MAX_BODY = 65536  # GitHub comment limit
+MAX_BODY = 65536 - len(MARKER) - 1  # GitHub comment limit, less the marker line
 TRUNCATED = "\n[truncated]"
 Status = Literal["kept", "wrong", "duplicate"]
 STATUSES = ("kept", "wrong", "duplicate")
@@ -199,6 +201,7 @@ class Job:
 @dataclass(frozen=True)
 class Thread:
     author: str
+    body: str
     repo: str
     number: int
 
@@ -564,8 +567,10 @@ def parse_thread(data: dict[str, Any]) -> Thread:
     if not node or "pullRequest" not in node:
         raise ValueError("id is not a review thread")
     pr = node["pullRequest"]
+    root = node["comments"]["nodes"][0]
     return Thread(
-        node["comments"]["nodes"][0]["author"]["login"],
+        root["author"]["login"],
+        root["body"],
         pr["repository"]["nameWithOwner"],
         pr["number"],
     )
@@ -683,7 +688,7 @@ def make_tools(
         ),
         define(
             "resolve_thread",
-            "Resolve a review thread started by github-actions or claude.",
+            "Resolve a review thread started by claude or by this tool.",
             {"thread_id": str},
             lambda a: add(Resolve(a["thread_id"])),
         ),
@@ -704,6 +709,10 @@ def make_tools(
 
 
 # GitHub implementations
+
+
+def marked(body: str) -> str:
+    return f"{MARKER}\n{body}"
 
 
 class GitHubKit:
@@ -754,7 +763,7 @@ class GitHubKit:
             owner=self.owner,
             repo=self.name,
             pull_number=pr,
-            body=body,
+            body=marked(body),
             commit_id=sha,
             path=path,
             line=line,
@@ -767,24 +776,30 @@ class GitHubKit:
             repo=self.name,
             pull_number=pr,
             comment_id=comment_id,
-            body=body,
+            body=marked(body),
         )
         return Posted(resp.parsed_data.id, review=True)
 
     async def comment(self, number: int, body: str) -> Posted:
         resp = await self.gh.rest.issues.async_create_comment(
-            owner=self.owner, repo=self.name, issue_number=number, body=body
+            owner=self.owner, repo=self.name, issue_number=number, body=marked(body)
         )
         return Posted(resp.parsed_data.id, review=False)
 
     async def edit_comment(self, comment: Posted, body: str) -> None:
         if comment.review:
             await self.gh.rest.pulls.async_update_review_comment(
-                owner=self.owner, repo=self.name, comment_id=comment.id, body=body
+                owner=self.owner,
+                repo=self.name,
+                comment_id=comment.id,
+                body=marked(body),
             )
         else:
             await self.gh.rest.issues.async_update_comment(
-                owner=self.owner, repo=self.name, comment_id=comment.id, body=body
+                owner=self.owner,
+                repo=self.name,
+                comment_id=comment.id,
+                body=marked(body),
             )
 
     async def thread(self, thread_id: str) -> Thread:
@@ -800,7 +815,7 @@ query($id: ID!) {
   node(id: $id) {
     ... on PullRequestReviewThread {
       pullRequest { number repository { nameWithOwner } }
-      comments(first: 1) { nodes { author { login } } }
+      comments(first: 1) { nodes { author { login } body } }
     }
   }
 }"""
@@ -843,7 +858,10 @@ async def check_thread(gh: GitHub, tgt: Target, thread_id: str) -> None:
             f"thread {thread_id} belongs to {thread.repo}#{thread.number}, "
             f"not {tgt.repo}#{tgt.number}"
         )
-    if thread.author not in BOTS:
+    ours = thread.author == "claude" or (
+        thread.author == "github-actions" and thread.body.startswith(MARKER)
+    )
+    if not ours:
         raise ValueError(
             f"thread {thread_id} was started by {thread.author!r}, not resolving"
         )

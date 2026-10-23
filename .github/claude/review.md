@@ -21,8 +21,9 @@ Review whether tests are adequate, not whether they pass.
 
 1. Prior threads. Read `./tmp/pr-review-comments.json`.
    - Skip findings any reviewer already raised.
-   - Own threads: author `github-actions` or `claude`. For each unresolved one: `reply` (comment_id = root comment
-     `databaseId`) on what changed; `resolve_thread` if fixed, explained or answered. Never resolve others' threads.
+   - Own threads: author `claude`, or author `github-actions` with a root body starting with `<!-- claude-gh -->`. For
+     each unresolved one: `reply` (comment_id = root comment `databaseId`) on what changed; `resolve_thread` if fixed,
+     explained or answered. Never resolve others' threads.
 2. Map the change: what it touches, what it claims to fix or add.
 3. Hunks. For each hunk, Read the whole enclosing function. Per line: which input, state, ordering or concurrency makes
    it wrong: wrong conditions or arithmetic, panics reachable from external input, work that blocks or waits on

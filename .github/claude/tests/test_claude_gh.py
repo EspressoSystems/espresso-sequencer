@@ -154,11 +154,13 @@ def text(out: dict) -> str:
     return out["content"][0]["text"]
 
 
-def thread(author: str = "claude", repo: str = "o/r", number: int = 7) -> dict:
+def thread(
+    author: str = "claude", repo: str = "o/r", number: int = 7, body: str = "b"
+) -> dict:
     return {
         "node": {
             "pullRequest": {"number": number, "repository": {"nameWithOwner": repo}},
-            "comments": {"nodes": [{"author": {"login": author}}]},
+            "comments": {"nodes": [{"author": {"login": author}, "body": body}]},
         }
     }
 
@@ -730,7 +732,7 @@ def test_parse_args_shas_only_and_always_for_code_review():
 
 
 def test_parse_thread():
-    assert cg.parse_thread(thread()) == cg.Thread("claude", "o/r", 7)
+    assert cg.parse_thread(thread()) == cg.Thread("claude", "b", "o/r", 7)
 
 
 @pytest.mark.parametrize("data", [{"node": {}}, {"node": None}, {"node": {"id": "x"}}])
@@ -862,9 +864,12 @@ def test_apply_notes_diff_unavailable():
     assert gh.edits == [(STATUS, body)]
 
 
-@pytest.mark.parametrize("author", ["claude", "github-actions"])
-def test_resolve_own_thread(author):
-    gh = FakeGitHub(threads={"T_1": thread(author)})
+@pytest.mark.parametrize(
+    "author,body",
+    [("claude", "b"), ("github-actions", f"{cg.MARKER}\nb")],
+)
+def test_resolve_own_thread(author, body):
+    gh = FakeGitHub(threads={"T_1": thread(author, body=body)})
     assert do_apply(gh, record([cg.Resolve("T_1")])) == 0
     assert gh.resolved == ["T_1"]
 
@@ -955,6 +960,8 @@ def test_kind_not_allowed_is_skipped(name, action, line):
     "other,match",
     [
         (thread("alice"), "alice"),
+        (thread("github-actions", body="Test log"), "github-actions"),
+        (thread("github-actions", body=f"x\n{cg.MARKER}"), "github-actions"),
         (thread(number=8), "belongs to"),
         (thread(repo="o/x"), "belongs to"),
         ({"node": {}}, "not a review thread"),
@@ -1487,3 +1494,8 @@ def test_amain_apply_missing_record(tmp_path):
     argv = apply_argv("review", tmp_path / "absent.json")
     assert amain(tmp_path, argv, "pull_request", REVIEW_EVENT, gh) == 1
     assert gh.edits[0][1].startswith("Review failed: no actions file")
+
+
+def test_marked_body_fits_github_limit():
+    body = cg.marked("x" * cg.MAX_BODY)
+    assert body.startswith(cg.MARKER) and len(body) == 65536
