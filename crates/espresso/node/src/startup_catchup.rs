@@ -21,6 +21,11 @@
 //!    catchup is skipped. With peers, startup fails if none reports a block height.
 //!
 //! The anchor and the peer block heights are read concurrently. All stages share one deadline.
+//!
+//! Called from validator boot (`SequencerContext::init`), follower boot (`init_with_source`) and the
+//! follower mid-run skip-ahead (`Follower::catch_up_skipped_epochs`, without metrics).
+//! `init_node_state` runs `reload_stake` first. The returned current epoch `N` goes to
+//! `coordinator_network.apply_epoch`, which dials the cliquenet window before consensus starts.
 
 use std::{collections::BTreeSet, ops::RangeInclusive, time::Duration};
 
@@ -51,15 +56,6 @@ use vec1::Vec1;
 /// Log target of the boot-time milestones.
 const TARGET: &str = "announce::bootstrap";
 
-/// First wait between two retries, doubled up to `MAX_BACKOFF`.
-const INITIAL_BACKOFF: Duration = Duration::from_secs(1);
-/// Longest wait between two retries.
-const MAX_BACKOFF: Duration = Duration::from_secs(60);
-/// Epochs past `epoch(F)` that the median tip epoch may reach, `F` being the finalized header.
-const TARGET_SLACK: u64 = 2;
-/// Passes over the peers when reading their block heights, with backoff in between.
-const PEER_HEIGHT_ATTEMPTS: usize = 3;
-
 /// A once-per-boot milestone: INFO on the announce target when `$metrics` is `Some` (the call at
 /// boot), debug otherwise.
 macro_rules! milestone {
@@ -70,38 +66,6 @@ macro_rules! milestone {
             tracing::debug!($($arg)+)
         }
     };
-}
-
-/// Time bounds of the startup catchup.
-#[derive(Clone, Copy, Debug)]
-pub struct BootstrapParams {
-    /// Bound on a single peer catchup step, light-client catchup fetch, anchor read or block height
-    /// read.
-    pub step_timeout: Duration,
-    /// How long light-client catchup and peer catchup may keep retrying, together, before startup
-    /// gives up.
-    pub deadline: Duration,
-}
-
-/// Gauges of the boot-time catchup, in epochs.
-pub(crate) struct BootstrapMetrics {
-    /// Current epoch `N` once the window is ready.
-    window_epoch: Box<dyn Gauge>,
-    /// Epoch of the light-client finalized header `F`.
-    anchor_epoch: Box<dyn Gauge>,
-    /// Epoch of the median peer's last block, before the cap.
-    peer_target_epoch: Box<dyn Gauge>,
-}
-
-impl BootstrapMetrics {
-    /// Register the gauges with `metrics`.
-    pub fn new(metrics: &dyn Metrics) -> Self {
-        Self {
-            window_epoch: metrics.create_gauge("bootstrap_window_epoch".into(), None),
-            anchor_epoch: metrics.create_gauge("bootstrap_anchor_epoch".into(), None),
-            peer_target_epoch: metrics.create_gauge("bootstrap_peer_target_epoch".into(), None),
-        }
-    }
 }
 
 /// Populate the membership with stake tables for every epoch up through `N+1` (where `N` is the
@@ -150,6 +114,38 @@ where
         "epoch window ready",
     );
     Ok(current)
+}
+
+/// Time bounds of the startup catchup.
+#[derive(Clone, Copy, Debug)]
+pub struct BootstrapParams {
+    /// Bound on a single peer catchup step, light-client catchup fetch, anchor read or block height
+    /// read.
+    pub step_timeout: Duration,
+    /// How long light-client catchup and peer catchup may keep retrying, together, before startup
+    /// gives up.
+    pub deadline: Duration,
+}
+
+/// Gauges of the boot-time catchup, in epochs.
+pub(crate) struct BootstrapMetrics {
+    /// Current epoch `N` once the window is ready.
+    window_epoch: Box<dyn Gauge>,
+    /// Epoch of the light-client finalized header `F`.
+    anchor_epoch: Box<dyn Gauge>,
+    /// Epoch of the median peer's last block, before the cap.
+    peer_target_epoch: Box<dyn Gauge>,
+}
+
+impl BootstrapMetrics {
+    /// Register the gauges with `metrics`.
+    pub fn new(metrics: &dyn Metrics) -> Self {
+        Self {
+            window_epoch: metrics.create_gauge("bootstrap_window_epoch".into(), None),
+            anchor_epoch: metrics.create_gauge("bootstrap_anchor_epoch".into(), None),
+            peer_target_epoch: metrics.create_gauge("bootstrap_peer_target_epoch".into(), None),
+        }
+    }
 }
 
 /// One `QueryServiceClient` per URL, to read block heights and light-client proofs from.
@@ -219,46 +215,6 @@ impl<C: Client> Bootstrap<'_, C> {
         Ok(point)
     }
 
-    /// The block heights the peers report, each read bounded by `step_timeout` and the deadline.
-    ///
-    /// Empty only without peers. With peers, up to `PEER_HEIGHT_ATTEMPTS` passes run with backoff
-    /// until one peer answers. The last pass, or the deadline, fails the call.
-    async fn read_peer_block_heights(&self) -> anyhow::Result<Vec<u64>> {
-        if self.peers.is_empty() {
-            return Ok(vec![]);
-        }
-        let mut backoff = INITIAL_BACKOFF;
-        for attempt in 1..=PEER_HEIGHT_ATTEMPTS {
-            let remaining = self.deadline.saturating_duration_since(Instant::now());
-            ensure!(
-                !remaining.is_zero(),
-                "bootstrap deadline exceeded while reading the peer block heights: no state peer \
-                 reported a block height"
-            );
-            let bound = self.params.step_timeout.min(remaining);
-            let heights = join_all(
-                self.peers
-                    .iter()
-                    .map(|(_, peer)| timeout(bound, peer.block_height())),
-            )
-            .await;
-            let heights: Vec<u64> = heights
-                .into_iter()
-                .filter_map(|height| height.ok()?.ok())
-                .collect();
-            if !heights.is_empty() {
-                return Ok(heights);
-            }
-            tracing::warn!(attempt, "bootstrap: no state peer reported a block height");
-            if attempt < PEER_HEIGHT_ATTEMPTS {
-                let remaining = self.deadline.saturating_duration_since(Instant::now());
-                sleep(backoff.min(remaining)).await;
-                backoff = (backoff * 2).min(MAX_BACKOFF);
-            }
-        }
-        bail!("no state peer reported a block height after {PEER_HEIGHT_ATTEMPTS} attempts")
-    }
-
     /// Plan from `point`, run light-client catchup and peer catchup, and prepare the window.
     ///
     /// A light-client catchup slower than `step_timeout` leaves the block heights stale: they are
@@ -288,169 +244,10 @@ impl<C: Client> Bootstrap<'_, C> {
         };
         self.prepare_window(point.first_epoch, highest_epoch).await
     }
-
-    /// Log `plan` as a milestone, warn when the median tip epoch is capped, and set the gauge.
-    fn log_plan(&self, point: &StartingPoint, plan: &CatchupPlan) {
-        let median_tip_epoch = point.median_tip_epoch();
-        if let (Some(metrics), Some(epoch)) = (self.metrics, median_tip_epoch) {
-            metrics.peer_target_epoch.set(epoch.u64() as usize);
-        }
-        let capped = point
-            .peer_catchup()
-            .zip(median_tip_epoch)
-            .filter(|(catchup, uncapped)| catchup.median_tip_epoch < *uncapped);
-        if let Some((catchup, uncapped)) = capped {
-            tracing::warn!(
-                peer_tip_epoch = %uncapped,
-                median_tip_epoch = %catchup.median_tip_epoch,
-                "bootstrap: median peer tip past the light-client epochs; capping it"
-            );
-        }
-        milestone!(
-            self.metrics,
-            light_client_epochs = ?plan.light_client_catchup.as_ref().map(|c| epoch_numbers(&c.missing_epochs)),
-            start = %plan.highest_held_epoch,
-            median_tip_epoch = ?plan.peer_catchup.map(|c| c.median_tip_epoch.u64()),
-            highest_tip_epoch = ?plan.peer_catchup.map(|c| c.highest_tip_epoch.u64()),
-            "catchup plan",
-        );
-    }
-
-    /// Add the epoch roots light-client catchup fetched, from the peers in turn until one serves.
-    ///
-    /// Only the fetch is bounded by `step_timeout`: adding the roots can scan L1 events for longer,
-    /// and cancelling it would restart that scan.
-    async fn catch_up_from_light_client(&self, catchup: &LightClientCatchup) -> anyhow::Result<()> {
-        ensure!(
-            !self.peers.is_empty(),
-            "light-client catchup at finalized height {} needs a state peer serving the \
-             light-client module",
-            catchup.finalized_height
-        );
-        retry(
-            self.deadline,
-            "light-client catchup",
-            self.peers.len(),
-            |attempt, remaining| async move {
-                let (url, peer) = &self.peers[attempt % self.peers.len()];
-                let headers = timeout(
-                    self.params.step_timeout.min(remaining),
-                    catchup.fetch_roots(peer, self.blocks_per_epoch),
-                )
-                .await
-                .context("attempt timed out")?
-                .with_context(|| format!("peer {url}"))?;
-                timeout_at(self.deadline, async {
-                    for header in headers {
-                        let height = header.height();
-                        self.coordinator
-                            .add_epoch_root(header)
-                            .await
-                            .map_err(|err| anyhow!("adding the epoch root at {height}: {err}"))?;
-                    }
-                    anyhow::Ok(())
-                })
-                .await
-                .context("adding the epoch roots timed out")?
-            },
-        )
-        .await
-    }
-
-    /// Derive the stake table of one epoch at a time above `start`, the highest epoch with an epoch
-    /// root. Returns the highest epoch reached when peer catchup ends.
-    ///
-    /// Steps `catchup` requires are retried until the deadline. Above them, the first step peers
-    /// cannot serve marks the live tip, and reaching the highest tip epoch ends peer catchup.
-    async fn catch_up_from_peers(
-        &self,
-        start: EpochNumber,
-        catchup: &PeerCatchup,
-    ) -> anyhow::Result<EpochNumber> {
-        let coordinator = self.coordinator;
-        let step_timeout = self.params.step_timeout;
-        let mut highest = start;
-        while !catchup.reached(highest) {
-            let next = highest + 1;
-            let derive = move |_, bound: Duration| async move {
-                let bound = step_timeout.min(bound);
-                let step = timeout(bound, coordinator.wait_for_stake_table(next));
-                step.await
-                    .with_context(|| format!("timed out after {bound:?}"))?
-                    .map(drop)
-                    .map_err(|err| anyhow!("{err:#}"))
-            };
-            let required = catchup.required(next);
-            let step = if required {
-                let what =
-                    format!("peer catchup of epoch {next} up to the epoch after the median tip");
-                retry(self.deadline, &what, 1, derive).await
-            } else {
-                derive(0, step_timeout).await
-            };
-            match step {
-                Ok(()) => {
-                    tracing::debug!(%next, "bootstrap: derived stake table from peers");
-                    highest = next;
-                },
-                Err(err) if required => return Err(err),
-                Err(err) if err.is::<Elapsed>() => {
-                    tracing::warn!(%next, %err, "bootstrap: peer catchup timed out; proceeding with a possibly stale epoch window");
-                    break;
-                },
-                Err(err) => {
-                    milestone!(self.metrics, %next, %err, "peer catchup: at the live tip");
-                    break;
-                },
-            }
-        }
-        Ok(highest)
-    }
-
-    /// Check the stake tables of `highest_epoch - 1` and `highest_epoch` and prepare the DRBs of
-    /// `N-1`, `N` and `N+1`. Returns the current epoch `N = highest_epoch - 1`.
-    async fn prepare_window(
-        &self,
-        first_epoch: EpochNumber,
-        highest_epoch: EpochNumber,
-    ) -> anyhow::Result<EpochNumber> {
-        // `highest_epoch` corresponds to N+1 (the leaf at root_block_in_epoch(N-1) is
-        // the last finalized one peers can serve). So current epoch N = highest_epoch - 1.
-        let current = EpochNumber::new(highest_epoch.saturating_sub(1));
-        let membership = self.coordinator.membership();
-        ensure!(
-            membership.snapshot(current).is_some(),
-            "missing stake table for current epoch {current} after bootstrap"
-        );
-        ensure!(
-            membership.snapshot(highest_epoch).is_some(),
-            "missing stake table for next epoch {highest_epoch} after bootstrap"
-        );
-        // `current - 1` is skipped when seeded from genesis, which already has its DRB.
-        let previous = current.checked_sub(1).filter(|e| *e > *first_epoch + 1);
-        for epoch in previous.into_iter().chain([*current, *highest_epoch]) {
-            self.prepare_drb(EpochNumber::new(epoch)).await;
-        }
-        Ok(current)
-    }
-
-    /// Make the DRB of `epoch` available before consensus starts. A failure only delays it:
-    /// consensus retries through reactive catchup.
-    async fn prepare_drb(&self, epoch: EpochNumber) {
-        // A missing DRB starts a catchup that ends in `drb_ready`; its error is the start notice.
-        if self.coordinator.membership_for_epoch(Some(epoch)).is_ok() {
-            return;
-        }
-        let ready = self.coordinator.wait_for_catchup(epoch);
-        match timeout(self.params.step_timeout, ready).await {
-            Ok(Ok(_)) => tracing::debug!(%epoch, "bootstrap: DRB ready"),
-            Ok(Err(err)) => {
-                tracing::warn!(%epoch, %err, "bootstrap: DRB not ready; consensus will catch up")
-            },
-            Err(_) => tracing::warn!(%epoch, "bootstrap: DRB timed out; consensus will catch up"),
-        }
-    }
 }
+
+/// Epochs past `epoch(F)` that the median tip epoch may reach, `F` being the finalized header.
+const TARGET_SLACK: u64 = 2;
 
 /// What the node knows before any catchup runs.
 #[derive(Clone, Debug, PartialEq)]
@@ -642,6 +439,56 @@ impl LightClientCatchup {
     }
 }
 
+impl<C: Client> Bootstrap<'_, C> {
+    /// Add the epoch roots light-client catchup fetched, from the peers in turn until one serves.
+    ///
+    /// Only the fetch is bounded by `step_timeout`: adding the roots can scan L1 events for longer,
+    /// and cancelling it would restart that scan.
+    async fn catch_up_from_light_client(&self, catchup: &LightClientCatchup) -> anyhow::Result<()> {
+        ensure!(
+            !self.peers.is_empty(),
+            "light-client catchup at finalized height {} needs a state peer serving the \
+             light-client module",
+            catchup.finalized_height
+        );
+        retry(
+            self.deadline,
+            "light-client catchup",
+            self.peers.len(),
+            |attempt, remaining| async move {
+                let (url, peer) = &self.peers[attempt % self.peers.len()];
+                let headers = timeout(
+                    self.params.step_timeout.min(remaining),
+                    catchup.fetch_roots(peer, self.blocks_per_epoch),
+                )
+                .await
+                .context("attempt timed out")?
+                .with_context(|| format!("peer {url}"))?;
+                timeout_at(self.deadline, async {
+                    for header in headers {
+                        let height = header.height();
+                        self.coordinator
+                            .add_epoch_root(header)
+                            .await
+                            .map_err(|err| anyhow!("adding the epoch root at {height}: {err}"))?;
+                    }
+                    anyhow::Ok(())
+                })
+                .await
+                .context("adding the epoch roots timed out")?
+            },
+        )
+        .await
+    }
+}
+
+/// First wait between two retries, doubled up to `MAX_BACKOFF`.
+const INITIAL_BACKOFF: Duration = Duration::from_secs(1);
+/// Longest wait between two retries.
+const MAX_BACKOFF: Duration = Duration::from_secs(60);
+/// Passes over the peers when reading their block heights, with backoff in between.
+const PEER_HEIGHT_ATTEMPTS: usize = 3;
+
 /// Peer catchup: the epochs to derive from the peers' chain tips.
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct PeerCatchup {
@@ -662,6 +509,173 @@ impl PeerCatchup {
     /// Whether peer catchup ends with `highest_held` as the highest epoch reached.
     fn reached(&self, highest_held: EpochNumber) -> bool {
         highest_held > self.highest_tip_epoch
+    }
+}
+
+impl<C: Client> Bootstrap<'_, C> {
+    /// The block heights the peers report, each read bounded by `step_timeout` and the deadline.
+    ///
+    /// Empty only without peers. With peers, up to `PEER_HEIGHT_ATTEMPTS` passes run with backoff
+    /// until one peer answers. The last pass, or the deadline, fails the call.
+    async fn read_peer_block_heights(&self) -> anyhow::Result<Vec<u64>> {
+        if self.peers.is_empty() {
+            return Ok(vec![]);
+        }
+        let mut backoff = INITIAL_BACKOFF;
+        for attempt in 1..=PEER_HEIGHT_ATTEMPTS {
+            let remaining = self.deadline.saturating_duration_since(Instant::now());
+            ensure!(
+                !remaining.is_zero(),
+                "bootstrap deadline exceeded while reading the peer block heights: no state peer \
+                 reported a block height"
+            );
+            let bound = self.params.step_timeout.min(remaining);
+            let heights = join_all(
+                self.peers
+                    .iter()
+                    .map(|(_, peer)| timeout(bound, peer.block_height())),
+            )
+            .await;
+            let heights: Vec<u64> = heights
+                .into_iter()
+                .filter_map(|height| height.ok()?.ok())
+                .collect();
+            if !heights.is_empty() {
+                return Ok(heights);
+            }
+            tracing::warn!(attempt, "bootstrap: no state peer reported a block height");
+            if attempt < PEER_HEIGHT_ATTEMPTS {
+                let remaining = self.deadline.saturating_duration_since(Instant::now());
+                sleep(backoff.min(remaining)).await;
+                backoff = (backoff * 2).min(MAX_BACKOFF);
+            }
+        }
+        bail!("no state peer reported a block height after {PEER_HEIGHT_ATTEMPTS} attempts")
+    }
+
+    /// Derive the stake table of one epoch at a time above `start`, the highest epoch with an epoch
+    /// root. Returns the highest epoch reached when peer catchup ends.
+    ///
+    /// Steps `catchup` requires are retried until the deadline. Above them, the first step peers
+    /// cannot serve marks the live tip, and reaching the highest tip epoch ends peer catchup.
+    async fn catch_up_from_peers(
+        &self,
+        start: EpochNumber,
+        catchup: &PeerCatchup,
+    ) -> anyhow::Result<EpochNumber> {
+        let coordinator = self.coordinator;
+        let step_timeout = self.params.step_timeout;
+        let mut highest = start;
+        while !catchup.reached(highest) {
+            let next = highest + 1;
+            let derive = move |_, bound: Duration| async move {
+                let bound = step_timeout.min(bound);
+                let step = timeout(bound, coordinator.wait_for_stake_table(next));
+                step.await
+                    .with_context(|| format!("timed out after {bound:?}"))?
+                    .map(drop)
+                    .map_err(|err| anyhow!("{err:#}"))
+            };
+            let required = catchup.required(next);
+            let step = if required {
+                let what =
+                    format!("peer catchup of epoch {next} up to the epoch after the median tip");
+                retry(self.deadline, &what, 1, derive).await
+            } else {
+                derive(0, step_timeout).await
+            };
+            match step {
+                Ok(()) => {
+                    tracing::debug!(%next, "bootstrap: derived stake table from peers");
+                    highest = next;
+                },
+                Err(err) if required => return Err(err),
+                Err(err) if err.is::<Elapsed>() => {
+                    tracing::warn!(%next, %err, "bootstrap: peer catchup timed out; proceeding with a possibly stale epoch window");
+                    break;
+                },
+                Err(err) => {
+                    milestone!(self.metrics, %next, %err, "peer catchup: at the live tip");
+                    break;
+                },
+            }
+        }
+        Ok(highest)
+    }
+}
+
+impl<C: Client> Bootstrap<'_, C> {
+    /// Check the stake tables of `highest_epoch - 1` and `highest_epoch` and prepare the DRBs of
+    /// `N-1`, `N` and `N+1`. Returns the current epoch `N = highest_epoch - 1`.
+    async fn prepare_window(
+        &self,
+        first_epoch: EpochNumber,
+        highest_epoch: EpochNumber,
+    ) -> anyhow::Result<EpochNumber> {
+        // `highest_epoch` corresponds to N+1 (the leaf at root_block_in_epoch(N-1) is
+        // the last finalized one peers can serve). So current epoch N = highest_epoch - 1.
+        let current = EpochNumber::new(highest_epoch.saturating_sub(1));
+        let membership = self.coordinator.membership();
+        ensure!(
+            membership.snapshot(current).is_some(),
+            "missing stake table for current epoch {current} after bootstrap"
+        );
+        ensure!(
+            membership.snapshot(highest_epoch).is_some(),
+            "missing stake table for next epoch {highest_epoch} after bootstrap"
+        );
+        // `current - 1` is skipped when seeded from genesis, which already has its DRB.
+        let previous = current.checked_sub(1).filter(|e| *e > *first_epoch + 1);
+        for epoch in previous.into_iter().chain([*current, *highest_epoch]) {
+            self.prepare_drb(EpochNumber::new(epoch)).await;
+        }
+        Ok(current)
+    }
+
+    /// Make the DRB of `epoch` available before consensus starts. A failure only delays it:
+    /// consensus retries through reactive catchup.
+    async fn prepare_drb(&self, epoch: EpochNumber) {
+        // A missing DRB starts a catchup that ends in `drb_ready`; its error is the start notice.
+        if self.coordinator.membership_for_epoch(Some(epoch)).is_ok() {
+            return;
+        }
+        let ready = self.coordinator.wait_for_catchup(epoch);
+        match timeout(self.params.step_timeout, ready).await {
+            Ok(Ok(_)) => tracing::debug!(%epoch, "bootstrap: DRB ready"),
+            Ok(Err(err)) => {
+                tracing::warn!(%epoch, %err, "bootstrap: DRB not ready; consensus will catch up")
+            },
+            Err(_) => tracing::warn!(%epoch, "bootstrap: DRB timed out; consensus will catch up"),
+        }
+    }
+}
+
+impl<C: Client> Bootstrap<'_, C> {
+    /// Log `plan` as a milestone, warn when the median tip epoch is capped, and set the gauge.
+    fn log_plan(&self, point: &StartingPoint, plan: &CatchupPlan) {
+        let median_tip_epoch = point.median_tip_epoch();
+        if let (Some(metrics), Some(epoch)) = (self.metrics, median_tip_epoch) {
+            metrics.peer_target_epoch.set(epoch.u64() as usize);
+        }
+        let capped = point
+            .peer_catchup()
+            .zip(median_tip_epoch)
+            .filter(|(catchup, uncapped)| catchup.median_tip_epoch < *uncapped);
+        if let Some((catchup, uncapped)) = capped {
+            tracing::warn!(
+                peer_tip_epoch = %uncapped,
+                median_tip_epoch = %catchup.median_tip_epoch,
+                "bootstrap: median peer tip past the light-client epochs; capping it"
+            );
+        }
+        milestone!(
+            self.metrics,
+            light_client_epochs = ?plan.light_client_catchup.as_ref().map(|c| epoch_numbers(&c.missing_epochs)),
+            start = %plan.highest_held_epoch,
+            median_tip_epoch = ?plan.peer_catchup.map(|c| c.median_tip_epoch.u64()),
+            highest_tip_epoch = ?plan.peer_catchup.map(|c| c.highest_tip_epoch.u64()),
+            "catchup plan",
+        );
     }
 }
 
