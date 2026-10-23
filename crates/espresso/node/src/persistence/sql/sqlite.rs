@@ -1,6 +1,6 @@
 //! Persistence on an embedded SQLite file.
 
-use std::{path::Path, time::Duration};
+use std::path::Path;
 
 use anyhow::Context as _;
 use hotshot_query_service::{data_source::storage::sql::sqlite as qs, include_migrations};
@@ -63,23 +63,6 @@ impl BackendOptions for qs::Db {
         Ok(Some(
             storage_probe::probe(sqlite_probe_dir(&path), pragmas).await?,
         ))
-    }
-}
-
-impl From<SqliteOptions> for Config {
-    fn from(opt: SqliteOptions) -> Self {
-        let mut cfg = Config::default();
-
-        if let Some(path) = opt.path {
-            cfg = cfg.db_path(path);
-        }
-
-        cfg = cfg.max_connections(20);
-        cfg = cfg.idle_connection_timeout(Duration::from_secs(120));
-        cfg = cfg.connection_timeout(Duration::from_secs(10240));
-        cfg = cfg.slow_statement_threshold(Duration::from_secs(2));
-        cfg = cfg.statement_timeout(Duration::from_secs(600));
-        cfg
     }
 }
 

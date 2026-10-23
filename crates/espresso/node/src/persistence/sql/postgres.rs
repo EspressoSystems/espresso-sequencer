@@ -1,7 +1,5 @@
 //! Persistence on a Postgres server.
 
-use std::time::Duration;
-
 use hotshot_query_service::{
     data_source::storage::sql::postgres::{self as qs, set_no_deferrable_on_read},
     include_migrations,
@@ -75,46 +73,6 @@ impl BackendOptions for qs::Db {
         _opt: &SqlOptions,
     ) -> anyhow::Result<Option<StorageProbe>> {
         Ok(None)
-    }
-}
-
-impl From<PostgresOptions> for Config {
-    fn from(opt: PostgresOptions) -> Self {
-        let mut cfg = Config::default();
-
-        if let Some(host) = opt.host {
-            cfg = cfg.host(host);
-        }
-
-        if let Some(port) = opt.port {
-            cfg = cfg.port(port);
-        }
-
-        if let Some(database) = &opt.database {
-            cfg = cfg.database(database);
-        }
-
-        if let Some(user) = &opt.user {
-            cfg = cfg.user(user);
-        }
-
-        if let Some(password) = &opt.password {
-            cfg = cfg.password(password);
-        }
-
-        if opt.use_tls {
-            cfg = cfg.tls();
-        }
-
-        cfg = cfg.max_connections(20);
-        cfg = cfg.idle_connection_timeout(Duration::from_secs(120));
-        cfg = cfg.connection_timeout(Duration::from_secs(10240));
-        cfg = cfg.slow_statement_threshold(Duration::from_secs(1));
-        cfg = cfg.statement_timeout(Duration::from_secs(600)); // 10 minutes default
-
-        set_no_deferrable_on_read(opt.no_deferrable);
-
-        cfg
     }
 }
 
