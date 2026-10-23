@@ -698,6 +698,14 @@ impl Transaction<Write> {
     }
 }
 
+#[cfg(test)]
+#[async_trait]
+impl crate::testing::consensus::TestTransaction for Transaction<Write> {
+    async fn save_pruned_height(&mut self, height: u64) -> anyhow::Result<()> {
+        Transaction::<Write>::save_pruned_height(self, height).await
+    }
+}
+
 impl<Types> UpdateAvailabilityStorage<Types> for Transaction<Write>
 where
     Types: NodeType,

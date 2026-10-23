@@ -2131,9 +2131,28 @@ where
 #[cfg(any(test, feature = "testing"))]
 pub(crate) mod impl_testable_data_source {
 
+    use hotshot_query_service::{
+        availability::LeafQueryData,
+        data_source::{
+            Transaction as _,
+            storage::{
+                MerklizedStateHeightStorage as _, SerializableRetry as _,
+                UpdateAvailabilityStorage as _, pruning::PrunedHeightStorage as _,
+                sql::StorageConnectionType,
+            },
+        },
+        merklized_state::UpdateStateData,
+        serializable_retry,
+    };
+
     pub(crate) use super::super::persistence::tmp_options;
     use super::{super::qs::testing::TmpDb, *};
-    use crate::api::{self, data_source::testing::TestableSequencerDataSource};
+    use crate::api::{
+        self,
+        data_source::testing::{
+            DeferredMigration, TestableSequencerDataSource, TestableSqlDataSource,
+        },
+    };
 
     #[async_trait]
     impl TestableSequencerDataSource for DataSource {
@@ -2158,6 +2177,171 @@ pub(crate) mod impl_testable_data_source {
 
         fn options(storage: &Self::Storage, opt: api::Options) -> api::Options {
             opt.query_sql(Query::default(), tmp_options(storage))
+        }
+    }
+
+    #[async_trait]
+    impl TestableSqlDataSource for DataSource {
+        type SqlStorage = SqlStorage;
+
+        fn tmp_options(storage: &Self::Storage) -> SqlOptions {
+            tmp_options(storage)
+        }
+
+        fn sql_persistence_options(opt: SqlOptions) -> Self::Options {
+            Options::try_from(opt).unwrap()
+        }
+
+        async fn connect(
+            opt: &SqlOptions,
+            connection_type: StorageConnectionType,
+        ) -> anyhow::Result<SqlStorage> {
+            Ok(SqlStorage::connect(Config::try_from(opt)?, connection_type).await?)
+        }
+
+        async fn local_block_height(db: &SqlStorage) -> anyhow::Result<u64> {
+            let mut tx = db.read().await?;
+            Ok(NodeStorage::<SeqTypes>::block_height(&mut tx).await? as u64)
+        }
+
+        // Read in this order because every move of the pruned height, up by a batch or down by
+        // the startup repair, lands below the head, and the head only grows, so a head read
+        // after the pruned height is always above it.
+        async fn state_heights(db: &SqlStorage) -> (Option<u64>, u64) {
+            let mut tx = db.read().await.unwrap();
+            let pruned = tx.load_state_pruned_height().await.unwrap();
+            let head = tx.get_last_state_height().await.unwrap() as u64;
+            (pruned, head)
+        }
+
+        async fn insert_leaf(
+            db: &SqlStorage,
+            leaf: &LeafQueryData<SeqTypes>,
+        ) -> anyhow::Result<()> {
+            let mut tx = db.write().await?;
+            tx.insert_leaf(leaf).await?;
+            tx.commit().await
+        }
+
+        async fn set_last_state_height(db: &SqlStorage, height: u64) -> anyhow::Result<()> {
+            let mut tx = db.write().await?;
+            UpdateStateData::<SeqTypes, BlockMerkleTree, { BlockMerkleTree::ARITY }>::set_last_state_height(
+                &mut tx,
+                height as usize,
+            )
+            .await?;
+            tx.commit().await
+        }
+
+        // Id 2 is the state pruned height.
+        async fn stamp_state_pruned_height(db: &SqlStorage, height: u64) -> anyhow::Result<()> {
+            let mut tx = db.write().await?;
+            tx.upsert(
+                "pruned_height",
+                ["id", "last_height"],
+                ["id"],
+                [(2i32, height as i64)],
+            )
+            .await?;
+            tx.commit().await
+        }
+
+        // The node may be writing new blocks meanwhile, so a serialization conflict is retried.
+        // Id 1 is the data pruned height.
+        async fn prune_data_to(db: &SqlStorage, pruned: u64) -> anyhow::Result<()> {
+            serializable_retry!(db, || async {
+                let mut tx = db.write().await?;
+                tx.upsert(
+                    "pruned_height",
+                    ["id", "last_height"],
+                    ["id"],
+                    [(1i32, pruned as i64)],
+                )
+                .await?;
+                for statement in [
+                    "DELETE FROM transactions WHERE block_height <= $1",
+                    "DELETE FROM leaf2 WHERE height <= $1",
+                    "DELETE FROM header WHERE height <= $1",
+                ] {
+                    sqlx::query(statement)
+                        .bind(pruned as i64)
+                        .execute(tx.as_mut())
+                        .await?;
+                }
+                tx.commit().await
+            })
+            .await
+        }
+
+        async fn delete_data_between(db: &SqlStorage, from: u64, to: u64) -> anyhow::Result<()> {
+            let mut tx = db.write().await?;
+            for statement in [
+                "DELETE FROM transactions WHERE block_height > $1 AND block_height <= $2",
+                "DELETE FROM leaf2 WHERE height > $1 AND height <= $2",
+                "DELETE FROM header WHERE height > $1 AND height <= $2",
+            ] {
+                sqlx::query(statement)
+                    .bind(from as i64)
+                    .bind(to as i64)
+                    .execute(tx.as_mut())
+                    .await?;
+            }
+            tx.commit().await
+        }
+
+        async fn count_leaves_up_to(db: &SqlStorage, height: u64) -> anyhow::Result<i64> {
+            let mut tx = db.read().await?;
+            Ok(
+                sqlx::query_scalar("SELECT count(*) FROM leaf2 WHERE height <= $1")
+                    .bind(height as i64)
+                    .fetch_one(tx.as_mut())
+                    .await?,
+            )
+        }
+
+        async fn insert_deferred_migration(
+            db: &SqlStorage,
+            migration: DeferredMigration,
+        ) -> anyhow::Result<()> {
+            let DeferredMigration {
+                name,
+                started_at,
+                completed_at,
+                last_offset,
+            } = migration;
+            let mut tx = db.write().await?;
+            sqlx::query(
+                "INSERT INTO deferred_migrations (name, started_at, completed_at, last_offset)
+                 VALUES ($1, $2, $3, $4)",
+            )
+            .bind(name)
+            .bind(started_at)
+            .bind(completed_at)
+            .bind(last_offset)
+            .execute(tx.as_mut())
+            .await?;
+            tx.commit().await
+        }
+
+        async fn reconstruct_state(
+            db: &SqlStorage,
+            instance: &NodeState,
+            from_height: u64,
+            to_view: ViewNumber,
+            fee_accounts: &[FeeAccount],
+            reward_accounts: &[RewardAccountV2],
+        ) -> anyhow::Result<(ValidatedState, Leaf2)> {
+            let mut tx = db.read().await?;
+            reconstruct_state(
+                instance,
+                db,
+                &mut tx,
+                from_height,
+                to_view,
+                fee_accounts,
+                reward_accounts,
+            )
+            .await
         }
     }
 }
