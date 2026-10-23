@@ -13,7 +13,7 @@ default:
 
 # Release binaries the benchmark network runs; postgres and sqlite builds need separate invocations.
 build:
-    cd {{quote(repo_root)}} && cargo build --locked --release -p espresso-node --bin espresso-node --bin orchestrator --bin state-relay-server --bin deploy
+    cd {{quote(repo_root)}} && cargo build --locked --release -p espresso-node --bin espresso-node --bin orchestrator --bin state-relay-server -p espresso-deploy --bin deploy
     cd {{quote(repo_root)}} && cargo build --locked --release -p espresso-node-sqlite
 
 # AWS harness: plan|up|run|down|status|list|collect|render|destroy|prune|publish; `just bench aws --help`, README.md.

@@ -17,7 +17,6 @@ use anyhow::Context;
 use async_trait::async_trait;
 use backon::{BackoffBuilder, ExponentialBuilder};
 use chrono::Utc;
-#[cfg(not(feature = "embedded-db"))]
 use futures::future::FutureExt;
 use hotshot_types::{
     data::VidShare,
@@ -144,6 +143,29 @@ macro_rules! include_migrations {
                     .expect("invalid migration")
             })
     };
+}
+
+/// Drop connections that come back to the pool with a transaction still open.
+///
+/// In sqlx 0.8.6, a `begin()` cancelled mid-flight can return its connection to the pool inside
+/// a transaction that sqlx does not know about.
+pub fn release_only_idle(pool: PoolOptions<sqlx::Postgres>) -> PoolOptions<sqlx::Postgres> {
+    // TODO(abdul): remove once a sqlx release includes launchbadge/sqlx#4394.
+    // With no transaction open, this query starts its own, so both timestamps are the same.
+    // Keep `raw_sql`. A normal query is sent in several messages and Postgres moves
+    // `statement_timestamp()` forward on each one, so the timestamps would always differ.
+    pool.after_release(|conn, _| {
+        async move {
+            let row = conn
+                .fetch_one(sqlx::raw_sql(
+                    "SELECT transaction_timestamp() <> statement_timestamp()",
+                ))
+                .await?;
+            let in_transaction: bool = row.try_get(0)?;
+            Ok(!in_transaction)
+        }
+        .boxed()
+    })
 }
 
 /// The migrations required to build the default schema for this version of [`SqlStorage`].
@@ -376,6 +398,11 @@ impl Config {
     pub fn tls(mut self) -> Self {
         self.db_opt = self.db_opt.ssl_mode(PgSslMode::Require);
         self
+    }
+
+    #[cfg(not(feature = "embedded-db"))]
+    pub fn connect_options(&self) -> &PgConnectOptions {
+        &self.db_opt
     }
 
     /// Set the name of the schema to use for queries.
@@ -740,26 +767,8 @@ impl SqlStorage {
             }
             .boxed()
         });
-        // TODO(abdul): remove once a sqlx release includes launchbadge/sqlx#4394.
-        // In sqlx 0.8.6, if `begin()` is cancelled, the connection can go back to the pool with a
-        // transaction still open, and sqlx does not know about it. Ask Postgres and drop it.
-        // With no transaction open, this query starts its own, so both timestamps are the same.
-        // Inside an open transaction, the transaction started earlier, so they differ.
-        // Keep `raw_sql`. A normal query is sent in several messages and Postgres moves
-        // `statement_timestamp()` forward on each one, so the timestamps would always differ.
         #[cfg(not(feature = "embedded-db"))]
-        let pool = pool.after_release(|conn, _| {
-            async move {
-                let row = conn
-                    .fetch_one(sqlx::raw_sql(
-                        "SELECT transaction_timestamp() <> statement_timestamp()",
-                    ))
-                    .await?;
-                let in_transaction: bool = row.try_get(0)?;
-                Ok(!in_transaction)
-            }
-            .boxed()
-        });
+        let pool = release_only_idle(pool);
 
         #[cfg(feature = "embedded-db")]
         if config.reset {
@@ -1734,7 +1743,7 @@ impl VersionedDataSource for SqlStorage {
     }
 }
 
-// These tests run the `postgres` Docker image, which doesn't work on Windows.
+// These tests start `postgres` from PATH, which doesn't work on Windows.
 #[cfg(all(any(test, feature = "testing"), not(target_os = "windows")))]
 pub mod testing {
     #![allow(unused_imports)]
@@ -1753,92 +1762,37 @@ pub mod testing {
     #[derive(Debug)]
     pub struct TmpDb {
         #[cfg(not(feature = "embedded-db"))]
-        host: String,
-        #[cfg(not(feature = "embedded-db"))]
-        port: u16,
-        #[cfg(not(feature = "embedded-db"))]
-        data_dir: std::path::PathBuf,
-        #[cfg(not(feature = "embedded-db"))]
-        postgres: Option<Child>,
+        postgres: TmpPostgres,
         #[cfg(feature = "embedded-db")]
         db_path: std::path::PathBuf,
-        #[allow(dead_code)]
-        persistent: bool,
     }
     impl TmpDb {
-        #[cfg(feature = "embedded-db")]
-        fn init_sqlite_db(persistent: bool) -> Self {
-            let file = tempfile::Builder::new()
-                .prefix("sqlite-")
-                .suffix(".db")
-                .tempfile()
-                .unwrap();
-
-            let (_, db_path) = file.keep().unwrap();
-
-            Self {
-                db_path,
-                persistent,
-            }
-        }
         pub async fn init() -> Self {
             #[cfg(feature = "embedded-db")]
-            return Self::init_sqlite_db(false);
+            {
+                let file = tempfile::Builder::new()
+                    .prefix("sqlite-")
+                    .suffix(".db")
+                    .tempfile()
+                    .unwrap();
+                let (_, db_path) = file.keep().unwrap();
+                Self { db_path }
+            }
 
             #[cfg(not(feature = "embedded-db"))]
-            Self::init_postgres(false).await
-        }
-
-        pub async fn persistent() -> Self {
-            #[cfg(feature = "embedded-db")]
-            return Self::init_sqlite_db(true);
-
-            #[cfg(not(feature = "embedded-db"))]
-            Self::init_postgres(true).await
-        }
-
-        #[cfg(not(feature = "embedded-db"))]
-        async fn init_postgres(persistent: bool) -> Self {
-            let port = reserve_tcp_port().unwrap();
-            let host = "127.0.0.1".to_string();
-
-            // initdb requires an empty target; clear any dir left by a crashed run
-            // that reused this (recycled) ephemeral port.
-            let data_dir = env::temp_dir().join(format!("espresso-tmpdb-{port}"));
-            let _ = std::fs::remove_dir_all(&data_dir);
-
-            let output = Command::new("initdb")
-                .arg("-D")
-                .arg(&data_dir)
-                .args(["-U", "postgres", "--auth=trust"])
-                .output()
-                .expect("initdb failed to run; is postgres installed and on PATH?");
-            assert!(
-                output.status.success(),
-                "initdb failed for {data_dir:?}: {}",
-                String::from_utf8_lossy(&output.stderr)
-            );
-
-            let mut db = Self {
-                host,
-                port,
-                data_dir,
-                postgres: None,
-                persistent,
-            };
-
-            db.start_postgres().await;
-            db
+            Self {
+                postgres: TmpPostgres::init().await,
+            }
         }
 
         #[cfg(not(feature = "embedded-db"))]
         pub fn host(&self) -> String {
-            self.host.clone()
+            self.postgres.host()
         }
 
         #[cfg(not(feature = "embedded-db"))]
         pub fn port(&self) -> u16 {
-            self.port
+            self.postgres.port()
         }
 
         #[cfg(feature = "embedded-db")]
@@ -1867,9 +1821,69 @@ pub mod testing {
 
             cfg
         }
+    }
 
-        #[cfg(not(feature = "embedded-db"))]
-        pub fn stop_postgres(&mut self) {
+    #[cfg(feature = "embedded-db")]
+    impl Drop for TmpDb {
+        fn drop(&mut self) {
+            std::fs::remove_file(self.db_path.clone()).unwrap();
+        }
+    }
+
+    /// A throwaway Postgres server with user `postgres` and trust auth, removed on drop.
+    ///
+    /// Available whichever database the query service is built for, for crates that keep data of
+    /// their own in Postgres.
+    #[derive(Debug)]
+    pub struct TmpPostgres {
+        host: String,
+        port: u16,
+        data_dir: std::path::PathBuf,
+        postgres: Option<Child>,
+    }
+
+    impl TmpPostgres {
+        pub async fn init() -> Self {
+            let port = reserve_tcp_port().unwrap();
+            let host = "127.0.0.1".to_string();
+
+            // initdb requires an empty target; clear any dir left by a crashed run
+            // that reused this (recycled) ephemeral port.
+            let data_dir = env::temp_dir().join(format!("espresso-tmpdb-{port}"));
+            let _ = std::fs::remove_dir_all(&data_dir);
+
+            let output = Command::new("initdb")
+                .arg("-D")
+                .arg(&data_dir)
+                .args(["-U", "postgres", "--auth=trust"])
+                .output()
+                .expect("initdb failed to run; is postgres installed and on PATH?");
+            assert!(
+                output.status.success(),
+                "initdb failed for {data_dir:?}: {}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+
+            let mut db = Self {
+                host,
+                port,
+                data_dir,
+                postgres: None,
+            };
+
+            db.start().await;
+            db
+        }
+
+        pub fn host(&self) -> String {
+            self.host.clone()
+        }
+
+        pub fn port(&self) -> u16 {
+            self.port
+        }
+
+        fn stop(&mut self) {
             let Some(mut postgres) = self.postgres.take() else {
                 return;
             };
@@ -1891,9 +1905,7 @@ pub mod testing {
             let _ = postgres.wait();
         }
 
-        #[cfg(not(feature = "embedded-db"))]
-        pub async fn start_postgres(&mut self) {
-            self.stop_postgres();
+        async fn start(&mut self) {
             tracing::info!(port = self.port, "starting postgres");
             let postgres = Command::new("postgres")
                 .arg("-D")
@@ -1912,7 +1924,6 @@ pub mod testing {
             self.wait_for_ready().await;
         }
 
-        #[cfg(not(feature = "embedded-db"))]
         async fn wait_for_ready(&self) {
             let timeout_duration = Duration::from_secs(
                 env::var("SQL_TMP_DB_CONNECT_TIMEOUT")
@@ -1947,22 +1958,10 @@ pub mod testing {
         }
     }
 
-    #[cfg(not(feature = "embedded-db"))]
-    impl Drop for TmpDb {
+    impl Drop for TmpPostgres {
         fn drop(&mut self) {
-            self.stop_postgres();
-            if !self.persistent {
-                let _ = std::fs::remove_dir_all(&self.data_dir);
-            }
-        }
-    }
-
-    #[cfg(feature = "embedded-db")]
-    impl Drop for TmpDb {
-        fn drop(&mut self) {
-            if !self.persistent {
-                std::fs::remove_file(self.db_path.clone()).unwrap();
-            }
+            self.stop();
+            let _ = std::fs::remove_dir_all(&self.data_dir);
         }
     }
 
@@ -2014,7 +2013,7 @@ pub mod testing {
     }
 }
 
-// These tests run the `postgres` Docker image, which doesn't work on Windows.
+// These tests start `postgres` from PATH, which doesn't work on Windows.
 #[cfg(all(test, not(target_os = "windows")))]
 mod test {
     use std::time::Duration;

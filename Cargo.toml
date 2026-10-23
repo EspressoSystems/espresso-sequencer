@@ -12,6 +12,7 @@ members = [
     "crates/cliquenet",
     "crates/cliquenet-types",
     "crates/espresso/api",
+    "crates/espresso/deploy",
     "crates/espresso/dev-node",
     "crates/espresso/keyset",
     "crates/espresso/node",
@@ -61,6 +62,7 @@ default-members = [
     "crates/cliquenet",
     "crates/cliquenet-types",
     "crates/espresso/api",
+    "crates/espresso/deploy",
     "crates/espresso/keyset",
     "crates/espresso/node",
     "crates/espresso/telemetry",
@@ -432,8 +434,6 @@ opt-level = 1
 [profile.test.package.hotshot-contract-adapter]
 opt-level = 1
 [profile.test.package.hotshot-new-protocol]
-opt-level = 1
-[profile.test.package.espresso-node]
 opt-level = 1
 [profile.test.package.cliquenet]
 opt-level = 1
