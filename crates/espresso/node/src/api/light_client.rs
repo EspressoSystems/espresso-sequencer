@@ -2057,7 +2057,7 @@ mod test {
         for stored_out_of_limit in [false, true] {
             requested.lock().unwrap().clear();
             let storage = <DataSource as TestableSequencerDataSource>::create_storage().await;
-            let ds = Config::try_from(&DataSource::persistence_options(&storage).0)
+            let ds = Config::try_from(&*DataSource::persistence_options(&storage))
                 .unwrap()
                 .builder(Provider::default().with_cert2_provider(peer.clone()))
                 .await
@@ -2129,7 +2129,7 @@ mod test {
         let (peer, requested) = serve_cert2(cert2_for_leaf(&leaves[3])).await;
 
         let storage = <DataSource as TestableSequencerDataSource>::create_storage().await;
-        let ds = Config::try_from(&DataSource::persistence_options(&storage).0)
+        let ds = Config::try_from(&*DataSource::persistence_options(&storage))
             .unwrap()
             .builder(Provider::default().with_cert2_provider(peer))
             .await

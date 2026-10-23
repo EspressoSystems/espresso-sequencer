@@ -678,7 +678,7 @@ mod test {
     fn sql_storage_keeps_light_client_in_postgres() {
         use clap::Parser as _;
 
-        let opt = persistence::sql::postgres::Options(
+        let opt = persistence::sql::postgres::Options::try_from(
             persistence::sql::Options::try_parse_from([
                 "espresso-node",
                 "--host",
@@ -689,7 +689,8 @@ mod test {
                 "espresso",
             ])
             .unwrap(),
-        );
+        )
+        .unwrap();
         let LightClientDbOptions::Postgres(lc) = opt.light_client_db(&Query::default()).unwrap()
         else {
             panic!("expected the light client in Postgres");

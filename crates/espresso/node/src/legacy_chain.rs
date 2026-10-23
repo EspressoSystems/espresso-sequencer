@@ -155,7 +155,7 @@ impl LegacyChain {
             .with_context(|| format!("replaying the {} chain's L1", self.name))?;
 
         let storage = SqlDataSource::create_storage().await;
-        let mut db = persistence::Options(tmp_options(&storage));
+        let mut db = persistence::Options::try_from(tmp_options(&storage))?;
         let persistence = db.create().await?;
         // There are no peers to fetch the config or state certs from.
         persistence.save_config(&self.network_config).await?;
@@ -175,7 +175,7 @@ impl LegacyChain {
         let url: url::Url = format!("http://localhost:{port}").parse()?;
         let params = replay_params(url.clone());
         let handle = Options::with_port(port)
-            .query_sql(Query::default(), db.0)
+            .query_sql(Query::default(), db.into_inner())
             .catchup(Default::default())
             .config(Default::default())
             .explorer(Default::default())
@@ -218,7 +218,7 @@ impl LegacyChain {
 impl ReplayNode {
     /// Another connection to the node's consensus storage.
     pub async fn persistence(&self) -> anyhow::Result<Persistence> {
-        persistence::Options(tmp_options(&self.storage))
+        persistence::Options::try_from(tmp_options(&self.storage))?
             .create()
             .await
     }

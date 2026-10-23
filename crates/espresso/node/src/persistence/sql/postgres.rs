@@ -1,7 +1,5 @@
 //! Persistence on a Postgres server.
 
-use std::time::Duration;
-
 use hotshot_query_service::{
     data_source::storage::sql::postgres::{self as qs, set_no_deferrable_on_read},
     include_migrations,
@@ -78,46 +76,6 @@ impl BackendOptions for qs::Db {
     }
 }
 
-impl From<PostgresOptions> for Config {
-    fn from(opt: PostgresOptions) -> Self {
-        let mut cfg = Config::default();
-
-        if let Some(host) = opt.host {
-            cfg = cfg.host(host);
-        }
-
-        if let Some(port) = opt.port {
-            cfg = cfg.port(port);
-        }
-
-        if let Some(database) = &opt.database {
-            cfg = cfg.database(database);
-        }
-
-        if let Some(user) = &opt.user {
-            cfg = cfg.user(user);
-        }
-
-        if let Some(password) = &opt.password {
-            cfg = cfg.password(password);
-        }
-
-        if opt.use_tls {
-            cfg = cfg.tls();
-        }
-
-        cfg = cfg.max_connections(20);
-        cfg = cfg.idle_connection_timeout(Duration::from_secs(120));
-        cfg = cfg.connection_timeout(Duration::from_secs(10240));
-        cfg = cfg.slow_statement_threshold(Duration::from_secs(1));
-        cfg = cfg.statement_timeout(Duration::from_secs(600)); // 10 minutes default
-
-        set_no_deferrable_on_read(opt.no_deferrable);
-
-        cfg
-    }
-}
-
 #[cfg(any(test, feature = "testing"))]
 pub(crate) fn tmp_options(db: &qs::testing::TmpDb) -> SqlOptions {
     PostgresOptions {
@@ -163,6 +121,35 @@ mod test {
 
     use super::*;
     use crate::{SeqTypes, persistence::tests::TestablePersistence as _};
+
+    #[test]
+    fn sqlite_options_do_not_build_postgres_persistence() {
+        let opt = SqlOptions {
+            embedded_db: true,
+            ..SqlOptions::default()
+        };
+        assert!(Options::try_from(opt.clone()).is_err());
+        assert!(matches!(
+            opt.into_backend(),
+            super::super::SqlBackendOptions::Sqlite(_)
+        ));
+    }
+
+    #[tokio::test]
+    async fn a_sqlite_pool_is_not_reused_for_postgres() {
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .connect(":memory:")
+            .await
+            .unwrap();
+        let opt = SqlOptions {
+            pool: Some(pool.into()),
+            ..SqlOptions::default()
+        };
+        let Err(err) = Config::try_from(&opt) else {
+            panic!("a SQLite pool was accepted for Postgres");
+        };
+        assert!(format!("{err:#}").contains("other SQL backend"), "{err:#}");
+    }
 
     async fn test_postgres_read_ns_table(instance_state: NodeState) {
         instance_state
