@@ -689,12 +689,20 @@ async fn fetch_boundary_state(
     Ok(state)
 }
 
-/// Store `state`, the state at the epoch boundary `height`, as the loop's head snapshot. The reward
-/// tree goes first: the loop reads it at the head when it resumes, so a head without it would fail
-/// every start. No state is stored below the boundary, so the state pruned height goes just below
-/// it: queries for lower heights then fail as pruned, not on nodes that are missing. The boundary
-/// is also recorded as where the state starts, so that a node meant to have complete trees can tell
-/// that it does not.
+/// Store `state`, the state at the epoch boundary `height`, as the loop's head snapshot. The loop
+/// keeps nothing of `state`: on every start it rebuilds the head's state from the header and fills
+/// it from this database, so the head needs what a state update stores:
+/// - The reward tree. The loop reads it from here only, so it goes first: a head without it would
+///   fail every start.
+/// - The block frontier. Without it, the loop would fetch it from peers again, and block proofs at
+///   the head would fail.
+/// - The chain config. The loop takes it from the header, but only the loop stores it, and chain
+///   config catchup reads it from here.
+///
+/// No state is stored below the boundary, so the state pruned height goes just below it: queries
+/// for lower heights then answer that the state is pruned, as on a node that pruned it. The
+/// boundary is also recorded as where the state starts, so that a node meant to have complete
+/// trees can tell that it does not.
 async fn store_boundary_snapshot<T>(
     storage: &T,
     height: u64,
