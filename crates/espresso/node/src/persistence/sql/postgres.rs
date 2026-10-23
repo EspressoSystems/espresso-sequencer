@@ -164,6 +164,35 @@ mod test {
     use super::*;
     use crate::{SeqTypes, persistence::tests::TestablePersistence as _};
 
+    #[test]
+    fn sqlite_options_do_not_build_postgres_persistence() {
+        let opt = SqlOptions {
+            embedded_db: true,
+            ..SqlOptions::default()
+        };
+        assert!(Options::try_from(opt.clone()).is_err());
+        assert!(matches!(
+            opt.into_backend(),
+            super::super::SqlBackendOptions::Sqlite(_)
+        ));
+    }
+
+    #[tokio::test]
+    async fn a_sqlite_pool_is_not_reused_for_postgres() {
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .connect(":memory:")
+            .await
+            .unwrap();
+        let opt = SqlOptions {
+            pool: Some(pool.into()),
+            ..SqlOptions::default()
+        };
+        let Err(err) = Config::try_from(&opt) else {
+            panic!("a SQLite pool was accepted for Postgres");
+        };
+        assert!(format!("{err:#}").contains("other SQL backend"), "{err:#}");
+    }
+
     async fn test_postgres_read_ns_table(instance_state: NodeState) {
         instance_state
             .coordinator

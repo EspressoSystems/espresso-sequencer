@@ -55,7 +55,11 @@ impl BackendOptions for qs::Db {
         opt: &SqlOptions,
     ) -> anyhow::Result<Option<StorageProbe>> {
         let pragmas = read_pragmas(&db.pool()).await;
-        let path = opt.sqlite_options.path.clone().unwrap_or_default();
+        let path = opt
+            .sqlite_options
+            .path
+            .clone()
+            .context("ESPRESSO_NODE_STORAGE_PATH must be set for an embedded database")?;
         Ok(Some(
             storage_probe::probe(sqlite_probe_dir(&path), pragmas).await?,
         ))

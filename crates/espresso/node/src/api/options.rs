@@ -165,11 +165,15 @@ impl Options {
             Option<RequestResponseStorage>,
         ) = if let Some(query_opt) = self.query.take() {
             if let Some(opt) = self.storage_sql.take() {
-                if opt.embedded_db {
-                    sql::sqlite::init_query_module(&self, query_opt, opt, state, &mut tasks).await?
-                } else {
-                    sql::postgres::init_query_module(&self, query_opt, opt, state, &mut tasks)
-                        .await?
+                match opt.into_backend() {
+                    persistence::sql::SqlBackendOptions::Sqlite(opt) => {
+                        sql::sqlite::init_query_module(&self, query_opt, opt, state, &mut tasks)
+                            .await?
+                    },
+                    persistence::sql::SqlBackendOptions::Postgres(opt) => {
+                        sql::postgres::init_query_module(&self, query_opt, opt, state, &mut tasks)
+                            .await?
+                    },
                 }
             } else if let Some(opt) = self.storage_fs.take() {
                 self.init_with_query_module_fs(query_opt, opt, state, &mut tasks)

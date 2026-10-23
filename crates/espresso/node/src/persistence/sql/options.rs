@@ -114,6 +114,12 @@ impl TryFrom<SqlPool> for sqlx::SqlitePool {
     }
 }
 
+/// [`Options`] wrapped for the backend [`Options::embedded_db`] selects.
+pub enum SqlBackendOptions {
+    Postgres(super::postgres::Options),
+    Sqlite(super::sqlite::Options),
+}
+
 /// Options for database-backed persistence, supporting both Postgres and SQLite.
 #[derive(Parser, Clone, Derivative)]
 #[derivative(Debug)]
@@ -323,6 +329,17 @@ pub struct Options {
 impl Default for Options {
     fn default() -> Self {
         Self::parse_from(std::iter::empty::<String>())
+    }
+}
+
+impl Options {
+    /// These options for the backend [`embedded_db`](Self::embedded_db) selects.
+    pub fn into_backend(self) -> SqlBackendOptions {
+        if self.embedded_db {
+            SqlBackendOptions::Sqlite(super::sqlite::Options(self))
+        } else {
+            SqlBackendOptions::Postgres(super::postgres::Options(self))
+        }
     }
 }
 

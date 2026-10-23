@@ -4213,7 +4213,7 @@ mod test {
             let mut opt = tmp_options(&dbs[LATE]);
             opt.disable_proactive_fetching = true;
             let ds = SqlDataSource::create(
-                persistence::sql::postgres::Options(opt),
+                persistence::sql::postgres::Options::try_from(opt).unwrap(),
                 Default::default(),
                 false,
             )
@@ -5884,7 +5884,7 @@ mod test {
         Client<ClientErr, SequencerApiVersion>,
     )> {
         let port = reserve_tcp_port().expect("No ports free for query service");
-        let mut db = persistence::sql::postgres::Options(tmp_options(storage));
+        let mut db = persistence::sql::postgres::Options::try_from(tmp_options(storage))?;
         let persistence = db.create().await?;
         let handle = Options::with_port(port)
             .query_sql(
@@ -5892,7 +5892,7 @@ mod test {
                     peers: params.upstreams.clone(),
                     ..Default::default()
                 },
-                db.0,
+                db.into_inner(),
             )
             .catchup(Default::default())
             .light_client(Default::default())
@@ -6190,7 +6190,7 @@ mod test {
                                 .init_node(
                                     1,
                                     genesis_state,
-                                    persistence::sql::postgres::Options(db),
+                                    persistence::sql::postgres::Options::try_from(db).unwrap(),
                                     Some(StatePeers::<SequencerApiVersion>::from_urls(
                                         vec![peer_url],
                                         Default::default(),
@@ -7998,7 +7998,7 @@ mod test {
         wait_until_block_height(&client, "fee-state/block-height", from_height).await;
 
         let ds = SqlStorage::connect(
-            Config::try_from(&node_0_persistence.0).unwrap(),
+            Config::try_from(&*node_0_persistence).unwrap(),
             StorageConnectionType::Sequencer,
         )
         .await
