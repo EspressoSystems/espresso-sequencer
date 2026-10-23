@@ -233,7 +233,7 @@ impl Options {
     pub fn bootstrap_params(&self) -> StartupCatchupParams {
         StartupCatchupParams {
             step_timeout: self.bootstrap_epoch_catchup_timeout,
-            deadline: self.bootstrap_deadline,
+            total_timeout: self.bootstrap_deadline,
         }
     }
 
@@ -982,6 +982,7 @@ impl PublicNodeConfig {
             identity: opt.identity.clone(),
             catchup_base_timeout: opt.catchup_base_timeout,
             local_catchup_timeout: opt.local_catchup_timeout,
+            http_catchup_delay: opt.http_catchup_delay,
             bootstrap_epoch_catchup_timeout: opt.bootstrap_epoch_catchup_timeout,
             bootstrap_deadline: opt.bootstrap_deadline,
             catchup_backoff: opt.catchup_backoff,
@@ -997,7 +998,6 @@ impl PublicNodeConfig {
                 .unwrap_or(0),
             storage,
             modules: ApiModulesConfig::from(modules),
-            http_catchup_delay: opt.http_catchup_delay,
         }
     }
 }

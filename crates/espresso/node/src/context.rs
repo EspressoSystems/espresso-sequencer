@@ -66,10 +66,7 @@ use crate::{
         network::Sender as RequestResponseSender,
         recipient_source::RecipientSource,
     },
-    startup_catchup::{
-        StartupCatchupMetrics, StartupCatchupParams, catch_up_cliquenet_stake_tables,
-        state_peer_clients,
-    },
+    startup_catchup::{StartupCatchupParams, catch_up_cliquenet_stake_tables, state_peer_clients},
     state_signature::{self, DecidedLeaf, StateSignatureMemStorage, StateSigner},
 };
 pub(crate) type ConsensusNode<P> = Node<P>;
@@ -191,7 +188,6 @@ where
             || instance_state.finalized_light_client_state(),
             &state_peer_clients,
             &bootstrap_params,
-            Some(&StartupCatchupMetrics::new(metrics)),
         )
         .await
         .context("startup stake-table catchup failed")?;

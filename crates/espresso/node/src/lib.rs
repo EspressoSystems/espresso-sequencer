@@ -1656,7 +1656,7 @@ pub mod testing {
                 Default::default(),
                 StartupCatchupParams {
                     step_timeout: Duration::from_secs(2),
-                    deadline: Duration::from_secs(15),
+                    total_timeout: Duration::from_secs(15),
                 },
                 self.bootstrap_peers.clone(),
                 Duration::from_millis(500),

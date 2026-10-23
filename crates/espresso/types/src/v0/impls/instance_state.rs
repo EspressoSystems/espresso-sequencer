@@ -26,6 +26,8 @@ use super::{
 };
 #[cfg(feature = "node")]
 use crate::v0::L1Client;
+#[cfg(feature = "node")]
+use crate::v0_1::L1Provider;
 use crate::{
     AuthenticatedValidatorMap, Header, PubKey, RegisteredValidatorMap,
     v0::{
@@ -142,19 +144,23 @@ impl NodeState {
         }
     }
 
+    /// The light client contract on the L1 client's provider.
+    #[cfg(feature = "node")]
+    async fn light_client_contract(
+        &self,
+    ) -> anyhow::Result<LightClientV3::LightClientV3Instance<L1Provider>> {
+        let address = self.light_client_contract_address().await?;
+        Ok(LightClientV3::new(address, self.l1_client.provider.clone()))
+    }
+
     #[cfg(feature = "node")]
     pub async fn finalized_hotshot_height(&self) -> anyhow::Result<u64> {
         match self.finalized_hotshot_height.get(&()).await {
             Some(block) => Ok(block),
             None => {
-                let light_client_contract_address = self.light_client_contract_address().await?;
-
-                let light_client_contract = LightClientV3::new(
-                    light_client_contract_address,
-                    self.l1_client.provider.clone(),
-                );
-
-                let finalized_hotshot_height = light_client_contract
+                let finalized_hotshot_height = self
+                    .light_client_contract()
+                    .await?
                     .finalizedState()
                     .call()
                     .await?
@@ -177,13 +183,9 @@ impl NodeState {
     /// or a read fails.
     #[cfg(feature = "node")]
     pub async fn finalized_light_client_state(&self) -> anyhow::Result<LightClientStateSol> {
-        let genesis = LightClientStateSol {
-            viewNum: 0,
-            blockHeight: 0,
-            blockCommRoot: U256::ZERO,
-        };
+        let genesis = LightClientStateSol::default();
         if self.chain_config.stake_table_contract.is_none() {
-            tracing::debug!("no stake table contract in the chain config; anchor height 0");
+            tracing::debug!("no stake table contract in the chain config; LC contract height 0");
             return Ok(genesis);
         }
         // The L1 client learns the finalized block asynchronously after start.
@@ -194,7 +196,8 @@ impl NodeState {
             .finalized
             .context("L1 finality is not yet known")?
             .number;
-        let address = self.light_client_contract_address().await?;
+        let light_client_contract = self.light_client_contract().await?;
+        let address = *light_client_contract.address();
         // The address is read at latest, so the contract may not exist at the finalized block.
         let code = self
             .l1_client
@@ -207,11 +210,10 @@ impl NodeState {
             tracing::debug!(
                 %address,
                 l1_block = finalized,
-                "light client not deployed at the finalized L1 block; anchor height 0"
+                "light client not deployed at the finalized L1 block; LC contract height 0"
             );
             return Ok(genesis);
         }
-        let light_client_contract = LightClientV3::new(address, self.l1_client.provider.clone());
         let state = light_client_contract
             .finalizedState()
             .block(BlockId::number(finalized))
@@ -235,10 +237,7 @@ impl NodeState {
         // One block for all three reads. By number, not hash: hash is EIP-1898, which some
         // providers reject, and a finalized block cannot reorg.
         let block = BlockId::number(finalized.number);
-        let light_client_contract = LightClientV3::new(
-            self.light_client_contract_address().await?,
-            self.l1_client.provider.clone(),
-        );
+        let light_client_contract = self.light_client_contract().await?;
         let count = light_client_contract
             .getStateHistoryCount()
             .block(block)

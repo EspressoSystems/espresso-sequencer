@@ -70,10 +70,7 @@ use crate::{
     apply_genesis_overrides,
     context::TaskList,
     init_node_state, load_or_fetch_network_config,
-    startup_catchup::{
-        StartupCatchupMetrics, StartupCatchupParams, catch_up_cliquenet_stake_tables,
-        state_peer_clients,
-    },
+    startup_catchup::{StartupCatchupParams, catch_up_cliquenet_stake_tables, state_peer_clients},
     state_signature::StateSignatureMemStorage,
 };
 
@@ -264,14 +261,13 @@ where
     )
     .await;
     let state_peer_clients = state_peer_clients(&params.upstreams);
-    let replaying = replay.is_some();
+    let lc_contract = replay.is_none().then(|| node_state.clone());
     catch_up_cliquenet_stake_tables(
         &coordinator,
         epoch_height,
-        || l1_lc_contract_state(&node_state, replaying),
+        || l1_lc_contract_state(lc_contract.as_ref()),
         &state_peer_clients,
         &params.bootstrap,
-        Some(&StartupCatchupMetrics::new(&*metrics)),
     )
     .await
     .context("startup stake-table catchup failed")?;
@@ -315,8 +311,7 @@ where
         .context("reading the height the query database has reached")?;
     let follower = Follower {
         source,
-        node_state: node_state.clone(),
-        replaying,
+        lc_contract,
         sink: Arc::new(sink),
         persistence: persistence.clone(),
         coordinator,
@@ -330,7 +325,7 @@ where
         // and peer catchup together get one step's time per upstream plus one, not the boot
         // deadline. The next poll retries.
         bootstrap: StartupCatchupParams {
-            deadline: params.bootstrap.step_timeout * (state_peer_clients.len() as u32 + 1),
+            total_timeout: params.bootstrap.step_timeout * (state_peer_clients.len() as u32 + 1),
             ..params.bootstrap
         },
         state_peer_clients,
@@ -581,8 +576,7 @@ impl ConsensusSource for FollowerConsensus {
 
 struct Follower<P> {
     source: Arc<dyn ChainSource>,
-    node_state: NodeState,
-    replaying: bool,
+    lc_contract: Option<NodeState>,
     sink: Arc<dyn DecideSink>,
     persistence: Arc<P>,
     coordinator: EpochMembershipCoordinator<SeqTypes>,
@@ -774,10 +768,9 @@ impl<P: SequencerPersistence> Follower<P> {
         let current_epoch = catch_up_cliquenet_stake_tables(
             &self.coordinator,
             self.epoch_height,
-            || l1_lc_contract_state(&self.node_state, self.replaying),
+            || l1_lc_contract_state(self.lc_contract.as_ref()),
             &self.state_peer_clients,
             &self.bootstrap,
-            None,
         )
         .await
         .context("stake-table catchup after skipping ahead")?;
@@ -860,15 +853,14 @@ impl ChainSource for NodeLightClient {
     }
 }
 
+/// The LC contract state, or the default when replaying a recorded chain, which has no LC contract.
 async fn l1_lc_contract_state(
-    node_state: &NodeState,
-    replaying: bool,
+    lc_contract: Option<&NodeState>,
 ) -> anyhow::Result<LightClientStateSol> {
-    // A replayed chain has no LC contract to read.
-    if replaying {
-        return Ok(LightClientStateSol::default());
+    match lc_contract {
+        Some(node_state) => node_state.finalized_light_client_state().await,
+        None => Ok(LightClientStateSol::default()),
     }
-    node_state.finalized_light_client_state().await
 }
 
 async fn connect_light_client(

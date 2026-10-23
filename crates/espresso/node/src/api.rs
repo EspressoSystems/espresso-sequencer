@@ -5753,7 +5753,7 @@ mod test {
             },
             bootstrap: StartupCatchupParams {
                 step_timeout: Duration::from_secs(30),
-                deadline: Duration::from_secs(900),
+                total_timeout: Duration::from_secs(900),
             },
             options: FollowerOptions {
                 poll_interval: Duration::from_millis(500),
@@ -6741,13 +6741,6 @@ mod test {
             )
             .await;
 
-        let exported = metrics.export()?;
-        let current_epoch: u64 = exported
-            .lines()
-            .find_map(|line| line.strip_prefix("consensus_bootstrap_window_epoch "))
-            .context("current epoch gauge not exported")?
-            .parse()?;
-        // The current epoch is the LC contract header's, with nothing below it caught up from peers.
         let membership = node.node_state().coordinator.membership().clone();
         for epoch in (lc_contract_epoch - 3)..=(lc_contract_epoch + 1) {
             assert!(
@@ -6763,14 +6756,14 @@ mod test {
                 "no block reward for epoch {epoch}"
             );
         }
-        assert!(
-            exported.contains(&format!(
-                "consensus_bootstrap_anchor_epoch {lc_contract_epoch}"
-            )),
-            "{exported}"
-        );
-        // Peer catchup above the LC contract header may advance the current epoch past it.
-        assert!(current_epoch >= lc_contract_epoch, "{exported}");
+        // The current epoch is one below the highest epoch with a root. Peer catchup above the LC
+        // contract header may advance it past the header's epoch.
+        let highest_root = membership
+            .epochs_with_root()
+            .last()
+            .copied()
+            .context("no epoch root after startup catchup")?;
+        assert!(highest_root.u64() > lc_contract_epoch);
 
         node.start_consensus().await;
 
