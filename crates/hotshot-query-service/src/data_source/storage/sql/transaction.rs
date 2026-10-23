@@ -45,7 +45,7 @@ use sqlx::{Encode, Execute, FromRow, QueryBuilder, Type, pool::Pool, query_build
 use tracing::instrument;
 
 use super::{
-    Backend as _, Database, Db, StateQueries as _,
+    Backend as _, Database, Db, DbKind, StateQueries as _,
     queries::{self, state::collect_nodes_from_proofs},
 };
 use crate::{
@@ -149,10 +149,9 @@ impl TransactionMode for Write {
         //
         // With Postgres things are much more straightforward: just tell Postgres we want a write
         // transaction immediately after opening it.
-        let sql = if Db::EMBEDDED {
-            "UPDATE pruned_height SET id = id WHERE false"
-        } else {
-            "SET TRANSACTION ISOLATION LEVEL SERIALIZABLE"
+        let sql = match Db::KIND {
+            DbKind::Sqlite => "UPDATE pruned_height SET id = id WHERE false",
+            DbKind::Postgres => "SET TRANSACTION ISOLATION LEVEL SERIALIZABLE",
         };
         conn.execute(sql).await?;
 
@@ -171,10 +170,9 @@ impl TransactionMode for Prune {
         // Postgres: use READ COMMITTED to avoid predicate lock conflicts between pruning
         // DELETE and concurrent consensus INSERT operations. Pruning does not need SERIALIZABLE
         // guarantees since it only removes old data that is no longer read by consensus.
-        let sql = if Db::EMBEDDED {
-            "UPDATE pruned_height SET id = id WHERE false"
-        } else {
-            "SET TRANSACTION ISOLATION LEVEL READ COMMITTED"
+        let sql = match Db::KIND {
+            DbKind::Sqlite => "UPDATE pruned_height SET id = id WHERE false",
+            DbKind::Postgres => "SET TRANSACTION ISOLATION LEVEL READ COMMITTED",
         };
         conn.execute(sql).await?;
 
@@ -199,10 +197,9 @@ pub struct Backfill;
 impl TransactionMode for Backfill {
     async fn begin(conn: &mut <Db as Database>::Connection) -> anyhow::Result<()> {
         // SQLite: same as Write -- acquire an exclusive lock immediately to avoid deadlocks.
-        let sql = if Db::EMBEDDED {
-            "UPDATE pruned_height SET id = id WHERE false"
-        } else {
-            "SET TRANSACTION ISOLATION LEVEL READ COMMITTED"
+        let sql = match Db::KIND {
+            DbKind::Sqlite => "UPDATE pruned_height SET id = id WHERE false",
+            DbKind::Postgres => "SET TRANSACTION ISOLATION LEVEL READ COMMITTED",
         };
         conn.execute(sql).await?;
 
@@ -229,7 +226,7 @@ impl TransactionMode for Read {
         // With SQLite, there is nothing to be done here, as SQLite automatically starts
         // transactions in read-only mode, and always has serializable concurrency unless we
         // explicitly opt in to dirty reads with a pragma.
-        if !Db::EMBEDDED {
+        if Db::KIND == DbKind::Postgres {
             let sql = if NO_DEFERRABLE_ON_READ.load(std::sync::atomic::Ordering::Relaxed) {
                 "SET TRANSACTION ISOLATION LEVEL SERIALIZABLE, READ ONLY"
             } else {
@@ -631,30 +628,32 @@ impl Transaction<Prune> {
                 continue;
             }
 
-            let delete = if Db::EMBEDDED {
-                // SQLite removes a deleted row's index entries in the same statement, so its
-                // unbounded range only ever reads live versions.
-                format!(
-                    "DELETE FROM {state_table} WHERE (path, created) IN (
+            let delete = match Db::KIND {
+                DbKind::Sqlite => {
+                    // SQLite removes a deleted row's index entries in the same statement, so its
+                    // unbounded range only ever reads live versions.
+                    format!(
+                        "DELETE FROM {state_table} WHERE (path, created) IN (
                        SELECT old.path, old.created
                        FROM (SELECT path, max(created) AS latest FROM {state_table}
                              WHERE created >= $1 AND created <= $2 GROUP BY path) AS n
                        JOIN {state_table} AS old ON old.path = n.path AND old.created < n.latest
                      )"
-                )
-            } else {
-                // Postgres underestimates how many distinct paths a state table has, so it would
-                // hash-join the window against a full scan of the table. `OFFSET 0` stops it from
-                // flattening the lateral lookup into that join, keeping one primary key range scan
-                // per path. Dropping it makes the batch cost grow with the table again.
-                //
-                // The lookup stops at `from` instead of reading every older version of the path. A
-                // deleted row stays in the index until vacuum, so a range from the start of a path
-                // rewritten every block walks every version earlier batches deleted, and each
-                // batch is slower than the last. Below `from` only the newest version is left, and
-                // a backward scan reaches it first.
-                format!(
-                    "DELETE FROM {state_table} WHERE ctid = ANY (ARRAY(
+                    )
+                },
+                DbKind::Postgres => {
+                    // Postgres underestimates how many distinct paths a state table has, so it would
+                    // hash-join the window against a full scan of the table. `OFFSET 0` stops it from
+                    // flattening the lateral lookup into that join, keeping one primary key range scan
+                    // per path. Dropping it makes the batch cost grow with the table again.
+                    //
+                    // The lookup stops at `from` instead of reading every older version of the path. A
+                    // deleted row stays in the index until vacuum, so a range from the start of a path
+                    // rewritten every block walks every version earlier batches deleted, and each
+                    // batch is slower than the last. Below `from` only the newest version is left, and
+                    // a backward scan reaches it first.
+                    format!(
+                        "DELETE FROM {state_table} WHERE ctid = ANY (ARRAY(
                        SELECT old.ctid
                        FROM (SELECT path, max(created) AS latest FROM {state_table}
                              WHERE created >= $1 AND created <= $2 GROUP BY path) AS n
@@ -668,7 +667,8 @@ impl Transaction<Prune> {
                           ORDER BY o.created DESC LIMIT 1)
                        ) AS old
                      ))"
-                )
+                    )
+                },
             };
             self.execute(query(&delete).bind(from as i64).bind(to as i64))
                 .await?;
@@ -960,7 +960,6 @@ impl<Types: NodeType, State: MerklizedState<Types, ARITY>, const ARITY: usize>
             return Ok(());
         }
 
-        let name = State::state_type();
         let block_number = block_number as i64;
 
         let (mut all_nodes, all_hashes) = collect_nodes_from_proofs(&proofs)?;
@@ -987,7 +986,11 @@ impl<Types: NodeType, State: MerklizedState<Types, ARITY>, const ARITY: usize>
             }
         }
 
-        Db::upsert_nodes(name, all_nodes.into_iter().map(|(n, ..)| n).collect(), self).await?;
+        Db::upsert_nodes::<Types, State, ARITY>(
+            all_nodes.into_iter().map(|(n, ..)| n).collect(),
+            self,
+        )
+        .await?;
 
         Ok(())
     }

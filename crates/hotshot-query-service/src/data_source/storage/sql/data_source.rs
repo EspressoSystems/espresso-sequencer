@@ -377,11 +377,6 @@ mod test {
         node_types::TEST_VERSIONS,
         state_types::{TestInstanceState, TestValidatedState},
     };
-    use hotshot_types::{
-        data::{VidCommon, VidShare},
-        vid::advz::advz_scheme,
-    };
-    use jf_advz::VidScheme;
 
     use super::*;
     use crate::{
@@ -394,7 +389,7 @@ mod test {
             storage::{NodeStorage, UpdateAvailabilityStorage},
         },
         fetching::provider::NoFetching,
-        testing::{consensus::DataSourceLifeCycle, mocks::MockTypes},
+        testing::{chain::genesis_vid, consensus::DataSourceLifeCycle, mocks::MockTypes},
     };
 
     type D = SqlDataSource<MockTypes, NoFetching>;
@@ -406,9 +401,6 @@ mod test {
         let storage = D::create(0).await;
         let ds = <D as DataSourceLifeCycle>::connect(&storage).await;
 
-        // Generate some test VID data.
-        let disperse = advz_scheme(2).disperse([]).unwrap();
-
         // Insert test data with VID common but no share.
         let leaf = LeafQueryData::<MockTypes>::genesis(
             &TestValidatedState::default(),
@@ -416,7 +408,8 @@ mod test {
             TEST_VERSIONS.test,
         )
         .await;
-        let common = VidCommonQueryData::new(leaf.header().clone(), VidCommon::V0(disperse.common));
+        let (common, shares) = genesis_vid(leaf.header());
+        let common = VidCommonQueryData::new(leaf.header().clone(), common);
         ds.append(BlockInfo::new(leaf, None, Some(common.clone()), None))
             .await
             .unwrap();
@@ -427,7 +420,7 @@ mod test {
             .unwrap_err();
 
         // Re-insert the common data with the share.
-        let share0 = VidShare::V0(disperse.shares[0].clone());
+        let share0 = shares[0].clone();
         let mut tx = ds.write().await.unwrap();
         tx.insert_vid(&common, Some(&share0)).await.unwrap();
         tx.commit().await.unwrap();

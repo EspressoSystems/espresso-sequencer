@@ -58,8 +58,8 @@ use sqlx::{Executor, QueryBuilder, Row, query};
 use super::{
     super::{ConsensusPruningOptions, Options as SqlOptions, within_gap_fill_horizon},
     qs::{
-        Backend as _, Config, Db, Read, SerializableRetryConfig, SqlStorage, Transaction, Write,
-        query_as,
+        Backend as _, Config, Db, DbKind, Read, SerializableRetryConfig, SqlStorage, Transaction,
+        Write, query_as,
     },
 };
 use crate::{
@@ -789,20 +789,21 @@ impl Persistence {
     /// Measured in a read transaction: on SQLite it scans every page of the pruned tables, and
     /// holding the write lock that long stalls the vote and proposal writes consensus waits on.
     async fn consensus_storage_usage(&self) -> anyhow::Result<u64> {
-        let usage_query = if Db::EMBEDDED {
-            format!(
+        let usage_query = match Db::KIND {
+            DbKind::Sqlite => format!(
                 "SELECT sum(pgsize) FROM dbstat WHERE name IN ({})",
                 PRUNE_TABLES
                     .iter()
                     .map(|table| format!("'{table}'"))
                     .join(",")
-            )
-        } else {
-            let table_sizes = PRUNE_TABLES
-                .iter()
-                .map(|table| format!("pg_table_size('{table}')"))
-                .join(" + ");
-            format!("SELECT {table_sizes}")
+            ),
+            DbKind::Postgres => {
+                let table_sizes = PRUNE_TABLES
+                    .iter()
+                    .map(|table| format!("pg_table_size('{table}')"))
+                    .join(" + ");
+                format!("SELECT {table_sizes}")
+            },
         };
 
         let mut tx = self.db.read().await?;
@@ -2180,7 +2181,7 @@ impl MembershipPersistence for Persistence {
     async fn delete_stake_tables(&self) -> anyhow::Result<()> {
         serializable_retry!(self, || async {
             let mut tx = self.db.write().await?;
-            if !Db::EMBEDDED {
+            if Db::KIND == DbKind::Postgres {
                 query(
                     "TRUNCATE stake_table_events, stake_table_events_l1_block, \
                      epoch_drb_and_root, stake_table_validators",

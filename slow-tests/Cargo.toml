@@ -8,7 +8,7 @@ edition.workspace = true
 # Run the tests against SQLite instead of Postgres.
 sqlite = []
 
-[dependencies]
+[dev-dependencies]
 alloy = { workspace = true }
 anyhow = { workspace = true }
 async-lock = { workspace = true }

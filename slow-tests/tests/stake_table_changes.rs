@@ -38,7 +38,6 @@ use hotshot_types::{
     x25519,
 };
 use http_client::{Client, error::ClientErr};
-use slow_tests::BUILDER_TIMEOUT;
 use staking_cli::{
     NodeSignatures, Transaction as StakingTransaction, demo::DelegationConfig,
     update_network_config,
@@ -46,6 +45,13 @@ use staking_cli::{
 use test_utils::reserve_tcp_port;
 use tokio::time::timeout;
 use versions::{NEW_PROTOCOL_VERSION, Upgrade};
+
+/// How long a leader waits for a block before proposing an empty one.
+///
+/// These tests submit no transactions, so this is their seconds per block. Set
+/// per test rather than on `TestConfigBuilder`, whose default the
+/// `espresso-dev-node` binary also runs on.
+const BUILDER_TIMEOUT: Duration = Duration::from_millis(250);
 
 const V6: Upgrade = Upgrade::trivial(NEW_PROTOCOL_VERSION);
 
