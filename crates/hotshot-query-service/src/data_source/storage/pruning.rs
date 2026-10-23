@@ -49,10 +49,6 @@ pub trait PrunedHeightStorage: Sized {
     async fn load_state_pruned_height(&mut self) -> anyhow::Result<Option<u64>> {
         Ok(None)
     }
-
-    async fn load_state_start_height(&mut self) -> anyhow::Result<Option<u64>> {
-        Ok(None)
-    }
 }
 
 #[async_trait]
@@ -62,12 +58,6 @@ pub trait PrunedHeightDataSource: Sized {
     }
 
     async fn load_state_pruned_height(&self) -> anyhow::Result<Option<u64>> {
-        Ok(None)
-    }
-
-    /// The height of the snapshot the state started from, if it did not start from genesis. See
-    /// [`UpdateStateData::set_state_start_height`](crate::merklized_state::UpdateStateData::set_state_start_height).
-    async fn load_state_start_height(&self) -> anyhow::Result<Option<u64>> {
         Ok(None)
     }
 }

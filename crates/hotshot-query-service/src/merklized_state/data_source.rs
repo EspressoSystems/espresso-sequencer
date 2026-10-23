@@ -72,6 +72,9 @@ pub trait UpdateStateData<Types: NodeType, State: MerklizedState<Types, ARITY>, 
 #[async_trait]
 pub trait MerklizedStateHeightPersistence {
     async fn get_last_state_height(&self) -> QueryResult<usize>;
+    /// The height of the snapshot the state started from, if it did not start from genesis. See
+    /// [`UpdateStateData::set_state_start_height`].
+    async fn load_state_start_height(&self) -> QueryResult<Option<u64>>;
 }
 
 type StateCommitment<Types, T, const ARITY: usize> = <T as MerklizedState<Types, ARITY>>::Commit;

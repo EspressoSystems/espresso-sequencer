@@ -704,7 +704,7 @@ impl Transaction<Prune> {
 impl<Mode> Transaction<Mode> {
     pub(super) const PRUNED_HEIGHT_ID: i32 = 1;
     pub(super) const STATE_PRUNED_HEIGHT_ID: i32 = 2;
-    const STATE_START_HEIGHT_ID: i32 = 3;
+    pub(super) const STATE_START_HEIGHT_ID: i32 = 3;
 }
 
 /// Query service specific mutations.
@@ -1126,19 +1126,6 @@ impl<Mode: TransactionMode> PrunedHeightStorage for Transaction<Mode> {
                 .fetch_optional(self.as_mut())
                 .await
                 .context("loading state pruned height")?
-        else {
-            return Ok(None);
-        };
-        Ok(Some(height as u64))
-    }
-
-    async fn load_state_start_height(&mut self) -> anyhow::Result<Option<u64>> {
-        let Some((height,)) =
-            query_as::<(i64,)>("SELECT last_height FROM pruned_height WHERE id = $1 LIMIT 1")
-                .bind(Self::STATE_START_HEIGHT_ID)
-                .fetch_optional(self.as_mut())
-                .await
-                .context("loading state start height")?
         else {
             return Ok(None);
         };

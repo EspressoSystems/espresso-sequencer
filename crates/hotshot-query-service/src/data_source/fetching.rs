@@ -644,11 +644,6 @@ where
         let mut tx = self.read().await?;
         tx.load_state_pruned_height().await
     }
-
-    async fn load_state_start_height(&self) -> anyhow::Result<Option<u64>> {
-        let mut tx = self.read().await?;
-        tx.load_state_start_height().await
-    }
 }
 
 #[async_trait]
@@ -2238,6 +2233,16 @@ where
                 message: err.to_string(),
             })?;
             tx.get_last_state_height().await
+        })
+        .await
+    }
+
+    async fn load_state_start_height(&self) -> QueryResult<Option<u64>> {
+        serializable_retry!(self.fetcher.storage, || async {
+            let mut tx = self.read().await.map_err(|err| QueryError::Error {
+                message: err.to_string(),
+            })?;
+            tx.load_state_start_height().await
         })
         .await
     }

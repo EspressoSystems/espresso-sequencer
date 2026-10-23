@@ -328,6 +328,18 @@ impl<Mode: TransactionMode> MerklizedStateHeightStorage for Transaction<Mode> {
         };
         Ok(height as usize)
     }
+
+    async fn load_state_start_height(&mut self) -> QueryResult<Option<u64>> {
+        let Some((height,)) =
+            query_as::<(i64,)>("SELECT last_height FROM pruned_height WHERE id = $1 LIMIT 1")
+                .bind(Self::STATE_START_HEIGHT_ID)
+                .fetch_optional(self.as_mut())
+                .await?
+        else {
+            return Ok(None);
+        };
+        Ok(Some(height as u64))
+    }
 }
 
 impl<Mode: TransactionMode> Transaction<Mode> {

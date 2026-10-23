@@ -154,10 +154,6 @@ where
     async fn load_state_pruned_height(&self) -> anyhow::Result<Option<u64>> {
         self.data_source.load_state_pruned_height().await
     }
-
-    async fn load_state_start_height(&self) -> anyhow::Result<Option<u64>> {
-        self.data_source.load_state_start_height().await
-    }
 }
 
 #[async_trait]
@@ -439,6 +435,10 @@ where
 {
     async fn get_last_state_height(&self) -> QueryResult<usize> {
         self.data_source.get_last_state_height().await
+    }
+
+    async fn load_state_start_height(&self) -> QueryResult<Option<u64>> {
+        self.data_source.load_state_start_height().await
     }
 }
 

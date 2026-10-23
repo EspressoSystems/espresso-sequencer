@@ -539,11 +539,6 @@ where
         self.maybe_fail_read(FailableAction::Any).await?;
         self.inner.load_state_pruned_height().await
     }
-
-    async fn load_state_start_height(&mut self) -> anyhow::Result<Option<u64>> {
-        self.maybe_fail_read(FailableAction::Any).await?;
-        self.inner.load_state_start_height().await
-    }
 }
 
 #[async_trait]
