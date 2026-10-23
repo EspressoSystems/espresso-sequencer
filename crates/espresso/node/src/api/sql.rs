@@ -55,8 +55,8 @@ use versions::{
 use super::{
     persistence::{BackendOptions as _, Options},
     qs::{
-        Backend as _, Config, Db, SqlDataSource, SqlStorage, Transaction, TransactionMode, Write,
-        query_as,
+        Backend as _, Config, Db, DbKind, SqlDataSource, SqlStorage, Transaction, TransactionMode,
+        Write, query_as,
     },
 };
 use crate::{
@@ -64,7 +64,6 @@ use crate::{
     api::{
         ApiState, BlocksFrontier, LightClientProvider, RewardMerkleTreeDataSource,
         RewardMerkleTreeV2Data,
-        context::ApiContext,
         data_source::{DataSourceOptions, NodeStateDataSource as _, Provider, SequencerDataSource},
         options::{self, Query, get_public_env_vars, init_query_data_source},
         state::NodeApiStateImpl,
@@ -147,11 +146,11 @@ impl SequencerDataSource for DataSource {
 }
 
 /// Start the query module of `api` over this backend, returning what consensus needs from it.
-pub(in crate::api) async fn init_query_module<C: ApiContext>(
+pub(in crate::api) async fn init_query_module(
     api: &options::Options,
     query_opt: Query,
     mod_opt: SqlOptions,
-    state: ApiState<C>,
+    state: ApiState,
     tasks: &mut TaskList,
 ) -> anyhow::Result<(
     Box<dyn Metrics>,
@@ -242,7 +241,7 @@ pub(in crate::api) async fn init_query_module<C: ApiContext>(
     Ok((
         metrics,
         Box::new(ApiEventConsumer::from(ds)),
-        Some(RequestResponseStorage::from(inner_storage)),
+        Some(RequestResponseStorage::Sql(inner_storage)),
     ))
 }
 
@@ -563,7 +562,10 @@ impl RewardMerkleTreeDataSource for SqlStorage {
             // Postgres supports improved performance by using `FOR UPDATE` in a sub-select to
             // acquire exclusive locks on visited rows, which are later deleted. SQLite does not
             // support this syntax.
-            let for_update = if Db::EMBEDDED { "" } else { "FOR UPDATE" };
+            let for_update = match Db::KIND {
+                DbKind::Sqlite => "",
+                DbKind::Postgres => "FOR UPDATE",
+            };
 
             // Delete batches from the merkle data table until there is nothing left to delete.
             loop {
@@ -1184,6 +1186,92 @@ impl RewardMerkleTreeDataSource for DataSource {
     }
 }
 
+// A module of its own so `RequestStorage` is not in scope where `CatchupStorage` methods are
+// called by name on this type.
+mod request_storage {
+    use async_trait::async_trait;
+    use espresso_types::{
+        Certificate2, ChainConfig, FeeAccount, FeeMerkleTree, Leaf2, NodeState,
+        v0_3::{RewardAccountV1, RewardMerkleTreeV1},
+        v0_4::{RewardAccountV2, RewardMerkleTreeV2},
+    };
+    use hotshot_types::data::{VidShare, ViewNumber};
+
+    use super::SqlStorage;
+    use crate::{
+        SeqTypes,
+        api::{BlocksFrontier, RewardMerkleTreeDataSource},
+        catchup::CatchupStorage,
+        request_response::data_source::RequestStorage,
+    };
+
+    #[async_trait]
+    impl RequestStorage for SqlStorage {
+        async fn get_accounts(
+            &self,
+            instance: &NodeState,
+            height: u64,
+            view: ViewNumber,
+            accounts: &[FeeAccount],
+        ) -> anyhow::Result<(FeeMerkleTree, Leaf2)> {
+            CatchupStorage::get_accounts(self, instance, height, view, accounts).await
+        }
+
+        async fn get_reward_accounts_v1(
+            &self,
+            instance: &NodeState,
+            height: u64,
+            view: ViewNumber,
+            accounts: &[RewardAccountV1],
+        ) -> anyhow::Result<(RewardMerkleTreeV1, Leaf2)> {
+            CatchupStorage::get_reward_accounts_v1(self, instance, height, view, accounts).await
+        }
+
+        async fn get_reward_accounts_v2(
+            &self,
+            instance: &NodeState,
+            height: u64,
+            view: ViewNumber,
+            accounts: &[RewardAccountV2],
+        ) -> anyhow::Result<(RewardMerkleTreeV2, Leaf2)> {
+            CatchupStorage::get_reward_accounts_v2(self, instance, height, view, accounts).await
+        }
+
+        async fn get_frontier(
+            &self,
+            instance: &NodeState,
+            height: u64,
+            view: ViewNumber,
+        ) -> anyhow::Result<BlocksFrontier> {
+            CatchupStorage::get_frontier(self, instance, height, view).await
+        }
+
+        async fn get_chain_config(
+            &self,
+            commitment: committable::Commitment<ChainConfig>,
+        ) -> anyhow::Result<ChainConfig> {
+            CatchupStorage::get_chain_config(self, commitment).await
+        }
+
+        async fn get_leaf_chain(&self, height: u64) -> anyhow::Result<Vec<Leaf2>> {
+            CatchupStorage::get_leaf_chain(self, height).await
+        }
+
+        async fn load_cert2(&self, height: u64) -> anyhow::Result<Option<Certificate2<SeqTypes>>> {
+            CatchupStorage::load_cert2(self, height).await
+        }
+
+        async fn load_tree(&self, height: u64) -> anyhow::Result<Vec<u8>> {
+            RewardMerkleTreeDataSource::load_tree(self, height).await
+        }
+
+        async fn get_vid_share(&self, block_number: u64) -> anyhow::Result<VidShare> {
+            let id = hotshot_query_service::node::BlockId::Number(block_number as usize);
+            Ok(SqlStorage::get_vid_share::<SeqTypes>(self, id).await?)
+        }
+    }
+}
+
 impl CatchupStorage for DataSource {
     async fn get_accounts(
         &self,
@@ -1349,7 +1437,7 @@ impl crate::api::data_source::DatabaseMetadataSource for SqlStorage {
             .await
             .context("opening transaction to fetch table sizes")?;
 
-        if !Db::EMBEDDED {
+        if Db::KIND == DbKind::Postgres {
             let query = r#"
                 SELECT
                     schemaname || '.' || relname AS table_name,

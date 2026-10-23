@@ -16,9 +16,10 @@ use std::{collections::HashMap, time::Duration};
 
 use anyhow::Context as _;
 use futures::{FutureExt as _, stream::TryStreamExt};
+use hotshot_types::traits::node_implementation::NodeType;
 use sqlx::{
     Executor as _, Row as _,
-    pool::PoolOptions,
+    pool::{Pool, PoolOptions},
     postgres::{PgConnectOptions, PgRow, PgSslMode},
 };
 
@@ -30,7 +31,7 @@ mod imp;
 use imp::queries::state::Node;
 pub use imp::*;
 
-use crate::{QueryError, QueryResult, include_migrations};
+use crate::{QueryError, QueryResult, include_migrations, merklized_state::MerklizedState};
 
 /// Drop connections that come back to the pool with a transaction still open.
 ///
@@ -58,9 +59,8 @@ pub fn release_only_idle(pool: PoolOptions<sqlx::Postgres>) -> PoolOptions<sqlx:
 impl Backend for Db {
     type ConnectOptions = PgConnectOptions;
 
-    const EMBEDDED: bool = false;
+    const KIND: DbKind = DbKind::Postgres;
     const MAX_FN: &'static str = "GREATEST";
-    const BINARY_TYPE: &'static str = "BYTEA";
 
     fn default_connect_options() -> PgConnectOptions {
         PgConnectOptions::default()
@@ -90,6 +90,77 @@ impl Backend for Db {
             .boxed()
         });
         release_only_idle(pool)
+    }
+
+    fn log_conflict_sessions(pool: Pool<Db>, op: &'static str) {
+        tokio::spawn(async move {
+            match sqlx::query(
+                "SELECT pid, COALESCE(state, 'unknown') AS state, left(COALESCE(query, ''), 200) \
+                 AS query FROM pg_stat_activity WHERE pid != pg_backend_pid() AND state IS \
+                 DISTINCT FROM 'idle' AND usename = current_user",
+            )
+            .fetch_all(&pool)
+            .await
+            {
+                Ok(rows) if rows.is_empty() => {
+                    tracing::warn!(op, "serialization conflict: no other non-idle DB sessions");
+                },
+                Ok(rows) => {
+                    for row in &rows {
+                        let pid: i32 = row.try_get("pid").unwrap_or(-1);
+                        let state: String = row.try_get("state").unwrap_or_default();
+                        let query_text: String = row.try_get("query").unwrap_or_default();
+                        tracing::warn!(
+                            op,
+                            pid,
+                            state,
+                            "serialization conflict: concurrent session: {query_text}",
+                        );
+                    }
+                },
+                Err(e) => {
+                    tracing::error!(op, "failed to query pg_stat_activity: {e:#}");
+                },
+            }
+
+            // Log SSI predicate locks held by all non-idle sessions
+            match sqlx::query(
+                "SELECT l.pid, l.locktype, CASE WHEN l.relation IS NOT NULL THEN c.relname ELSE \
+                 NULL END AS relation, l.page, l.tuple, left(COALESCE(a.query, ''), 100) AS query \
+                 FROM pg_locks l JOIN pg_stat_activity a ON a.pid = l.pid LEFT JOIN pg_class c ON \
+                 c.oid = l.relation WHERE l.mode = 'SIReadLock' AND a.state IS DISTINCT FROM \
+                 'idle' AND l.pid != pg_backend_pid() ORDER BY l.pid, c.relname",
+            )
+            .fetch_all(&pool)
+            .await
+            {
+                Ok(rows) if rows.is_empty() => {
+                    tracing::warn!(op, "serialization conflict: no SIReadLocks held");
+                },
+                Ok(rows) => {
+                    for row in &rows {
+                        let pid: i32 = row.try_get("pid").unwrap_or(-1);
+                        let locktype: String = row.try_get("locktype").unwrap_or_default();
+                        let relation: Option<String> = row.try_get("relation").unwrap_or(None);
+                        let page: Option<i32> = row.try_get("page").unwrap_or(None);
+                        let tuple: Option<i16> = row.try_get("tuple").unwrap_or(None);
+                        let query_text: String = row.try_get("query").unwrap_or_default();
+                        tracing::warn!(
+                            op,
+                            pid,
+                            locktype,
+                            relation,
+                            page,
+                            tuple,
+                            "serialization conflict: SIReadLock: {query_text}",
+                        );
+                    }
+                },
+                Err(e) => {
+                    tracing::warn!(op, "failed to query pg_locks: {e:#}");
+                },
+            }
+        });
     }
 }
 
@@ -136,14 +207,18 @@ impl StateQueries for Db {
         Ok(result)
     }
 
-    async fn upsert_nodes(
-        name: &str,
+    async fn upsert_nodes<Types, State, const ARITY: usize>(
         nodes: Vec<Node>,
         tx: &mut Transaction<Write>,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<()>
+    where
+        Types: NodeType,
+        State: MerklizedState<Types, ARITY>,
+    {
         if nodes.is_empty() {
             return Ok(());
         }
+        let name = State::state_type();
 
         // Deduplicate nodes by (path, created) - keep the last occurrence
         // This is required because UNNEST + ON CONFLICT cannot handle duplicates in the same batch
@@ -210,11 +285,15 @@ impl StateQueries for Db {
         }
     }
 
-    fn get_path_query<'q>(
-        table: &'static str,
+    fn get_path_query<'q, Types, State, const ARITY: usize>(
         paths: Vec<serde_json::Value>,
         created: i64,
-    ) -> QueryResult<(QueryBuilder<'q>, String)> {
+    ) -> QueryResult<(QueryBuilder<'q>, String)>
+    where
+        Types: NodeType,
+        State: MerklizedState<Types, ARITY>,
+    {
+        let table = State::state_type();
         let mut query = QueryBuilder::default();
         let paths_param = query.bind(paths)?;
         let created_param = query.bind(created)?;

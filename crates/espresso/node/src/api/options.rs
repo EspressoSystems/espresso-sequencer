@@ -138,7 +138,7 @@ impl Options {
     /// that consensus will populuate metrics that can then be read and served by the API.
     pub async fn serve<C, F>(mut self, init_context: F) -> anyhow::Result<C>
     where
-        C: ApiContext,
+        C: ApiContext + Clone,
         F: FnOnce(
             Box<dyn Metrics>,
             Box<dyn ApiSink>,
@@ -249,17 +249,17 @@ impl Options {
 
         let ctx = init_context(metrics, consumer, storage.clone()).await?;
         send_ctx
-            .send(ctx.clone())
+            .send(Box::new(ctx.clone()))
             .ok()
             .context("API server exited without receiving context")?;
         Ok(ctx.with_task_list(tasks))
     }
 
-    async fn init_with_query_module_fs<C: ApiContext>(
+    async fn init_with_query_module_fs(
         &self,
         query_opt: Query,
         mod_opt: persistence::fs::Options,
-        state: ApiState<C>,
+        state: ApiState,
         tasks: &mut TaskList,
     ) -> anyhow::Result<(
         Box<dyn Metrics>,
@@ -435,10 +435,10 @@ pub struct LightClient;
 /// Returns the metrics handle plus the wrapped query data source shared by the axum server and
 /// update loops.
 #[allow(clippy::type_complexity)]
-pub(super) fn init_query_data_source<C: ApiContext, D>(
+pub(super) fn init_query_data_source<D>(
     ds: D,
-    state: ApiState<C>,
-) -> (Box<dyn Metrics>, Arc<StorageState<C, D>>)
+    state: ApiState,
+) -> (Box<dyn Metrics>, Arc<StorageState<D>>)
 where
     D: SequencerDataSource + CatchupStorage + PruningDataSource + Send + Sync + 'static,
 {

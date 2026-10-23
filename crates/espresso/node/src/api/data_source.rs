@@ -45,7 +45,7 @@ use super::{
 };
 use crate::{
     SeqTypes, U256,
-    api::{ApiState, LightClientProvider, context::ApiContext},
+    api::{ApiState, LightClientProvider},
     persistence,
     state_cert::StateCertFetchError,
 };
@@ -94,9 +94,9 @@ pub trait SequencerDataSource:
 pub type Provider = AnyProvider<SeqTypes>;
 
 /// Create a provider for fetching missing data from a list of peer query services.
-pub(super) async fn provider<C: ApiContext>(
+pub(super) async fn provider(
     peers: impl IntoIterator<Item = Url>,
-    state: &ApiState<C>,
+    state: &ApiState,
     opt: LightClientOptions,
     db_opt: LightClientDbOptions,
 ) -> anyhow::Result<Provider> {

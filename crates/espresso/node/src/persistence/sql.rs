@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, future::Future, path::Path, sync::Arc, time::Instant};
+use std::{collections::BTreeMap, future::Future, sync::Arc, time::Instant};
 
 use alloy::primitives::Address;
 use anyhow::{Context, bail};
@@ -9,16 +9,15 @@ use espresso_types::{
     AuthenticatedValidatorMap, BackoffParams, Header, Leaf, Leaf2, NetworkConfig, Payload, PubKey,
     RegisteredValidatorMap, StakeTableHash,
     traits::{EventsPersistenceRead, MembershipPersistence, StakeTuple},
-    v0::traits::{EventConsumer, PersistenceOptions, SequencerPersistence, StateCatchup},
+    v0::traits::{
+        EventConsumer, PersistenceOptions, SequencerPersistence, StateCatchup, StateCertPersistence,
+    },
     v0_3::{
         AuthenticatedValidator, EventKey, IndexedStake, RegisteredValidator, RewardAmount,
         StakeTableEvent,
     },
 };
 use futures::stream::StreamExt;
-use hotshot_libp2p_networking::network::behaviours::dht::store::persistent::{
-    DhtPersistentStorage, SerializableRecord,
-};
 use hotshot_new_protocol::message::Certificate2;
 use hotshot_query_service::{
     data_source::{
@@ -54,13 +53,13 @@ use hotshot_types::{
 use indexmap::IndexMap;
 use itertools::Itertools;
 use light_client::storage::LightClientDbOptions;
-use sqlx::{Decode, Executor, QueryBuilder, Row, Type, query};
+use sqlx::{Executor, QueryBuilder, Row, query};
 
 use super::{
     super::{ConsensusPruningOptions, Options as SqlOptions, within_gap_fill_horizon},
     qs::{
-        Backend as _, Config, Db, Read, SerializableRetryConfig, SqlStorage, Transaction, Write,
-        query_as,
+        Backend as _, Config, Db, DbKind, Read, SerializableRetryConfig, SqlStorage, Transaction,
+        Write, query_as,
     },
 };
 use crate::{
@@ -68,61 +67,10 @@ use crate::{
     api::options::Query,
     catchup::SqlStateCatchup,
     persistence::{
-        migrate_network_config,
-        persistence_metrics::PersistenceMetricsValue,
-        storage_probe::{self, SqlitePragmas, StorageProbe},
+        migrate_network_config, persistence_metrics::PersistenceMetricsValue,
+        storage_probe::StorageProbe,
     },
 };
-
-/// The directory `storage_probe::probe` should classify for a SQLite database at `path`. Falls
-/// back to `.` when `path` has no parent, e.g. a bare relative filename, or the empty `PathBuf`
-/// from `SqliteOptions::default()`.
-pub(super) fn sqlite_probe_dir(path: &Path) -> &Path {
-    match path.parent() {
-        Some(parent) if !parent.as_os_str().is_empty() => parent,
-        _ => Path::new("."),
-    }
-}
-
-async fn read_pragma<T>(pool: &sqlx::Pool<Db>, pragma: &str) -> Option<T>
-where
-    T: for<'a> Decode<'a, Db> + Type<Db>,
-{
-    match sqlx::query(pragma).fetch_one(pool).await {
-        Ok(row) => row.try_get(0).ok(),
-        Err(err) => {
-            tracing::debug!(pragma, ?err, "storage probe: pragma query failed");
-            None
-        },
-    }
-}
-
-/// The first failure short-circuits the rest: a pragma query only fails if the pool is unusable.
-pub(super) async fn read_pragmas(pool: &sqlx::Pool<Db>) -> Option<SqlitePragmas> {
-    let journal_mode = read_pragma(pool, "PRAGMA journal_mode").await?;
-    // SQLite reports these two back as their numeric settings, not the names used to set them.
-    let synchronous = match read_pragma::<i64>(pool, "PRAGMA synchronous").await? {
-        0 => "off",
-        1 => "normal",
-        2 => "full",
-        3 => "extra",
-        _ => "unknown",
-    };
-    let auto_vacuum = match read_pragma::<i64>(pool, "PRAGMA auto_vacuum").await? {
-        0 => "none",
-        1 => "full",
-        2 => "incremental",
-        _ => "unknown",
-    };
-    let page_size: i64 = read_pragma(pool, "PRAGMA page_size").await?;
-
-    Some(SqlitePragmas {
-        journal_mode,
-        synchronous,
-        auto_vacuum,
-        page_size: page_size as u64,
-    })
-}
 
 /// Node setup that differs between the SQL backends.
 pub(crate) trait BackendOptions {
@@ -131,6 +79,12 @@ pub(crate) trait BackendOptions {
     fn light_client_db(cfg: &Config, query: &Query) -> LightClientDbOptions;
 
     async fn reset_light_client(cfg: &Config) -> anyhow::Result<()>;
+
+    /// A probe of the database file and its settings, for a backend that keeps the database in one.
+    async fn storage_probe(
+        db: &SqlStorage,
+        opt: &SqlOptions,
+    ) -> anyhow::Result<Option<StorageProbe>>;
 }
 
 impl TryFrom<&SqlOptions> for Config {
@@ -200,13 +154,7 @@ impl PersistenceOptions for Options {
         let config = Config::try_from(&self.0)?;
         let db = SqlStorage::connect(config, StorageConnectionType::Sequencer).await?;
 
-        let probe = if Db::EMBEDDED {
-            let pragmas = read_pragmas(&db.pool()).await;
-            let path = self.0.sqlite_options.path.clone().unwrap_or_default();
-            Some(storage_probe::probe(sqlite_probe_dir(&path), pragmas).await?)
-        } else {
-            None
-        };
+        let probe = Db::storage_probe(&db, &self.0).await?;
 
         let persistence = Persistence {
             db,
@@ -841,20 +789,21 @@ impl Persistence {
     /// Measured in a read transaction: on SQLite it scans every page of the pruned tables, and
     /// holding the write lock that long stalls the vote and proposal writes consensus waits on.
     async fn consensus_storage_usage(&self) -> anyhow::Result<u64> {
-        let usage_query = if Db::EMBEDDED {
-            format!(
+        let usage_query = match Db::KIND {
+            DbKind::Sqlite => format!(
                 "SELECT sum(pgsize) FROM dbstat WHERE name IN ({})",
                 PRUNE_TABLES
                     .iter()
                     .map(|table| format!("'{table}'"))
                     .join(",")
-            )
-        } else {
-            let table_sizes = PRUNE_TABLES
-                .iter()
-                .map(|table| format!("pg_table_size('{table}')"))
-                .join(" + ");
-            format!("SELECT {table_sizes}")
+            ),
+            DbKind::Postgres => {
+                let table_sizes = PRUNE_TABLES
+                    .iter()
+                    .map(|table| format!("pg_table_size('{table}')"))
+                    .join(" + ");
+                format!("SELECT {table_sizes}")
+            },
         };
 
         let mut tx = self.db.read().await?;
@@ -1744,6 +1693,61 @@ impl SequencerPersistence for Persistence {
         Ok(Some(cert))
     }
 
+    async fn load_start_epoch_info(&self) -> anyhow::Result<Vec<InitializerEpochInfo<SeqTypes>>> {
+        let rows = self
+            .db
+            .read()
+            .await?
+            .fetch_all(
+                query("SELECT * from epoch_drb_and_root ORDER BY epoch DESC LIMIT $1")
+                    .bind(RECENT_STAKE_TABLES_LIMIT as i64),
+            )
+            .await?;
+
+        // reverse the rows vector to return the most recent epochs, but in ascending order
+        rows.into_iter()
+            .rev()
+            .map(|row| {
+                let epoch: i64 = row.try_get("epoch")?;
+                let drb_result: Option<Vec<u8>> = row.try_get("drb_result")?;
+                let block_header: Option<Vec<u8>> = row.try_get("block_header")?;
+                if let Some(drb_result) = drb_result {
+                    let drb_result_array = drb_result
+                        .try_into()
+                        .or_else(|_| bail!("invalid drb result"))?;
+                    let block_header: Option<<SeqTypes as NodeType>::BlockHeader> = block_header
+                        .map(|data| bincode::deserialize(&data))
+                        .transpose()?;
+                    Ok(Some(InitializerEpochInfo::<SeqTypes> {
+                        epoch: EpochNumber::new(epoch as u64),
+                        drb_result: drb_result_array,
+                        block_header,
+                    }))
+                } else {
+                    // Right now we skip the epoch_drb_and_root row if there is no drb result.
+                    // This seems reasonable based on the expected order of events, but please double check!
+                    Ok(None)
+                }
+            })
+            .filter_map(|e| match e {
+                Err(v) => Some(Err(v)),
+                Ok(Some(v)) => Some(Ok(v)),
+                Ok(None) => None,
+            })
+            .collect()
+    }
+
+    fn enable_metrics(&mut self, metrics: &dyn Metrics) {
+        self.internal_metrics = PersistenceMetricsValue::new(metrics);
+
+        if let Some(probe) = &self.probe {
+            probe.register(&*metrics.subgroup("disk".into()));
+        }
+    }
+}
+
+#[async_trait]
+impl StateCertPersistence for Persistence {
     async fn get_state_cert_by_epoch(
         &self,
         epoch: u64,
@@ -1804,58 +1808,6 @@ impl SequencerPersistence for Persistence {
             tx.commit().await
         })
         .await
-    }
-
-    async fn load_start_epoch_info(&self) -> anyhow::Result<Vec<InitializerEpochInfo<SeqTypes>>> {
-        let rows = self
-            .db
-            .read()
-            .await?
-            .fetch_all(
-                query("SELECT * from epoch_drb_and_root ORDER BY epoch DESC LIMIT $1")
-                    .bind(RECENT_STAKE_TABLES_LIMIT as i64),
-            )
-            .await?;
-
-        // reverse the rows vector to return the most recent epochs, but in ascending order
-        rows.into_iter()
-            .rev()
-            .map(|row| {
-                let epoch: i64 = row.try_get("epoch")?;
-                let drb_result: Option<Vec<u8>> = row.try_get("drb_result")?;
-                let block_header: Option<Vec<u8>> = row.try_get("block_header")?;
-                if let Some(drb_result) = drb_result {
-                    let drb_result_array = drb_result
-                        .try_into()
-                        .or_else(|_| bail!("invalid drb result"))?;
-                    let block_header: Option<<SeqTypes as NodeType>::BlockHeader> = block_header
-                        .map(|data| bincode::deserialize(&data))
-                        .transpose()?;
-                    Ok(Some(InitializerEpochInfo::<SeqTypes> {
-                        epoch: EpochNumber::new(epoch as u64),
-                        drb_result: drb_result_array,
-                        block_header,
-                    }))
-                } else {
-                    // Right now we skip the epoch_drb_and_root row if there is no drb result.
-                    // This seems reasonable based on the expected order of events, but please double check!
-                    Ok(None)
-                }
-            })
-            .filter_map(|e| match e {
-                Err(v) => Some(Err(v)),
-                Ok(Some(v)) => Some(Ok(v)),
-                Ok(None) => None,
-            })
-            .collect()
-    }
-
-    fn enable_metrics(&mut self, metrics: &dyn Metrics) {
-        self.internal_metrics = PersistenceMetricsValue::new(metrics);
-
-        if let Some(probe) = &self.probe {
-            probe.register(&*metrics.subgroup("disk".into()));
-        }
     }
 }
 
@@ -2229,7 +2181,7 @@ impl MembershipPersistence for Persistence {
     async fn delete_stake_tables(&self) -> anyhow::Result<()> {
         serializable_retry!(self, || async {
             let mut tx = self.db.write().await?;
-            if !Db::EMBEDDED {
+            if Db::KIND == DbKind::Postgres {
                 query(
                     "TRUNCATE stake_table_events, stake_table_events_l1_block, \
                      epoch_drb_and_root, stake_table_validators",
@@ -2334,66 +2286,6 @@ impl MembershipPersistence for Persistence {
                     .map_err(Into::into)
             })
             .collect()
-    }
-}
-
-#[async_trait]
-impl DhtPersistentStorage for Persistence {
-    /// Save the DHT to the database
-    ///
-    /// # Errors
-    /// - If we fail to serialize the records
-    /// - If we fail to write the serialized records to the DB
-    async fn save(&self, records: Vec<SerializableRecord>) -> anyhow::Result<()> {
-        // Bincode-serialize the records
-        let to_save =
-            bincode::serialize(&records).with_context(|| "failed to serialize records")?;
-
-        // Prepare the statement
-        let stmt = "INSERT INTO libp2p_dht (id, serialized_records) VALUES (0, $1) ON CONFLICT \
-                    (id) DO UPDATE SET serialized_records = $1";
-
-        serializable_retry!(self, || async {
-            // Execute the query
-            let mut tx = self
-                .db
-                .write()
-                .await
-                .with_context(|| "failed to start an atomic DB transaction")?;
-            tx.execute(query(stmt).bind(to_save.clone()))
-                .await
-                .with_context(|| "failed to execute DB query")?;
-
-            // Commit the state
-            tx.commit().await.with_context(|| "failed to commit to DB")
-        })
-        .await
-    }
-
-    /// Load the DHT from the database
-    ///
-    /// # Errors
-    /// - If we fail to read from the DB
-    /// - If we fail to deserialize the records
-    async fn load(&self) -> anyhow::Result<Vec<SerializableRecord>> {
-        // Fetch the results from the DB
-        let result = self
-            .db
-            .read()
-            .await
-            .with_context(|| "failed to start a DB read transaction")?
-            .fetch_one("SELECT * FROM libp2p_dht where id = 0")
-            .await
-            .with_context(|| "failed to fetch from DB")?;
-
-        // Get the `serialized_records` row
-        let serialied_records: Vec<u8> = result.get("serialized_records");
-
-        // Deserialize it
-        let records: Vec<SerializableRecord> = bincode::deserialize(&serialied_records)
-            .with_context(|| "Failed to deserialize records")?;
-
-        Ok(records)
     }
 }
 
@@ -2508,7 +2400,7 @@ mod testing {
 mod test {
     use std::time::Duration;
 
-    use espresso_types::{Leaf, NodeState, ValidatedState, traits::NullEventConsumer};
+    use espresso_types::{Leaf, NodeState, PubKey, ValidatedState, traits::NullEventConsumer};
     use futures::stream::TryStreamExt;
     use hotshot_example_types::node_types::TEST_VERSIONS;
     use hotshot_types::{
@@ -2524,7 +2416,7 @@ mod test {
     };
 
     use super::*;
-    use crate::{BLSPubKey, PubKey, persistence::tests::TestablePersistence as _};
+    use crate::{BLSPubKey, persistence::tests::TestablePersistence as _};
 
     #[test_log::test(tokio::test(flavor = "multi_thread"))]
     async fn test_quorum_proposals_leaf_hash_migration() {

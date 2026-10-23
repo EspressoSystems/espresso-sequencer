@@ -1,10 +1,11 @@
 //! Persistence on an embedded SQLite file.
 
-use std::time::Duration;
+use std::{path::Path, time::Duration};
 
 use anyhow::Context as _;
 use hotshot_query_service::{data_source::storage::sql::sqlite as qs, include_migrations};
 use light_client::storage::LightClientDbOptions;
+use sqlx::{Decode, Row, Type};
 
 #[expect(
     clippy::duplicate_mod,
@@ -14,10 +15,13 @@ use light_client::storage::LightClientDbOptions;
 mod imp;
 
 pub use imp::*;
-use qs::Config;
+use qs::{Config, SqlStorage};
 
 use super::{Options as SqlOptions, SqliteOptions};
-use crate::api::options::Query;
+use crate::{
+    api::options::Query,
+    persistence::storage_probe::{self, SqlitePragmas, StorageProbe},
+};
 
 impl BackendOptions for qs::Db {
     fn apply(mut cfg: Config, opt: &SqlOptions) -> anyhow::Result<Config> {
@@ -45,6 +49,17 @@ impl BackendOptions for qs::Db {
     async fn reset_light_client(_cfg: &Config) -> anyhow::Result<()> {
         Ok(())
     }
+
+    async fn storage_probe(
+        db: &SqlStorage,
+        opt: &SqlOptions,
+    ) -> anyhow::Result<Option<StorageProbe>> {
+        let pragmas = read_pragmas(&db.pool()).await;
+        let path = opt.sqlite_options.path.clone().unwrap_or_default();
+        Ok(Some(
+            storage_probe::probe(sqlite_probe_dir(&path), pragmas).await?,
+        ))
+    }
 }
 
 impl From<SqliteOptions> for Config {
@@ -64,6 +79,56 @@ impl From<SqliteOptions> for Config {
     }
 }
 
+/// The directory `storage_probe::probe` should classify for a SQLite database at `path`. Falls
+/// back to `.` when `path` has no parent, e.g. a bare relative filename, or the empty `PathBuf`
+/// from `SqliteOptions::default()`.
+fn sqlite_probe_dir(path: &Path) -> &Path {
+    match path.parent() {
+        Some(parent) if !parent.as_os_str().is_empty() => parent,
+        _ => Path::new("."),
+    }
+}
+
+async fn read_pragma<T>(pool: &sqlx::Pool<qs::Db>, pragma: &str) -> Option<T>
+where
+    T: for<'a> Decode<'a, qs::Db> + Type<qs::Db>,
+{
+    match sqlx::query(pragma).fetch_one(pool).await {
+        Ok(row) => row.try_get(0).ok(),
+        Err(err) => {
+            tracing::debug!(pragma, ?err, "storage probe: pragma query failed");
+            None
+        },
+    }
+}
+
+/// The first failure short-circuits the rest: a pragma query only fails if the pool is unusable.
+async fn read_pragmas(pool: &sqlx::Pool<qs::Db>) -> Option<SqlitePragmas> {
+    let journal_mode = read_pragma(pool, "PRAGMA journal_mode").await?;
+    // SQLite reports these two back as their numeric settings, not the names used to set them.
+    let synchronous = match read_pragma::<i64>(pool, "PRAGMA synchronous").await? {
+        0 => "off",
+        1 => "normal",
+        2 => "full",
+        3 => "extra",
+        _ => "unknown",
+    };
+    let auto_vacuum = match read_pragma::<i64>(pool, "PRAGMA auto_vacuum").await? {
+        0 => "none",
+        1 => "full",
+        2 => "incremental",
+        _ => "unknown",
+    };
+    let page_size: i64 = read_pragma(pool, "PRAGMA page_size").await?;
+
+    Some(SqlitePragmas {
+        journal_mode,
+        synchronous,
+        auto_vacuum,
+        page_size: page_size as u64,
+    })
+}
+
 #[cfg(any(test, feature = "testing"))]
 pub(crate) fn tmp_options(db: &qs::testing::TmpDb) -> SqlOptions {
     SqliteOptions {
@@ -81,8 +146,7 @@ mod test {
     use hotshot_types::traits::metrics::Metrics;
 
     use super::{
-        Config, SqlOptions, SqliteOptions,
-        imp::{Persistence, read_pragmas, sqlite_probe_dir},
+        Config, SqlOptions, SqliteOptions, imp::Persistence, read_pragmas, sqlite_probe_dir,
     };
     use crate::persistence::tests::TestablePersistence as _;
 

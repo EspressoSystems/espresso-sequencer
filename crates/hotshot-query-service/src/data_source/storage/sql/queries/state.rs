@@ -94,7 +94,6 @@ impl<Mode: TransactionMode> Transaction<Mode> {
         Types: NodeType,
         State: MerklizedState<Types, ARITY> + 'static,
     {
-        let state_type = State::state_type();
         let tree_height = State::tree_height();
 
         // Get the traversal path of the index
@@ -103,7 +102,7 @@ impl<Mode: TransactionMode> Transaction<Mode> {
         // Get all the nodes in the path to the index.
         // Order by pos DESC is to return nodes from the leaf to the root
         let paths = traversal_path_values(&traversal_path, traversal_path.len());
-        let (query, sql) = Db::get_path_query(state_type, paths, created)?;
+        let (query, sql) = Db::get_path_query::<Types, State, ARITY>(paths, created)?;
         let rows = query.query(&sql).fetch_all(self.as_mut()).await?;
 
         let nodes: Vec<Node> = rows.into_iter().map(Db::node_from_row).collect();

@@ -26,7 +26,6 @@ use hotshot_types::{
 };
 use itertools::Itertools;
 use log::LevelFilter;
-use rand::Rng;
 use sqlx::{
     ConnectOptions, Row,
     pool::{Pool, PoolOptions},
@@ -75,7 +74,8 @@ pub use refinery::Migration;
 pub use transaction::*;
 
 use self::{migrate::Migrator, transaction::PoolMetrics};
-use super::Db;
+pub use super::super::retry::SerializableRetryConfig;
+use super::{super::retry::is_serialization_conflict_err, Db};
 use crate::data_source::storage::{AvailabilityStorage, NodeStorage, sql::StorageConnectionType};
 
 /// The migrations required to build the default schema for this version of [`SqlStorage`].
@@ -299,6 +299,8 @@ impl Config {
         self
     }
 
+    /// Set the minimum number of connections of the query pool. SQLite has one pool, so this does
+    /// nothing there.
     pub fn query_min_connections(mut self, min: u32) -> Self {
         self.pool_opt_query = self.pool_opt_query.min_connections(min);
         self
@@ -313,6 +315,8 @@ impl Config {
         self
     }
 
+    /// Set the maximum number of connections of the query pool. SQLite has one pool, so this does
+    /// nothing there.
     pub fn query_max_connections(mut self, max: u32) -> Self {
         self.pool_opt_query = self.pool_opt_query.max_connections(max);
         self
@@ -476,7 +480,9 @@ impl SqlStorage {
         let pruned_heights = PrunedHeightMetrics::new(&*metrics.subgroup("pruner".into()));
 
         let pool = match connection_type {
-            StorageConnectionType::Query if !Db::EMBEDDED => config.pool_opt_query.clone(),
+            StorageConnectionType::Query if Db::KIND == DbKind::Postgres => {
+                config.pool_opt_query.clone()
+            },
             StorageConnectionType::Query | StorageConnectionType::Sequencer => {
                 config.pool_opt.clone()
             },
@@ -486,7 +492,7 @@ impl SqlStorage {
         let serializable_retry_config = config.serializable_retry_config;
 
         // Only reuse the same pool if we're using sqlite
-        if Db::EMBEDDED || connection_type == StorageConnectionType::Sequencer {
+        if Db::KIND == DbKind::Sqlite || connection_type == StorageConnectionType::Sequencer {
             // re-use the same pool if present and return early
             if let Some(pool) = config.pool {
                 return Ok(Self {
@@ -502,7 +508,7 @@ impl SqlStorage {
             tracing::info!("not reusing existing pool for query connection");
         }
 
-        let schema = config.schema.clone();
+        let schema = config.schema;
         let pool = Db::session_hooks(pool, schema.clone());
 
         if config.reset {
@@ -514,7 +520,7 @@ impl SqlStorage {
         // Create or connect to the schema for this query service.
         let mut conn = pool.acquire().await?;
 
-        if !Db::EMBEDDED {
+        if Db::KIND == DbKind::Postgres {
             // Disable statement timeout for migrations, as they can take a long time
             query("SET statement_timeout = 0")
                 .execute(conn.as_mut())
@@ -592,115 +598,6 @@ impl SqlStorage {
     }
 }
 
-/// Retry policy for transactions aborted by PostgreSQL serialization conflicts (SQLSTATE 40001).
-#[derive(Clone, Copy, Debug)]
-pub struct SerializableRetryConfig {
-    /// Initial delay before the first retry.
-    base: Duration,
-    /// Maximum delay between retries.
-    max: Duration,
-    /// Multiplier applied to the delay between successive retries.
-    factor: u32,
-    /// Backoff jitter as a `(numerator, denominator)` ratio of the delay.
-    jitter: (u64, u64),
-    /// Maximum number of retries before giving up.
-    retry_max: u32,
-    /// When set, each retried conflict spawns a background `pg_stat_activity` / `pg_locks` snapshot.
-    pg_stat_diag: bool,
-}
-
-impl Default for SerializableRetryConfig {
-    fn default() -> Self {
-        Self {
-            base: Duration::from_millis(10),
-            max: Duration::from_millis(500),
-            factor: 2,
-            jitter: (5, 10),
-            retry_max: 100,
-            pg_stat_diag: false,
-        }
-    }
-}
-
-impl SerializableRetryConfig {
-    /// Construct a retry policy. `jitter` is a `(numerator, denominator)` ratio of the delay.
-    pub const fn new(
-        base: Duration,
-        max: Duration,
-        factor: u32,
-        jitter: (u64, u64),
-        retry_max: u32,
-        pg_stat_diag: bool,
-    ) -> Self {
-        Self {
-            base,
-            max,
-            factor,
-            jitter,
-            retry_max,
-            pg_stat_diag,
-        }
-    }
-
-    /// Run `f`, retrying (up to `retry_max` times with exponential backoff + jitter) whenever
-    /// `should_retry` returns `true` for the error. `f` is re-run from scratch on each attempt.
-    async fn retry_if<F, Fut, T, E>(
-        &self,
-        op: &'static str,
-        mut should_retry: impl FnMut(&E) -> bool,
-        f: F,
-    ) -> Result<T, E>
-    where
-        F: Fn() -> Fut,
-        Fut: Future<Output = Result<T, E>>,
-    {
-        let mut delay = self.base;
-        for i in 0..=self.retry_max {
-            match f().await {
-                Ok(res) => return Ok(res),
-                Err(err) if i < self.retry_max && should_retry(&err) => {
-                    tracing::warn!(
-                        op,
-                        attempt = i + 1,
-                        max_retries = self.retry_max,
-                        delay_ms = delay.as_millis(),
-                        "serialization conflict, retrying transaction after {delay:?}"
-                    );
-                    sleep(delay).await;
-                    delay = self.backoff(delay);
-                },
-                Err(err) => return Err(err),
-            }
-        }
-        unreachable!()
-    }
-
-    /// Compute the next backoff delay: `delay * factor` plus random jitter, capped at `max`.
-    fn backoff(&self, delay: Duration) -> Duration {
-        if delay >= self.max {
-            return self.max;
-        }
-        let ms = delay
-            .saturating_mul(self.factor)
-            .as_millis()
-            .min(u64::MAX as u128) as u64;
-        let (jitter_num, jitter_den) = self.jitter;
-        let jitter = if jitter_num == 0 || jitter_den == 0 {
-            0
-        } else {
-            let mut rng = rand::thread_rng();
-            ms * rng.gen_range(0..jitter_num) / jitter_den
-        };
-        min(Duration::from_millis(ms + jitter), self.max)
-    }
-}
-
-/// Returns `true` if `err`'s [`Display`](std::fmt::Display) output identifies it as a PostgreSQL
-/// serialization conflict (SQLSTATE 40001, message "could not serialize access").
-fn is_serialization_conflict_err<E: std::fmt::Display>(err: &E) -> bool {
-    format!("{err:#}").contains("could not serialize access")
-}
-
 /// Like [`is_serialization_conflict_err`] but also logs concurrent DB sessions for diagnostics.
 fn serialization_conflict_with_diag<E: std::fmt::Display>(
     pool: Pool<Db>,
@@ -709,89 +606,15 @@ fn serialization_conflict_with_diag<E: std::fmt::Display>(
     let mut first = true;
     move |err| {
         if is_serialization_conflict_err(err) {
-            if first && !Db::EMBEDDED {
+            if first {
                 first = false;
-                spawn_pg_stat_activity_log(pool.clone(), op);
+                Db::log_conflict_sessions(pool.clone(), op);
             }
             true
         } else {
             false
         }
     }
-}
-
-/// Spawn a background task that queries `pg_stat_activity` and `pg_locks` to identify the
-/// connections and predicate locks involved in a serialization conflict, logging them at `warn`.
-fn spawn_pg_stat_activity_log(pool: Pool<Db>, op: &'static str) {
-    use sqlx::Row as _;
-    tokio::spawn(async move {
-        match sqlx::query(
-            "SELECT pid, COALESCE(state, 'unknown') AS state, left(COALESCE(query, ''), 200) AS \
-             query FROM pg_stat_activity WHERE pid != pg_backend_pid() AND state IS DISTINCT FROM \
-             'idle' AND usename = current_user",
-        )
-        .fetch_all(&pool)
-        .await
-        {
-            Ok(rows) if rows.is_empty() => {
-                tracing::warn!(op, "serialization conflict: no other non-idle DB sessions");
-            },
-            Ok(rows) => {
-                for row in &rows {
-                    let pid: i32 = row.try_get("pid").unwrap_or(-1);
-                    let state: String = row.try_get("state").unwrap_or_default();
-                    let query_text: String = row.try_get("query").unwrap_or_default();
-                    tracing::warn!(
-                        op,
-                        pid,
-                        state,
-                        "serialization conflict: concurrent session: {query_text}",
-                    );
-                }
-            },
-            Err(e) => {
-                tracing::error!(op, "failed to query pg_stat_activity: {e:#}");
-            },
-        }
-
-        // Log SSI predicate locks held by all non-idle sessions
-        match sqlx::query(
-            "SELECT l.pid, l.locktype, CASE WHEN l.relation IS NOT NULL THEN c.relname ELSE NULL \
-             END AS relation, l.page, l.tuple, left(COALESCE(a.query, ''), 100) AS query FROM \
-             pg_locks l JOIN pg_stat_activity a ON a.pid = l.pid LEFT JOIN pg_class c ON c.oid = \
-             l.relation WHERE l.mode = 'SIReadLock' AND a.state IS DISTINCT FROM 'idle' AND l.pid \
-             != pg_backend_pid() ORDER BY l.pid, c.relname",
-        )
-        .fetch_all(&pool)
-        .await
-        {
-            Ok(rows) if rows.is_empty() => {
-                tracing::warn!(op, "serialization conflict: no SIReadLocks held");
-            },
-            Ok(rows) => {
-                for row in &rows {
-                    let pid: i32 = row.try_get("pid").unwrap_or(-1);
-                    let locktype: String = row.try_get("locktype").unwrap_or_default();
-                    let relation: Option<String> = row.try_get("relation").unwrap_or(None);
-                    let page: Option<i32> = row.try_get("page").unwrap_or(None);
-                    let tuple: Option<i16> = row.try_get("tuple").unwrap_or(None);
-                    let query_text: String = row.try_get("query").unwrap_or_default();
-                    tracing::warn!(
-                        op,
-                        pid,
-                        locktype,
-                        relation,
-                        page,
-                        tuple,
-                        "serialization conflict: SIReadLock: {query_text}",
-                    );
-                }
-            },
-            Err(e) => {
-                tracing::warn!(op, "failed to query pg_locks: {e:#}");
-            },
-        }
-    });
 }
 
 #[async_trait]
@@ -812,186 +635,6 @@ impl SerializableRetry for SqlStorage {
                 .retry_if(op, is_serialization_conflict_err, f)
                 .await
         }
-    }
-}
-
-#[cfg(test)]
-mod serializable_retry_tests {
-    use std::sync::{
-        Arc,
-        atomic::{AtomicU32, Ordering},
-    };
-
-    use super::{Duration, SerializableRetryConfig, is_serialization_conflict_err};
-
-    /// A retry policy with small delays and a low retry cap, so the exhaustion test runs quickly.
-    const TEST_RETRY: SerializableRetryConfig = SerializableRetryConfig::new(
-        Duration::from_millis(1),
-        Duration::from_millis(5),
-        2,
-        (5, 10),
-        5,
-        false,
-    );
-
-    /// An error whose message matches a PostgreSQL serialization conflict.
-    fn mock_serialization_error() -> anyhow::Error {
-        anyhow::anyhow!(
-            "could not serialize access due to read/write dependencies among transactions"
-        )
-    }
-
-    #[test]
-    fn test_is_serialization_conflict_err() {
-        // The PostgreSQL serialization-conflict message must be recognised.
-        assert!(is_serialization_conflict_err(&mock_serialization_error()));
-        // Other database errors must NOT match.
-        assert!(!is_serialization_conflict_err(&anyhow::anyhow!(
-            "duplicate key value violates unique constraint"
-        )));
-        // Non-database errors must not match.
-        assert!(!is_serialization_conflict_err(&anyhow::anyhow!(
-            "plain error"
-        )));
-    }
-
-    #[test_log::test(tokio::test(flavor = "multi_thread"))]
-    async fn test_retry_if_succeeds_immediately() {
-        let calls = Arc::new(AtomicU32::new(0));
-        let calls_clone = calls.clone();
-
-        let result: anyhow::Result<()> = TEST_RETRY
-            .retry_if("test", is_serialization_conflict_err, || {
-                let calls = calls_clone.clone();
-                async move {
-                    calls.fetch_add(1, Ordering::SeqCst);
-                    Ok(())
-                }
-            })
-            .await;
-
-        assert!(result.is_ok());
-        assert_eq!(calls.load(Ordering::SeqCst), 1);
-    }
-
-    #[test_log::test(tokio::test(flavor = "multi_thread"))]
-    async fn test_retry_if_retries_on_serialization_error() {
-        let calls = Arc::new(AtomicU32::new(0));
-        let calls_clone = calls.clone();
-
-        // The closure fails twice with a serialization error, then succeeds on the third attempt.
-        let result: anyhow::Result<()> = TEST_RETRY
-            .retry_if("test", is_serialization_conflict_err, || {
-                let calls = calls_clone.clone();
-                async move {
-                    let n = calls.fetch_add(1, Ordering::SeqCst);
-                    if n < 2 {
-                        Err(mock_serialization_error())
-                    } else {
-                        Ok(())
-                    }
-                }
-            })
-            .await;
-
-        assert!(result.is_ok());
-        assert_eq!(calls.load(Ordering::SeqCst), 3);
-    }
-
-    #[test_log::test(tokio::test(flavor = "multi_thread"))]
-    async fn test_retry_if_exhausts_retries() {
-        let calls = Arc::new(AtomicU32::new(0));
-        let calls_clone = calls.clone();
-
-        // The closure always fails; retry must give up after TEST_RETRY.retry_max (5) retries.
-        let result: anyhow::Result<()> = TEST_RETRY
-            .retry_if("test", is_serialization_conflict_err, || {
-                let calls = calls_clone.clone();
-                async move {
-                    calls.fetch_add(1, Ordering::SeqCst);
-                    Err(mock_serialization_error())
-                }
-            })
-            .await;
-
-        assert!(result.is_err());
-        // 1 initial attempt + 5 retries = 6 total calls.
-        assert_eq!(calls.load(Ordering::SeqCst), 6);
-    }
-
-    #[test_log::test(tokio::test(flavor = "multi_thread"))]
-    async fn test_retry_if_no_retry_on_other_errors() {
-        let calls = Arc::new(AtomicU32::new(0));
-        let calls_clone = calls.clone();
-
-        // Non-serialization errors must not be retried.
-        let result: anyhow::Result<()> = TEST_RETRY
-            .retry_if("test", is_serialization_conflict_err, || {
-                let calls = calls_clone.clone();
-                async move {
-                    calls.fetch_add(1, Ordering::SeqCst);
-                    Err(anyhow::anyhow!("unrelated error"))
-                }
-            })
-            .await;
-
-        assert!(result.is_err());
-        assert_eq!(calls.load(Ordering::SeqCst), 1);
-    }
-
-    /// Verify that [`function_name!`](crate::function_name) resolves to the unqualified name of the
-    /// enclosing function, both from a nested helper and from the test fn itself.
-    #[test]
-    fn test_function_name_macro() {
-        fn outer_test_fn() -> &'static str {
-            crate::function_name!()
-        }
-        assert_eq!(outer_test_fn(), "outer_test_fn");
-        assert_eq!(crate::function_name!(), "test_function_name_macro");
-
-        // Non-ASCII identifiers must not panic: the macro slices the `type_name` output, and
-        // a multi-byte codepoint near a slice boundary would panic if the macro used fixed
-        // byte offsets instead of char-boundary-safe operations.
-        fn télécharger() -> &'static str {
-            crate::function_name!()
-        }
-        assert_eq!(télécharger(), "télécharger");
-    }
-
-    /// Verify that [`function_name!`](crate::function_name) resolves to the function name even from
-    /// `async` contexts, where the body is lowered into a generator/closure. This is the case that
-    /// every production call site hits, and a naive macro reports `{{closure}}` here.
-    #[test_log::test(tokio::test)]
-    async fn test_function_name_macro_async() {
-        // Plain `async fn`: the body becomes a generator, adding a `{{closure}}` path segment.
-        async fn plain_async_fn() -> &'static str {
-            crate::function_name!()
-        }
-        assert_eq!(plain_async_fn().await, "plain_async_fn");
-
-        // Closure returning an async block inside an `async fn`, mirroring the real
-        // `serializable_retry!(self, || async { .. })` call sites: adds multiple `{{closure}}`
-        // segments to the path.
-        async fn nested_async_blocks() -> &'static str {
-            let f = || async { crate::function_name!() };
-            f().await
-        }
-        assert_eq!(nested_async_blocks().await, "nested_async_blocks");
-
-        // `#[async_trait]` method: the body is rewritten to `Box::pin(async move { .. })`, exactly
-        // as the real `serializable_retry!` call sites are.
-        struct S;
-        #[async_trait::async_trait]
-        trait T {
-            async fn async_trait_method(&self) -> &'static str;
-        }
-        #[async_trait::async_trait]
-        impl T for S {
-            async fn async_trait_method(&self) -> &'static str {
-                crate::function_name!()
-            }
-        }
-        assert_eq!(S.async_trait_method().await, "async_trait_method");
     }
 }
 
@@ -1290,12 +933,13 @@ impl SqlStorage {
     async fn get_disk_usage(&self) -> anyhow::Result<u64> {
         let mut tx = self.read().await?;
 
-        let query = if Db::EMBEDDED {
-            "
+        let query = match Db::KIND {
+            DbKind::Sqlite => {
+                "
             SELECT( (SELECT page_count FROM pragma_page_count) * (SELECT * FROM pragma_page_size)) \
-             AS total_bytes"
-        } else {
-            "SELECT pg_database_size(current_database())"
+                 AS total_bytes"
+            },
+            DbKind::Postgres => "SELECT pg_database_size(current_database())",
         };
 
         let row = tx.fetch_one(query).await.context("getting disk usage")?;
@@ -1306,7 +950,7 @@ impl SqlStorage {
 
     /// No-op on Postgres: no incremental vacuum, and a full one is too expensive to schedule.
     async fn vacuum(&self, pages: u64) -> anyhow::Result<()> {
-        if !Db::EMBEDDED {
+        if Db::KIND == DbKind::Postgres {
             return Ok(());
         }
         let mut conn = self.pool().acquire().await?;
@@ -1478,7 +1122,7 @@ pub mod testing {
     use refinery::Migration;
 
     pub use super::super::tmp_db::TmpDb;
-    use super::{Backend as _, Db};
+    use super::{Backend as _, Db, DbKind};
 
     /// The migrations a [`TmpDb`] applies on top of the default schema.
     pub(crate) fn test_migrations() -> Vec<Migration> {
@@ -1493,20 +1137,19 @@ pub mod testing {
 
     impl TestMerkleTreeMigration {
         fn create(name: &str) -> String {
-            let (bit_vec, binary, hash_pk, root_stored_column) = if Db::EMBEDDED {
-                (
+            let (bit_vec, binary, hash_pk, root_stored_column) = match Db::KIND {
+                DbKind::Sqlite => (
                     "TEXT",
                     "BLOB",
                     "INTEGER PRIMARY KEY AUTOINCREMENT",
                     " (json_extract(data, '$.test_merkle_tree_root'))",
-                )
-            } else {
-                (
+                ),
+                DbKind::Postgres => (
                     "BIT(8)",
                     "BYTEA",
                     "BIGSERIAL PRIMARY KEY",
                     "(data->>'test_merkle_tree_root')",
-                )
+                ),
             };
 
             format!(
@@ -1631,10 +1274,9 @@ mod test {
     }
 
     async fn vacuum(storage: &SqlStorage) {
-        let query = if Db::EMBEDDED {
-            "PRAGMA incremental_vacuum(16000)"
-        } else {
-            "VACUUM"
+        let query = match Db::KIND {
+            DbKind::Sqlite => "PRAGMA incremental_vacuum(16000)",
+            DbKind::Postgres => "VACUUM",
         };
         storage
             .pool

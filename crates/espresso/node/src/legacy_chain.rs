@@ -25,7 +25,7 @@ use anyhow::{Context, bail, ensure};
 use async_trait::async_trait;
 use espresso_types::{
     Certificate2, Header, SeqTypes,
-    traits::{PersistenceOptions, SequencerPersistence},
+    traits::{PersistenceOptions, SequencerPersistence, StateCertPersistence},
 };
 use futures::FutureExt;
 use hotshot_query_service::{

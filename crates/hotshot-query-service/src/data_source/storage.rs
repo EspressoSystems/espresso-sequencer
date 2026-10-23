@@ -158,9 +158,11 @@ pub mod sql {
     pub use crate::include_migrations;
 
     pub mod postgres;
+    mod retry;
     pub mod sqlite;
 
     pub use postgres::release_only_idle;
+    pub use retry::SerializableRetryConfig;
 
     // These tests start `postgres` from PATH, which doesn't work on Windows.
     #[cfg(all(any(test, feature = "testing"), not(target_os = "windows")))]

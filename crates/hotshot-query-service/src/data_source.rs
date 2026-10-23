@@ -1057,7 +1057,7 @@ pub mod node_tests {
             SyncStatusRange, TimeWindowQueryData, WindowStart,
         },
         testing::{
-            chain::{ChainNode, EPOCH_HEIGHT, MockChain, NUM_NODES},
+            chain::{ChainNode, EPOCH_HEIGHT, MockChain, NUM_NODES, genesis_vid},
             consensus::TestableDataSource,
             mocks::{MockPayload, MockTypes, mock_transaction},
             sleep,
@@ -1100,10 +1100,10 @@ pub mod node_tests {
             )
             .await,
         ];
-        let dispersal = vid.disperse([]).unwrap();
+        let (genesis_common, _) = genesis_vid(leaves[0].header());
         let mut vid_commons = vec![VidCommonQueryData::new(
             leaves[0].header().clone(),
-            VidCommon::V0(dispersal.common.clone()),
+            genesis_common,
         )];
         for i in 0..2 {
             // Generate a unique payload and VID data, so that missing data is actually missing
@@ -1465,10 +1465,6 @@ pub mod node_tests {
         let storage = D::create(0).await;
         let ds = D::connect(&storage).await;
 
-        // Generate some test VID data.
-        let mut vid = advz_scheme(2);
-        let disperse = vid.disperse([]).unwrap();
-
         // Insert test data with VID common and a share.
         let leaf = LeafQueryData::<MockTypes>::genesis(
             &TestValidatedState::default(),
@@ -1476,22 +1472,21 @@ pub mod node_tests {
             TEST_VERSIONS.test,
         )
         .await;
-        let common = VidCommonQueryData::new(leaf.header().clone(), VidCommon::V0(disperse.common));
+        let (common, shares) = genesis_vid(leaf.header());
+        let common = VidCommonQueryData::new(leaf.header().clone(), common);
+        let share = shares[0].clone();
         ds.append(BlockInfo::new(
             leaf,
             None,
             Some(common.clone()),
-            Some(VidShare::V0(disperse.shares[0].clone())),
+            Some(share.clone()),
         ))
         .await
         .unwrap();
 
         {
             assert_eq!(ds.get_vid_common(0).await.await, common);
-            assert_eq!(
-                ds.vid_share(0).await.unwrap(),
-                VidShare::V0(disperse.shares[0].clone())
-            );
+            assert_eq!(ds.vid_share(0).await.unwrap(), share);
         }
 
         // Re-insert the common data, without a share. This should not overwrite the share we
@@ -1503,10 +1498,7 @@ pub mod node_tests {
         }
         {
             assert_eq!(ds.get_vid_common(0).await.await, common);
-            assert_eq!(
-                ds.vid_share(0).await.unwrap(),
-                VidShare::V0(disperse.shares[0].clone())
-            );
+            assert_eq!(ds.vid_share(0).await.unwrap(), share);
         }
     }
 

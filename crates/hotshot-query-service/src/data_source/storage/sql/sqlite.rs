@@ -14,7 +14,10 @@
 
 use std::{path::PathBuf, time::Duration};
 
-use sqlx::{pool::PoolOptions, sqlite::SqliteConnectOptions};
+use sqlx::{
+    pool::{Pool, PoolOptions},
+    sqlite::SqliteConnectOptions,
+};
 
 pub type Db = sqlx::Sqlite;
 
@@ -32,9 +35,8 @@ use crate::{include_migrations, sqlite_options::sqlite_options};
 impl Backend for Db {
     type ConnectOptions = SqliteConnectOptions;
 
-    const EMBEDDED: bool = true;
+    const KIND: DbKind = DbKind::Sqlite;
     const MAX_FN: &'static str = "MAX";
-    const BINARY_TYPE: &'static str = "BLOB";
 
     fn default_connect_options() -> SqliteConnectOptions {
         sqlite_options()
@@ -51,6 +53,8 @@ impl Backend for Db {
     fn session_hooks(pool: PoolOptions<Db>, _schema: String) -> PoolOptions<Db> {
         pool
     }
+
+    fn log_conflict_sessions(_pool: Pool<Db>, _op: &'static str) {}
 }
 
 impl StateQueries for Db {}
