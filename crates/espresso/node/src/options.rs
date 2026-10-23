@@ -197,16 +197,16 @@ pub struct Options {
 
     /// Timeout for each step of the startup stake-table catchup.
     ///
-    /// Bounds a walk step (`wait_for_stake_table`), the anchor read, a skip attempt on one peer,
-    /// a peer height read, and DRB preparation. Below the chain tip's epoch a timed-out step is
-    /// retried until the bootstrap deadline. From there up, it ends the walk. The timeout does
-    /// not cancel the catchup task, which is a detached `tokio::spawn` bounded by its own
-    /// `DEFAULT_CATCHUP_TIMEOUT` watchdog.
+    /// Bounds a peer catchup step (`wait_for_stake_table`), the anchor read, a light-client
+    /// catchup fetch from one peer, a peer height read, and DRB preparation. Below the median peer
+    /// tip's epoch a timed-out step is retried until the bootstrap deadline. From there up, it
+    /// ends peer catchup. The timeout does not cancel the catchup task, which is a detached
+    /// `tokio::spawn` bounded by its own `DEFAULT_CATCHUP_TIMEOUT` watchdog.
     #[clap(long, env = "ESPRESSO_NODE_BOOTSTRAP_EPOCH_CATCHUP_TIMEOUT", default_value = "30s", value_parser = parse_duration)]
     pub bootstrap_epoch_catchup_timeout: Duration,
 
-    /// How long startup retries before giving up, in total for the anchor read, the install and the
-    /// walk toward the chain tip the state peers report.
+    /// How long startup retries before giving up, in total for the anchor read, light-client
+    /// catchup and peer catchup toward the chain tip the state peers report.
     ///
     /// At the deadline the node exits with an error.
     #[clap(long, env = "ESPRESSO_NODE_BOOTSTRAP_DEADLINE", default_value = "15m", value_parser = parse_duration)]
@@ -234,7 +234,6 @@ impl Options {
         BootstrapParams {
             step_timeout: self.bootstrap_epoch_catchup_timeout,
             deadline: self.bootstrap_deadline,
-            boot: true,
         }
     }
 

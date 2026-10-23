@@ -1330,7 +1330,7 @@ pub mod testing {
         contracts: Option<Contracts>,
         /// See [`Self::set_genesis_chain_config`].
         genesis_chain_config: Option<ChainConfig>,
-        /// State peers the startup stake-table install fetches from. Required once the light client
+        /// State peers the startup light-client catchup fetches from. Required once the light client
         /// has finalized state.
         bootstrap_peers: Vec<Url>,
     }
@@ -1657,7 +1657,6 @@ pub mod testing {
                 BootstrapParams {
                     step_timeout: Duration::from_secs(2),
                     deadline: Duration::from_secs(15),
-                    boot: true,
                 },
                 self.bootstrap_peers.clone(),
                 Duration::from_millis(500),

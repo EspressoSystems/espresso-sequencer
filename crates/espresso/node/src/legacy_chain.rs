@@ -322,7 +322,6 @@ fn replay_params(own_url: url::Url) -> FollowerParams {
         bootstrap: BootstrapParams {
             step_timeout: Duration::from_secs(30),
             deadline: Duration::from_secs(30),
-            boot: true,
         },
         options: FollowerOptions {
             poll_interval: Duration::from_millis(100),

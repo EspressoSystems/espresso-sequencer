@@ -5745,7 +5745,6 @@ mod test {
             bootstrap: BootstrapParams {
                 step_timeout: Duration::from_secs(30),
                 deadline: Duration::from_secs(900),
-                boot: true,
             },
             options: FollowerOptions {
                 poll_interval: Duration::from_millis(500),
@@ -6578,16 +6577,17 @@ mod test {
         }
     }
 
-    /// A validator that restarts on an empty database installs its stake-table window from the L1
-    /// light client anchor instead of walking every epoch, and goes on to propose again.
+    /// A validator that restarts on an empty database catches up its stake-table window from the L1
+    /// light client anchor instead of from peers epoch by epoch, and goes on to propose again.
     ///
     /// Six nodes run the new protocol. Once the network is past epoch twelve, the light client
     /// mock is pointed at a recent decided block, node 5 is stopped, and it restarts on an empty
     /// database with node 0 as its only state peer. That peer cannot serve the epoch root of
-    /// epoch 3, which stalls a walk at epoch 3, the way one failed fetch left a decaf validator
+    /// epoch 3, which stalls a peer catchup at epoch 3, the way one failed fetch left a decaf validator
     /// stuck far below the tip.
     #[test_log::test(tokio::test(flavor = "multi_thread"))]
-    async fn test_new_protocol_fresh_validator_skips_epoch_walk() -> anyhow::Result<()> {
+    async fn test_new_protocol_fresh_validator_catches_up_from_light_client() -> anyhow::Result<()>
+    {
         const NUM_NODES: usize = 6;
         const NODE: usize = 5;
         const EPOCH_HEIGHT: u64 = 10;
@@ -6739,12 +6739,12 @@ mod test {
             .find_map(|line| line.strip_prefix("consensus_bootstrap_window_epoch "))
             .context("window epoch gauge not exported")?
             .parse()?;
-        // The window is the anchor's, with nothing below it walked.
+        // The window is the anchor's, with nothing below it caught up from peers.
         let membership = node.node_state().coordinator.membership().clone();
         for epoch in (anchor_epoch - 3)..=(anchor_epoch + 1) {
             assert!(
                 membership.snapshot(EpochNumber::new(epoch)).is_some(),
-                "stake table for epoch {epoch} was not installed"
+                "stake table for epoch {epoch} was not caught up from the light client"
             );
         }
         for epoch in [anchor_epoch, anchor_epoch + 1] {
@@ -6759,7 +6759,7 @@ mod test {
             exported.contains(&format!("consensus_bootstrap_anchor_epoch {anchor_epoch}")),
             "{exported}"
         );
-        // The walk above the anchor may advance the window past it.
+        // Peer catchup above the anchor may advance the window past it.
         assert!(window_epoch >= anchor_epoch, "{exported}");
 
         node.start_consensus().await;

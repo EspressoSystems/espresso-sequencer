@@ -31,6 +31,7 @@ use espresso_types::{
     v0_1::ChainId,
 };
 use futures::{FutureExt, future::BoxFuture};
+use hotshot_contract_adapter::sol_types::LightClientStateSol;
 use hotshot_query_service::{
     availability::{BlockInfo, BlockQueryData, LeafQueryData, VidCommonQueryData},
     types::HeightIndexed,
@@ -69,9 +70,7 @@ use crate::{
     apply_genesis_overrides,
     context::TaskList,
     init_node_state, load_or_fetch_network_config,
-    startup_catchup::{
-        BootstrapMetrics, BootstrapParams, TrustedAnchor, bootstrap_epoch_window, query_clients,
-    },
+    startup_catchup::{BootstrapMetrics, BootstrapParams, bootstrap_epoch_window, query_clients},
     state_signature::StateSignatureMemStorage,
 };
 
@@ -263,14 +262,13 @@ where
     .await;
     let peers = query_clients(&params.upstreams);
     let replaying = replay.is_some();
-    let bootstrap_metrics = BootstrapMetrics::new(&*metrics);
     bootstrap_epoch_window(
         &coordinator,
         epoch_height,
         || l1_anchor(&node_state, replaying),
         &peers,
         &params.bootstrap,
-        &bootstrap_metrics,
+        Some(&BootstrapMetrics::new(&*metrics)),
     )
     .await
     .context("startup stake-table catchup failed")?;
@@ -325,15 +323,13 @@ where
         upgrade_lock,
         epoch_height,
         options: params.options,
-        // Mid-run, the poll loop waits for the catchup, so the anchor read, install and walk
-        // together get one step's time per upstream plus one, not the boot deadline. The next poll
-        // retries.
+        // Mid-run, the poll loop waits for the catchup, so the anchor read, light-client catchup
+        // and peer catchup together get one step's time per upstream plus one, not the boot
+        // deadline. The next poll retries.
         bootstrap: BootstrapParams {
             deadline: params.bootstrap.step_timeout * (peers.len() as u32 + 1),
-            boot: false,
             ..params.bootstrap
         },
-        bootstrap_metrics,
         peers,
         next,
     };
@@ -594,7 +590,6 @@ struct Follower<P> {
     epoch_height: u64,
     options: FollowerOptions,
     bootstrap: BootstrapParams,
-    bootstrap_metrics: BootstrapMetrics,
     peers: Vec<(Url, QueryServiceClient)>,
     next: u64,
 }
@@ -726,7 +721,7 @@ impl<P: SequencerPersistence> Follower<P> {
 
     /// Awaited, so the transition block finds the stake table it supplies a DRB for, and a
     /// failed derivation fails the block and is retried with it. Nothing is redone when the
-    /// membership already knows the result, as after a restart or a catchup walk.
+    /// membership already knows the result, as after a restart or a peer catchup.
     async fn track_epoch(&self, leaf: &Leaf2) -> anyhow::Result<()> {
         let height = leaf.height();
         let Some(epoch) = leaf.epoch(self.epoch_height) else {
@@ -779,7 +774,7 @@ impl<P: SequencerPersistence> Follower<P> {
             || l1_anchor(&self.node_state, self.replaying),
             &self.peers,
             &self.bootstrap,
-            &self.bootstrap_metrics,
+            None,
         )
         .await
         .context("stake-table catchup after skipping ahead")?;
@@ -862,12 +857,12 @@ impl ChainSource for NodeLightClient {
     }
 }
 
-async fn l1_anchor(node_state: &NodeState, replaying: bool) -> anyhow::Result<TrustedAnchor> {
+async fn l1_anchor(node_state: &NodeState, replaying: bool) -> anyhow::Result<LightClientStateSol> {
     // A replayed chain has no light-client contract to read.
     if replaying {
-        return Ok(TrustedAnchor::genesis());
+        return Ok(LightClientStateSol::default());
     }
-    Ok(node_state.finalized_light_client_state().await?.into())
+    node_state.finalized_light_client_state().await
 }
 
 async fn connect_light_client(

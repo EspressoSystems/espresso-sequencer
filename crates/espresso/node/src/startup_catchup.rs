@@ -6,21 +6,23 @@
 //! so the existing reactive catchup (triggered by an unknown-epoch proposal)
 //! never fires.
 //!
-//! [`bootstrap_epoch_window`] populates the window in two stages:
+//! [`bootstrap_epoch_window`] observes what the node knows, plans the catchup and executes it:
 //!
-//! 1. Install: the L1 light-client contract vouches for a finalized header `F`. The epoch roots below
-//!    `F` are fetched with Merkle proofs against `F` and installed directly, except for epochs the
-//!    membership already holds. Failures to read the anchor, fetch the roots or install them are
-//!    retried until the deadline. Missing epochs without state peers fail at once.
-//! 2. Walk: from the highest epoch with an epoch root, one epoch at a time. The walk targets the
-//!    epoch the peers' chain tip needs, and a failure below it is retried until the deadline. Above
-//!    it, up to the epoch the highest reported tip needs, the first failure marks the live tip, and
-//!    the walk stops there without probing further. Without state peers, or with a chain of no
-//!    blocks, the walk is skipped. With peers, startup fails if none reports a height.
+//! 1. From storage: `reload_stake` put the stored epochs in memory before this module runs.
+//!    Nothing is fetched for them.
+//! 2. Light-client catchup: the L1 light-client contract vouches for a finalized header `F`. The
+//!    epoch roots below `F` are fetched with Merkle proofs against `F` for the epochs of
+//!    `epoch(F)-3 ..= epoch(F)+1` that storage lacks. Failures are retried until the deadline.
+//!    Missing epochs without state peers fail at once.
+//! 3. Peer catchup: from the highest epoch with a stake table, one epoch at a time, derived from
+//!    QC-verified leaves. Steps up to the epoch of the median peer's chain tip are retried until the
+//!    deadline. Above it, up to the epoch of the highest reported tip, the first failure marks the
+//!    live tip and peer catchup stops there. Without state peers, or on a chain of no blocks, peer
+//!    catchup is skipped. With peers, startup fails if none reports a block height.
 //!
-//! Both stages share one deadline.
+//! The anchor and the peer block heights are read concurrently. All stages share one deadline.
 
-use std::{ops::RangeInclusive, time::Duration};
+use std::{collections::BTreeSet, ops::RangeInclusive, time::Duration};
 
 use anyhow::{Context, anyhow, bail, ensure};
 use espresso_types::{Header, SeqTypes};
@@ -44,21 +46,25 @@ use hotshot_types::{
 use light_client::client::{Client, QueryServiceClient};
 use tokio::time::{Instant, error::Elapsed, sleep, timeout, timeout_at};
 use url::Url;
+use vec1::Vec1;
 
+/// Log target of the boot-time milestones.
 const TARGET: &str = "announce::bootstrap";
 
+/// First wait between two retries, doubled up to `MAX_BACKOFF`.
 const INITIAL_BACKOFF: Duration = Duration::from_secs(1);
+/// Longest wait between two retries.
 const MAX_BACKOFF: Duration = Duration::from_secs(60);
-/// Epochs past the anchor's window that the walk target may reach.
+/// Epochs past `epoch(F)` that the median tip epoch may reach, `F` being the finalized header.
 const TARGET_SLACK: u64 = 2;
 /// Passes over the peers when reading their block heights, with backoff in between.
 const PEER_HEIGHT_ATTEMPTS: usize = 3;
 
-/// A once-per-boot milestone: INFO on the announce target, or debug when the call is not the boot
-/// one.
+/// A once-per-boot milestone: INFO on the announce target when `$metrics` is `Some` (the call at
+/// boot), debug otherwise.
 macro_rules! milestone {
-    ($params:expr, $($arg:tt)+) => {
-        if $params.boot {
+    ($metrics:expr, $($arg:tt)+) => {
+        if $metrics.is_some() {
             tracing::info!(target: TARGET, $($arg)+)
         } else {
             tracing::debug!($($arg)+)
@@ -66,60 +72,29 @@ macro_rules! milestone {
     };
 }
 
-/// Where the walk must reach and where it may stop probing.
-#[derive(Clone, Copy, Debug)]
-struct WalkTarget {
-    /// Steps below it are retried until the deadline.
-    required: EpochNumber,
-    /// Stop without probing once reached. At least `required`.
-    stop: EpochNumber,
-}
-
+/// Time bounds of the startup catchup.
 #[derive(Clone, Copy, Debug)]
 pub struct BootstrapParams {
-    /// Bound on a single `wait_for_stake_table` call during the walk.
+    /// Bound on a single peer catchup step, light-client catchup fetch, anchor read or block height
+    /// read.
     pub step_timeout: Duration,
-    /// How long the install and the walk toward the peers' chain tip may keep retrying, together,
-    /// before startup gives up.
+    /// How long light-client catchup and peer catchup may keep retrying, together, before startup
+    /// gives up.
     pub deadline: Duration,
-    /// Set for the call at boot only. Mid-run, milestones log at debug and the gauges stay.
-    pub boot: bool,
 }
 
-/// A finalized HotShot block that the node trusts without asking the peers: the L1 light-client
-/// contract's finalized state.
-#[derive(Clone, Copy, Debug)]
-pub(crate) struct TrustedAnchor {
-    pub height: u64,
-    pub block_comm_root: CircuitField,
-}
-
-impl TrustedAnchor {
-    /// No finalized state: the install range is empty.
-    pub(crate) fn genesis() -> Self {
-        Self {
-            height: 0,
-            block_comm_root: CircuitField::from(0u64),
-        }
-    }
-}
-
-impl From<LightClientStateSol> for TrustedAnchor {
-    fn from(state: LightClientStateSol) -> Self {
-        Self {
-            height: state.blockHeight,
-            block_comm_root: u256_to_field(state.blockCommRoot),
-        }
-    }
-}
-
+/// Gauges of the boot-time catchup, in epochs.
 pub(crate) struct BootstrapMetrics {
+    /// Current epoch `N` once the window is ready.
     window_epoch: Box<dyn Gauge>,
+    /// Epoch of the light-client finalized header `F`.
     anchor_epoch: Box<dyn Gauge>,
+    /// Epoch of the median peer's last block, before the cap.
     peer_target_epoch: Box<dyn Gauge>,
 }
 
 impl BootstrapMetrics {
+    /// Register the gauges with `metrics`.
     pub fn new(metrics: &dyn Metrics) -> Self {
         Self {
             window_epoch: metrics.create_gauge("bootstrap_window_epoch".into(), None),
@@ -132,20 +107,22 @@ impl BootstrapMetrics {
 /// Populate the membership with stake tables for every epoch up through `N+1` (where `N` is the
 /// current epoch). Returns `N`.
 ///
-/// `fetch_anchor` failures are retried until the deadline, like those of the install.
+/// `read_anchor` returns the light-client finalized state, or `LightClientStateSol::default()`
+/// when there is none. Its failures are retried until the deadline. `metrics` is `Some` at boot:
+/// milestones log at INFO and the gauges are set.
 ///
 /// Preconditions: `reload_stake` should have run before this: it populates the membership from
-/// local persistence so the walk skips epochs we already know.
+/// local persistence, so those epochs are taken from storage.
 pub(crate) async fn bootstrap_epoch_window<C: Client, Fut>(
     coordinator: &EpochMembershipCoordinator<SeqTypes>,
     epoch_height: u64,
-    fetch_anchor: impl Fn() -> Fut,
+    read_anchor: impl Fn() -> Fut,
     peers: &[(Url, C)],
     params: &BootstrapParams,
-    metrics: &BootstrapMetrics,
+    metrics: Option<&BootstrapMetrics>,
 ) -> anyhow::Result<EpochNumber>
 where
-    Fut: Future<Output = anyhow::Result<TrustedAnchor>>,
+    Fut: Future<Output = anyhow::Result<LightClientStateSol>>,
 {
     if epoch_height == 0 {
         // Pre-epoch chain: epochs aren't enabled yet, the non-epoch
@@ -154,146 +131,527 @@ where
     }
 
     let started = Instant::now();
-    let first_epoch = coordinator
-        .membership()
-        .first_epoch()
-        .context("first_epoch not seeded; genesis stake table missing")?;
-
-    let deadline = Instant::now() + params.deadline;
-    let read_anchor = retry(deadline, "reading the anchor", 1, |_, remaining| {
-        let read = timeout(params.step_timeout.min(remaining), fetch_anchor());
-        async move { read.await.context("attempt timed out")? }
-    });
-    let (anchor, mut heights) =
-        try_join!(read_anchor, read_peer_heights(peers, params.step_timeout))?;
-    milestone!(params, finalized_height = anchor.height, "anchor read");
-    if params.boot {
-        let anchor_epoch = epoch_from_block_number(anchor.height, epoch_height);
-        metrics.anchor_epoch.set(anchor_epoch as usize);
-    }
-
-    let range = install_range(anchor.height, epoch_height, first_epoch);
-    if let Some(range) = &range {
-        let installing = Instant::now();
-        install_window(
-            coordinator,
-            peers,
-            &anchor,
-            range,
-            epoch_height,
-            deadline,
-            params,
-        )
-        .await?;
-        // The heights are older than the install took, so the tip may have moved.
-        if installing.elapsed() > params.step_timeout {
-            heights = read_peer_heights(peers, params.step_timeout).await?;
-        }
-    }
-
-    // An anchor with an empty range vouches for nothing, so it does not cap the target.
-    let anchor = range.is_some().then_some(&anchor);
-    let target = walk_target(heights, anchor, epoch_height, params, metrics);
-    let current = walk_to_tip(coordinator, first_epoch, target, deadline, params).await?;
-    if params.boot {
+    let bootstrap = Bootstrap {
+        coordinator,
+        peers,
+        params,
+        blocks_per_epoch: epoch_height,
+        deadline: started + params.deadline,
+        metrics,
+    };
+    let point = bootstrap.observe(read_anchor).await?;
+    let current = bootstrap.execute(point).await?;
+    if let Some(metrics) = metrics {
         metrics.window_epoch.set(current.u64() as usize);
     }
     milestone!(
-        params,
+        metrics,
         current_epoch = %current,
         duration_ms = started.elapsed().as_millis() as u64,
-        "window installed",
+        "epoch window ready",
     );
     Ok(current)
 }
 
+/// One `QueryServiceClient` per URL, to read block heights and light-client proofs from.
 pub(crate) fn query_clients(urls: &[Url]) -> Vec<(Url, QueryServiceClient)> {
     urls.iter()
         .map(|url| (url.clone(), QueryServiceClient::new(url.clone())))
         .collect()
 }
 
-/// Install the epochs of `range` the membership does not hold yet. Without any, no peer is needed.
-async fn install_window<C: Client>(
-    coordinator: &EpochMembershipCoordinator<SeqTypes>,
-    peers: &[(Url, C)],
-    anchor: &TrustedAnchor,
-    range: &RangeInclusive<EpochNumber>,
-    epoch_height: u64,
+/// What every stage of the catchup shares.
+struct Bootstrap<'a, C> {
+    /// Membership to fill, with the catchup machinery behind it.
+    coordinator: &'a EpochMembershipCoordinator<SeqTypes>,
+    /// State peers serving block heights and light-client proofs.
+    peers: &'a [(Url, C)],
+    /// Step timeout and deadline length.
+    params: &'a BootstrapParams,
+    /// Blocks in one epoch.
+    blocks_per_epoch: u64,
+    /// When every retry of every stage gives up.
     deadline: Instant,
-    params: &BootstrapParams,
-) -> anyhow::Result<()> {
-    let membership = coordinator.membership();
-    let missing: Vec<u64> = epochs(range)
-        .filter(|epoch| !membership.has_epoch_root(EpochNumber::new(*epoch)))
-        .collect();
-    if missing.is_empty() {
-        return Ok(());
+    /// `Some` at boot: INFO milestones and gauges.
+    metrics: Option<&'a BootstrapMetrics>,
+}
+
+impl<C: Client> Bootstrap<'_, C> {
+    /// Collect the starting point: stored epochs, the finalized state and the peers' block heights.
+    ///
+    /// The anchor read and the height reads run concurrently.
+    async fn observe<Fut>(&self, read_anchor: impl Fn() -> Fut) -> anyhow::Result<StartingPoint>
+    where
+        Fut: Future<Output = anyhow::Result<LightClientStateSol>>,
+    {
+        let membership = self.coordinator.membership();
+        let first_epoch = membership
+            .first_epoch()
+            .context("first_epoch not seeded; genesis stake table missing")?;
+        let stored_epochs = membership.epochs_with_root();
+
+        let anchor_read = retry(self.deadline, "reading the anchor", 1, |_, remaining| {
+            let read = timeout(self.params.step_timeout.min(remaining), read_anchor());
+            async move { read.await.context("attempt timed out")? }
+        });
+        let (anchor, peer_block_heights) = try_join!(anchor_read, self.read_peer_block_heights())?;
+
+        let point = StartingPoint {
+            blocks_per_epoch: self.blocks_per_epoch,
+            first_epoch,
+            stored_epochs,
+            anchor,
+            peer_block_heights,
+        };
+        if let Some(metrics) = self.metrics {
+            metrics
+                .anchor_epoch
+                .set(point.finalized_epoch().u64() as usize);
+        }
+        milestone!(
+            self.metrics,
+            %first_epoch,
+            stored = ?epoch_numbers(&point.stored_epochs),
+            anchor_height = point.anchor.blockHeight,
+            peer_heights = ?point.peer_block_heights,
+            "starting point",
+        );
+        Ok(point)
     }
-    ensure!(
-        !peers.is_empty(),
-        "finalized height {} needs a state peer serving the light-client module",
-        anchor.height
-    );
-    milestone!(
-        params,
-        finalized_height = anchor.height,
-        epochs = ?missing,
-        highest_known = ?membership.highest_known_epoch().map(|e| e.u64()),
-        "installing the anchor window",
-    );
 
-    // Peers rotate between attempts. Only the fetch is bounded by `step_timeout`: the install can
-    // scan L1 events for longer, and cancelling it would restart that scan.
-    let missing = &missing;
-    retry(
-        deadline,
-        "installing the anchor window",
-        peers.len(),
-        |attempt, remaining| async move {
-            let (url, peer) = &peers[attempt % peers.len()];
-            let headers = timeout(
-                params.step_timeout.min(remaining),
-                fetch_roots_from(peer, anchor, missing, epoch_height),
+    /// The block heights the peers report, each read bounded by `step_timeout`.
+    ///
+    /// Empty only without peers. With peers, up to `PEER_HEIGHT_ATTEMPTS` passes run with backoff
+    /// until one peer answers, and the last pass fails the call.
+    async fn read_peer_block_heights(&self) -> anyhow::Result<Vec<u64>> {
+        if self.peers.is_empty() {
+            return Ok(vec![]);
+        }
+        let mut backoff = INITIAL_BACKOFF;
+        for attempt in 1..=PEER_HEIGHT_ATTEMPTS {
+            let heights = join_all(
+                self.peers
+                    .iter()
+                    .map(|(_, peer)| timeout(self.params.step_timeout, peer.block_height())),
             )
-            .await
-            .context("attempt timed out")?
-            .with_context(|| format!("peer {url}"))?;
-            timeout_at(deadline, async {
-                for header in headers {
-                    let height = header.height();
-                    coordinator
-                        .add_epoch_root(header)
-                        .await
-                        .map_err(|err| anyhow!("installing the epoch root at {height}: {err}"))?;
-                }
-                anyhow::Ok(())
-            })
-            .await
-            .context("install timed out")?
-        },
-    )
-    .await
+            .await;
+            let heights: Vec<u64> = heights
+                .into_iter()
+                .filter_map(|height| height.ok()?.ok())
+                .collect();
+            if !heights.is_empty() {
+                return Ok(heights);
+            }
+            tracing::warn!(attempt, "bootstrap: no state peer reported a block height");
+            if attempt < PEER_HEIGHT_ATTEMPTS {
+                sleep(backoff).await;
+                backoff = (backoff * 2).min(MAX_BACKOFF);
+            }
+        }
+        bail!("no state peer reported a block height after {PEER_HEIGHT_ATTEMPTS} attempts")
+    }
+
+    /// Plan from `point`, run light-client catchup and peer catchup, and prepare the window.
+    ///
+    /// A light-client catchup slower than `step_timeout` leaves the block heights stale: they are
+    /// read again and the peer catchup is planned anew. Returns the current epoch `N`.
+    async fn execute(&self, mut point: StartingPoint) -> anyhow::Result<EpochNumber> {
+        let plan = point.plan();
+        self.log_plan(&point, &plan);
+
+        let mut peer_catchup = plan.peer_catchup;
+        if let Some(catchup) = &plan.light_client_catchup {
+            let started = Instant::now();
+            self.catch_up_from_light_client(catchup).await?;
+            if started.elapsed() > self.params.step_timeout {
+                point.peer_block_heights = self.read_peer_block_heights().await?;
+                peer_catchup = point.plan().peer_catchup;
+            }
+        }
+
+        let highest_epoch = match peer_catchup {
+            Some(catchup) => {
+                self.catch_up_from_peers(plan.highest_held_epoch, &catchup)
+                    .await?
+            },
+            None => plan.highest_held_epoch,
+        };
+        self.prepare_window(point.first_epoch, highest_epoch).await
+    }
+
+    /// Log `plan` as a milestone, warn when the median tip epoch is capped, and set the gauge.
+    fn log_plan(&self, point: &StartingPoint, plan: &CatchupPlan) {
+        let median_tip_epoch = point.median_tip_epoch();
+        if let (Some(metrics), Some(epoch)) = (self.metrics, median_tip_epoch) {
+            metrics.peer_target_epoch.set(epoch.u64() as usize);
+        }
+        let capped = plan
+            .peer_catchup
+            .zip(median_tip_epoch)
+            .filter(|(catchup, uncapped)| catchup.median_tip_epoch < *uncapped);
+        if let Some((catchup, uncapped)) = capped {
+            tracing::warn!(
+                peer_tip_epoch = %uncapped,
+                median_tip_epoch = %catchup.median_tip_epoch,
+                "bootstrap: median peer tip past the light-client epochs; capping it"
+            );
+        }
+        milestone!(
+            self.metrics,
+            light_client_epochs = ?plan.light_client_catchup.as_ref().map(|c| epoch_numbers(&c.missing_epochs)),
+            start = %plan.highest_held_epoch,
+            median_tip_epoch = ?plan.peer_catchup.map(|c| c.median_tip_epoch.u64()),
+            highest_tip_epoch = ?plan.peer_catchup.map(|c| c.highest_tip_epoch.u64()),
+            "catchup plan",
+        );
+    }
+
+    /// Add the epoch roots light-client catchup fetched, from the peers in turn until one serves.
+    ///
+    /// Only the fetch is bounded by `step_timeout`: adding the roots can scan L1 events for longer,
+    /// and cancelling it would restart that scan.
+    async fn catch_up_from_light_client(&self, catchup: &LightClientCatchup) -> anyhow::Result<()> {
+        ensure!(
+            !self.peers.is_empty(),
+            "light-client catchup at finalized height {} needs a state peer serving the \
+             light-client module",
+            catchup.finalized_height
+        );
+        retry(
+            self.deadline,
+            "light-client catchup",
+            self.peers.len(),
+            |attempt, remaining| async move {
+                let (url, peer) = &self.peers[attempt % self.peers.len()];
+                let headers = timeout(
+                    self.params.step_timeout.min(remaining),
+                    catchup.fetch_roots(peer, self.blocks_per_epoch),
+                )
+                .await
+                .context("attempt timed out")?
+                .with_context(|| format!("peer {url}"))?;
+                timeout_at(self.deadline, async {
+                    for header in headers {
+                        let height = header.height();
+                        self.coordinator
+                            .add_epoch_root(header)
+                            .await
+                            .map_err(|err| anyhow!("adding the epoch root at {height}: {err}"))?;
+                    }
+                    anyhow::Ok(())
+                })
+                .await
+                .context("adding the epoch roots timed out")?
+            },
+        )
+        .await
+    }
+
+    /// Derive the stake table of one epoch at a time above `start`, the highest epoch with one.
+    /// Returns the highest epoch with a stake table when peer catchup ends.
+    ///
+    /// Steps `catchup` requires are retried until the deadline. Above them, the first step peers
+    /// cannot serve marks the live tip, and reaching the highest tip epoch ends peer catchup.
+    async fn catch_up_from_peers(
+        &self,
+        start: EpochNumber,
+        catchup: &PeerCatchup,
+    ) -> anyhow::Result<EpochNumber> {
+        let coordinator = self.coordinator;
+        let step_timeout = self.params.step_timeout;
+        let mut highest = start;
+        while !catchup.reached(highest) {
+            let next = highest + 1;
+            let derive = move |_, bound: Duration| async move {
+                let bound = step_timeout.min(bound);
+                let step = timeout(bound, coordinator.wait_for_stake_table(next));
+                step.await
+                    .with_context(|| format!("timed out after {bound:?}"))?
+                    .map(drop)
+                    .map_err(|err| anyhow!("{err:#}"))
+            };
+            let required = catchup.required(next);
+            let step = if required {
+                let what = format!("peer catchup of epoch {next} below the median tip");
+                retry(self.deadline, &what, 1, derive).await
+            } else {
+                derive(0, step_timeout).await
+            };
+            match step {
+                Ok(()) => {
+                    tracing::debug!(%next, "bootstrap: derived stake table from peers");
+                    highest = next;
+                },
+                Err(err) if required => return Err(err),
+                Err(err) if err.is::<Elapsed>() => {
+                    tracing::warn!(%next, %err, "bootstrap: peer catchup timed out; proceeding with a possibly stale epoch window");
+                    break;
+                },
+                Err(err) => {
+                    milestone!(self.metrics, %next, %err, "peer catchup: at the live tip");
+                    break;
+                },
+            }
+        }
+        Ok(highest)
+    }
+
+    /// Check the stake tables of `highest_epoch - 1` and `highest_epoch` and prepare the DRBs of
+    /// `N-1`, `N` and `N+1`. Returns the current epoch `N = highest_epoch - 1`.
+    async fn prepare_window(
+        &self,
+        first_epoch: EpochNumber,
+        highest_epoch: EpochNumber,
+    ) -> anyhow::Result<EpochNumber> {
+        // `highest_epoch` corresponds to N+1 (the leaf at root_block_in_epoch(N-1) is
+        // the last finalized one peers can serve). So current epoch N = highest_epoch - 1.
+        let current = EpochNumber::new(highest_epoch.saturating_sub(1));
+        let membership = self.coordinator.membership();
+        ensure!(
+            membership.snapshot(current).is_some(),
+            "missing stake table for current epoch {current} after bootstrap"
+        );
+        ensure!(
+            membership.snapshot(highest_epoch).is_some(),
+            "missing stake table for next epoch {highest_epoch} after bootstrap"
+        );
+        // `current - 1` is skipped when seeded from genesis, which already has its DRB.
+        let previous = current.checked_sub(1).filter(|e| *e > *first_epoch + 1);
+        for epoch in previous.into_iter().chain([*current, *highest_epoch]) {
+            self.prepare_drb(EpochNumber::new(epoch)).await;
+        }
+        Ok(current)
+    }
+
+    /// Make the DRB of `epoch` available before consensus starts. A failure only delays it:
+    /// consensus retries through reactive catchup.
+    async fn prepare_drb(&self, epoch: EpochNumber) {
+        // A missing DRB starts a catchup that ends in `drb_ready`; its error is the start notice.
+        if self.coordinator.membership_for_epoch(Some(epoch)).is_ok() {
+            return;
+        }
+        let ready = self.coordinator.wait_for_catchup(epoch);
+        match timeout(self.params.step_timeout, ready).await {
+            Ok(Ok(_)) => tracing::debug!(%epoch, "bootstrap: DRB ready"),
+            Ok(Err(err)) => {
+                tracing::warn!(%epoch, %err, "bootstrap: DRB not ready; consensus will catch up")
+            },
+            Err(_) => tracing::warn!(%epoch, "bootstrap: DRB timed out; consensus will catch up"),
+        }
+    }
 }
 
-fn epochs(range: &RangeInclusive<EpochNumber>) -> RangeInclusive<u64> {
-    range.start().u64()..=range.end().u64()
-}
-
-/// The epochs whose stake tables the install covers: `n-3 ..= n+1` for `n = epoch(F)`, clamped to
-/// start after the two epochs seeded from genesis.
-///
-/// `block_reward(n)` and `block_reward(n+1)` need the stake table of three epochs earlier, and the
-/// rest is the window. `None` when `F` is before the first epoch's end, so there is no root to
-/// prove. Every root in the range is below `F`: the root of `e-2` lies in epoch `e-2 < n`.
-fn install_range(
-    anchor_height: u64,
-    epoch_height: u64,
+/// What the node knows before any catchup runs.
+#[derive(Clone, Debug, PartialEq)]
+struct StartingPoint {
+    /// Blocks in one epoch.
+    blocks_per_epoch: u64,
+    /// First epoch of the chain, whose stake table and the next one are seeded from genesis.
     first_epoch: EpochNumber,
-) -> Option<RangeInclusive<EpochNumber>> {
-    let n = epoch_from_block_number(anchor_height, epoch_height);
-    let start = n.saturating_sub(3).max(*first_epoch + 2);
-    (start <= n + 1).then(|| EpochNumber::new(start)..=EpochNumber::new(n + 1))
+    /// Epochs with an epoch root loaded from storage by `reload_stake`.
+    stored_epochs: BTreeSet<EpochNumber>,
+    /// Light-client finalized state, with the header `F` at its block height. Default without any.
+    anchor: LightClientStateSol,
+    /// Block heights (block counts) the state peers report. Empty only without peers.
+    peer_block_heights: Vec<u64>,
+}
+
+impl StartingPoint {
+    /// Decide what to fetch: pure in the starting point.
+    fn plan(&self) -> CatchupPlan {
+        let light_client_catchup = self.light_client_catchup();
+        let highest_stored = self.stored_epochs.last().copied();
+        let highest_fetched = light_client_catchup
+            .as_ref()
+            .map(|catchup| *catchup.missing_epochs.last());
+        let highest_held_epoch = highest_stored
+            .max(highest_fetched)
+            .unwrap_or(self.first_epoch + 1);
+        let peer_catchup = self
+            .peer_catchup()
+            .filter(|catchup| !catchup.reached(highest_held_epoch));
+        CatchupPlan {
+            light_client_catchup,
+            highest_held_epoch,
+            peer_catchup,
+        }
+    }
+
+    /// The light-client epochs storage lacks, `None` when it holds them all.
+    fn light_client_catchup(&self) -> Option<LightClientCatchup> {
+        let epochs = self.light_client_epochs()?;
+        let missing_epochs: Vec<EpochNumber> = (epochs.start().u64()..=epochs.end().u64())
+            .map(EpochNumber::new)
+            .filter(|epoch| !self.stored_epochs.contains(epoch))
+            .collect();
+        Some(LightClientCatchup {
+            finalized_height: self.anchor.blockHeight,
+            block_comm_root: u256_to_field(self.anchor.blockCommRoot),
+            missing_epochs: Vec1::try_from_vec(missing_epochs).ok()?,
+        })
+    }
+
+    /// The epochs peer catchup targets, `None` without a usable block height.
+    fn peer_catchup(&self) -> Option<PeerCatchup> {
+        let median_tip_epoch = self.median_tip_epoch()?;
+        let highest_tip_epoch = self.highest_tip_epoch()?;
+        // Epochs past the finalized one cannot be vouched for, so a few lying peers cannot hold
+        // peer catchup there.
+        let cap = self
+            .light_client_epochs()
+            .map(|_| EpochNumber::new(self.finalized_epoch().u64() + TARGET_SLACK));
+        Some(PeerCatchup {
+            median_tip_epoch: cap.map_or(median_tip_epoch, |cap| median_tip_epoch.min(cap)),
+            highest_tip_epoch,
+        })
+    }
+
+    /// Epoch of the light-client finalized header `F`.
+    fn finalized_epoch(&self) -> EpochNumber {
+        EpochNumber::new(epoch_from_block_number(
+            self.anchor.blockHeight,
+            self.blocks_per_epoch,
+        ))
+    }
+
+    /// The epochs light-client catchup covers: `epoch(F)-3 ..= epoch(F)+1`, clamped above the two
+    /// epochs seeded from genesis.
+    ///
+    /// `block_reward(n)` and `block_reward(n+1)` need the stake table of three epochs earlier, and
+    /// the rest is the window. `None` when `F` is before the first epoch's end, so there is no root
+    /// to prove. Every root in the range is below `F`: the root of `e-2` lies in epoch `e-2 < n`.
+    fn light_client_epochs(&self) -> Option<RangeInclusive<EpochNumber>> {
+        let n = self.finalized_epoch().u64();
+        let start = n.saturating_sub(3).max(*self.first_epoch + 2);
+        (start <= n + 1).then(|| EpochNumber::new(start)..=EpochNumber::new(n + 1))
+    }
+
+    /// Epoch of the last block of a chain of `block_height` blocks, `None` for no blocks.
+    fn tip_epoch(&self, block_height: u64) -> Option<EpochNumber> {
+        let tip = block_height.checked_sub(1)?;
+        Some(EpochNumber::new(epoch_from_block_number(
+            tip,
+            self.blocks_per_epoch,
+        )))
+    }
+
+    /// Epoch of the last block of the median peer, before the cap. The median of an even count is
+    /// the lower one.
+    fn median_tip_epoch(&self) -> Option<EpochNumber> {
+        let mut heights = self.peer_block_heights.clone();
+        heights.sort_unstable();
+        let median = heights.get(heights.len().checked_sub(1)? / 2)?;
+        self.tip_epoch(*median)
+    }
+
+    /// Epoch of the last block of the highest peer.
+    fn highest_tip_epoch(&self) -> Option<EpochNumber> {
+        self.tip_epoch(*self.peer_block_heights.iter().max()?)
+    }
+}
+
+/// What to fetch, from the starting point.
+#[derive(Clone, Debug, PartialEq)]
+struct CatchupPlan {
+    /// `None`: storage holds the light-client epochs, or there are none.
+    light_client_catchup: Option<LightClientCatchup>,
+    /// Highest epoch with a stake table once light-client catchup ran: the highest of the stored
+    /// and the fetched epochs, else `first_epoch + 1`.
+    highest_held_epoch: EpochNumber,
+    /// `None`: no usable peer block height, or the highest peer tip is already held.
+    peer_catchup: Option<PeerCatchup>,
+}
+
+/// Light-client catchup: the epoch roots below `F` that storage lacks.
+#[derive(Clone, Debug, PartialEq)]
+struct LightClientCatchup {
+    /// Block height of the light-client finalized header `F`.
+    finalized_height: u64,
+    /// Block commitment root the light client holds for `F`.
+    block_comm_root: CircuitField,
+    /// Light-client epochs storage lacks, ascending: `add_epoch_root(e)` reads the table of `e - 1`.
+    missing_epochs: Vec1<EpochNumber>,
+}
+
+impl LightClientCatchup {
+    /// Fetch the roots deriving the stake tables of the missing epochs from one `peer`, in
+    /// ascending order. The proofs are fetched concurrently, once the header `F` is verified.
+    ///
+    /// Every header is verified against header `F`, which is itself verified against the light
+    /// client's commitment, so a lying peer fails here and nothing it cannot prove gets added.
+    async fn fetch_roots<C: Client>(
+        &self,
+        peer: &C,
+        blocks_per_epoch: u64,
+    ) -> anyhow::Result<Vec<Header>> {
+        let header = peer
+            .header(self.finalized_height)
+            .await
+            .context("fetching the anchor header")?;
+        self.verify_anchor_header(&header)?;
+        let root = header.block_merkle_tree_root();
+
+        try_join_all(self.missing_epochs.iter().map(|epoch| async move {
+            // The root of epoch `e - 2` derives the stake table of epoch `e`.
+            let height = root_block_in_epoch(epoch.u64() - 2, blocks_per_epoch);
+            let proof = peer
+                .header_proof(self.finalized_height, BlockId::Number(height as usize))
+                .await
+                .with_context(|| format!("fetching the epoch root at height {height}"))?;
+            let header = proof
+                .verify(root)
+                .with_context(|| format!("verifying the epoch root at height {height}"))?;
+            ensure!(
+                header.height() == height,
+                "peer returned height {} for the epoch root at {height}",
+                header.height()
+            );
+            Ok(header)
+        }))
+        .await
+    }
+
+    /// Accept `header` only if it is the block the light client commits to at `F`.
+    ///
+    /// The view number does not enter `block_comm_root`, so any view serves.
+    fn verify_anchor_header(&self, header: &Header) -> anyhow::Result<()> {
+        ensure!(
+            header.height() == self.finalized_height,
+            "anchor header has height {}, expected {}",
+            header.height(),
+            self.finalized_height
+        );
+        let state = header.get_light_client_state(ViewNumber::genesis())?;
+        ensure!(
+            state.block_comm_root == self.block_comm_root,
+            "anchor header at height {} does not match the block commitment root",
+            self.finalized_height
+        );
+        Ok(())
+    }
+}
+
+/// Peer catchup: the epochs to derive from the peers' chain tips.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct PeerCatchup {
+    /// Epoch of the median peer's last block, capped at `epoch(F) + TARGET_SLACK`. Peer catchup
+    /// must reach the epoch after it, and retries until the deadline on the way.
+    median_tip_epoch: EpochNumber,
+    /// Epoch of the highest peer's last block, at least `median_tip_epoch`. Peer catchup stops at
+    /// the epoch after it, trying each step above the median once.
+    highest_tip_epoch: EpochNumber,
+}
+
+impl PeerCatchup {
+    /// Whether deriving `epoch` must succeed: it is at most the epoch after the median tip epoch.
+    fn required(&self, epoch: EpochNumber) -> bool {
+        epoch <= self.median_tip_epoch + 1
+    }
+
+    /// Whether peer catchup ends with `highest_held` as the highest epoch with a stake table.
+    fn reached(&self, highest_held: EpochNumber) -> bool {
+        highest_held > self.highest_tip_epoch
+    }
 }
 
 /// Run `attempt` with its index and the time left until it succeeds, backing off after every
@@ -336,264 +694,9 @@ async fn retry<T, Fut: Future<Output = anyhow::Result<T>>>(
     }
 }
 
-/// Fetch the roots deriving the stake tables of `wanted` from one `peer`, in the given order. The
-/// proofs are fetched concurrently, once the anchor header is verified.
-///
-/// Every header is verified against header `F` of the anchor, which is itself verified against
-/// the anchor's commitment, so a lying peer fails here and nothing it cannot prove gets installed.
-async fn fetch_roots_from<C: Client>(
-    peer: &C,
-    anchor: &TrustedAnchor,
-    wanted: &[u64],
-    epoch_height: u64,
-) -> anyhow::Result<Vec<Header>> {
-    let header = peer
-        .header(anchor.height)
-        .await
-        .context("fetching the anchor header")?;
-    verify_anchor_header(&header, anchor)?;
-    let root = header.block_merkle_tree_root();
-
-    try_join_all(wanted.iter().map(|&epoch| async move {
-        // The root of epoch `e - 2` derives the stake table of epoch `e`.
-        let height = root_block_in_epoch(epoch - 2, epoch_height);
-        let proof = peer
-            .header_proof(anchor.height, BlockId::Number(height as usize))
-            .await
-            .with_context(|| format!("fetching the epoch root at height {height}"))?;
-        let header = proof
-            .verify(root)
-            .with_context(|| format!("verifying the epoch root at height {height}"))?;
-        ensure!(
-            header.height() == height,
-            "peer returned height {} for the epoch root at {height}",
-            header.height()
-        );
-        Ok(header)
-    }))
-    .await
-}
-
-/// Accept `header` only if it is the block the anchor commits to.
-///
-/// The view number does not enter `block_comm_root`, so any view serves.
-fn verify_anchor_header(header: &Header, anchor: &TrustedAnchor) -> anyhow::Result<()> {
-    ensure!(
-        header.height() == anchor.height,
-        "anchor header has height {}, expected {}",
-        header.height(),
-        anchor.height
-    );
-    let state = header.get_light_client_state(ViewNumber::genesis())?;
-    ensure!(
-        state.block_comm_root == anchor.block_comm_root,
-        "anchor header at height {} does not match the block commitment root",
-        anchor.height
-    );
-    Ok(())
-}
-
-/// The epoch whose stake table the window needs for the chain tip the peers report, capped by the
-/// anchor, and the epoch of the highest tip. `None` without heights or when the chain is empty.
-fn walk_target(
-    heights: Vec<u64>,
-    anchor: Option<&TrustedAnchor>,
-    epoch_height: u64,
-    params: &BootstrapParams,
-    metrics: &BootstrapMetrics,
-) -> Option<WalkTarget> {
-    let max_height = heights.iter().max().copied();
-    let peer_target = target_epoch(heights, epoch_height)?;
-    if params.boot {
-        metrics.peer_target_epoch.set(peer_target.u64() as usize);
-    }
-    let target = cap_target(peer_target, anchor, epoch_height);
-    if target < peer_target {
-        tracing::warn!(
-            %peer_target,
-            %target,
-            "bootstrap: peers report a chain tip past the anchor's window; capping the walk target"
-        );
-    }
-    Some(WalkTarget {
-        required: target,
-        stop: epoch_needing(max_height?, epoch_height)?,
-    })
-}
-
-/// The block heights the peers report, empty only without peers.
-///
-/// With peers, the heights are read up to `PEER_HEIGHT_ATTEMPTS` times until one answers within
-/// `step_timeout`, and startup fails if none does.
-async fn read_peer_heights<C: Client>(
-    peers: &[(Url, C)],
-    step_timeout: Duration,
-) -> anyhow::Result<Vec<u64>> {
-    if peers.is_empty() {
-        return Ok(vec![]);
-    }
-    let mut backoff = INITIAL_BACKOFF;
-    for attempt in 1..=PEER_HEIGHT_ATTEMPTS {
-        let heights = join_all(
-            peers
-                .iter()
-                .map(|(_, peer)| timeout(step_timeout, peer.block_height())),
-        )
-        .await;
-        let heights: Vec<u64> = heights
-            .into_iter()
-            .filter_map(|height| height.ok()?.ok())
-            .collect();
-        if !heights.is_empty() {
-            return Ok(heights);
-        }
-        tracing::warn!(attempt, "bootstrap: no state peer reported a block height");
-        if attempt < PEER_HEIGHT_ATTEMPTS {
-            sleep(backoff).await;
-            backoff = (backoff * 2).min(MAX_BACKOFF);
-        }
-    }
-    bail!("no state peer reported a block height after {PEER_HEIGHT_ATTEMPTS} attempts")
-}
-
-/// `epoch(tip) + 1` for the median of the reported chain heights. The median of an even count is
-/// the lower one.
-fn target_epoch(mut heights: Vec<u64>, epoch_height: u64) -> Option<EpochNumber> {
-    heights.sort_unstable();
-    epoch_needing(
-        *heights.get(heights.len().checked_sub(1)? / 2)?,
-        epoch_height,
-    )
-}
-
-/// `epoch(tip) + 1` for a chain of `height` blocks: the epoch the root of `epoch(tip) - 1` derives.
-fn epoch_needing(height: u64, epoch_height: u64) -> Option<EpochNumber> {
-    let tip = height.checked_sub(1)?;
-    Some(EpochNumber::new(
-        epoch_from_block_number(tip, epoch_height) + 1,
-    ))
-}
-
-/// With an anchor, `target` at most `TARGET_SLACK` epochs past its window, so a few lying peers
-/// cannot hold the walk.
-fn cap_target(
-    target: EpochNumber,
-    anchor: Option<&TrustedAnchor>,
-    epoch_height: u64,
-) -> EpochNumber {
-    anchor.map_or(target, |anchor| {
-        let cap = epoch_from_block_number(anchor.height, epoch_height) + 1 + TARGET_SLACK;
-        target.min(EpochNumber::new(cap))
-    })
-}
-
-/// Walk forward from the highest epoch with an epoch root. Each step drives `add_epoch_root` through the
-/// existing catchup machinery, persisting the new stake table.
-///
-/// Steps below the required target are retried until the deadline. From there up, the first step
-/// that peers cannot serve marks the live tip, and reaching `stop` ends the walk without probing.
-/// Without a target the walk is skipped.
-async fn walk_to_tip(
-    coordinator: &EpochMembershipCoordinator<SeqTypes>,
-    first_epoch: EpochNumber,
-    target: Option<WalkTarget>,
-    deadline: Instant,
-    params: &BootstrapParams,
-) -> anyhow::Result<EpochNumber> {
-    let membership = coordinator.membership();
-    // When a step runs, catchup resumes from the latest consecutive pair of stake tables we
-    // hold, so a gap near the tip is bridged by that step rather than found here.
-    let mut highest = membership
-        .epochs_with_root()
-        .last()
-        .copied()
-        .unwrap_or(first_epoch + 1);
-
-    milestone!(
-        params,
-        %first_epoch,
-        starting_from = %highest,
-        target = ?target.map(|t| t.required.u64()),
-        stop = ?target.map(|t| t.stop.u64()),
-        "bootstrap: walking forward",
-    );
-
-    let step_timeout = params.step_timeout;
-    loop {
-        if target.is_none_or(|t| highest >= t.stop) {
-            break;
-        }
-        let next = highest + 1;
-        let derive = move |_, bound: Duration| async move {
-            let bound = step_timeout.min(bound);
-            let step = timeout(bound, coordinator.wait_for_stake_table(next));
-            step.await
-                .with_context(|| format!("timed out after {bound:?}"))?
-                .map(drop)
-                .map_err(|err| anyhow!("{err:#}"))
-        };
-        let below_target = target.is_some_and(|target| highest < target.required);
-        let step = if below_target {
-            let what = format!("deriving epoch {next} below the chain tip's epoch");
-            retry(deadline, &what, 1, derive).await
-        } else {
-            derive(0, step_timeout).await
-        };
-        match step {
-            Ok(()) => {
-                tracing::debug!(%next, "bootstrap: derived stake table");
-                highest = next;
-            },
-            Err(err) if below_target => return Err(err),
-            Err(err) if err.is::<Elapsed>() => {
-                tracing::warn!(%next, %err, "bootstrap: catchup timed out; proceeding with a possibly stale epoch window");
-                break;
-            },
-            Err(err) => {
-                milestone!(params, %next, %err, "bootstrap: no further epoch to derive; at the live tip");
-                break;
-            },
-        }
-    }
-
-    // `highest` corresponds to N+1 (the leaf at root_block_in_epoch(N-1) is
-    // the last finalized one peers can serve). So current epoch N = highest - 1.
-    let current = EpochNumber::new(highest.saturating_sub(1));
-
-    ensure!(
-        membership.snapshot(current).is_some(),
-        "missing stake table for current epoch {current} after bootstrap"
-    );
-    ensure!(
-        membership.snapshot(highest).is_some(),
-        "missing stake table for next epoch {highest} after bootstrap"
-    );
-    // `current - 1` is skipped when seeded from genesis, which already has its DRB.
-    let previous = current.checked_sub(1).filter(|e| *e > *first_epoch + 1);
-    for epoch in previous.into_iter().chain([*current, *highest]) {
-        prepare_drb(coordinator, EpochNumber::new(epoch), params.step_timeout).await;
-    }
-    Ok(current)
-}
-
-/// Make the DRB of `epoch` available before consensus starts. A failure only delays it: consensus
-/// retries through reactive catchup.
-async fn prepare_drb(
-    coordinator: &EpochMembershipCoordinator<SeqTypes>,
-    epoch: EpochNumber,
-    step_timeout: Duration,
-) {
-    // A missing DRB starts a catchup that ends in `drb_ready`; its error is the start notice.
-    if coordinator.membership_for_epoch(Some(epoch)).is_ok() {
-        return;
-    }
-    match timeout(step_timeout, coordinator.wait_for_catchup(epoch)).await {
-        Ok(Ok(_)) => tracing::debug!(%epoch, "bootstrap: DRB ready"),
-        Ok(Err(err)) => {
-            tracing::warn!(%epoch, %err, "bootstrap: DRB not ready; consensus will catch up")
-        },
-        Err(_) => tracing::warn!(%epoch, "bootstrap: DRB timed out; consensus will catch up"),
-    }
+/// The numbers of `epochs`, for logs.
+fn epoch_numbers<'a>(epochs: impl IntoIterator<Item = &'a EpochNumber>) -> Vec<u64> {
+    epochs.into_iter().map(|epoch| epoch.u64()).collect()
 }
 
 #[cfg(test)]
@@ -617,6 +720,7 @@ mod tests {
             EventKey, Fetcher, IndexedStake, RegisteredValidator, RewardAmount, StakeTableEvent,
         },
     };
+    use hotshot_contract_adapter::field_to_u256;
     use hotshot_example_types::storage_types::TestStorage;
     use hotshot_types::{
         PeerConfig, ValidatorConfig, drb::DrbResult, signature_key::BLSPubKey,
@@ -630,7 +734,7 @@ mod tests {
 
     const EPOCH_HEIGHT: u64 = 10;
     const FIRST_EPOCH: u64 = 1;
-    /// Epoch of the anchor: the install range is `N-3 ..= N+1`.
+    /// Epoch of the anchor: the light-client epochs are `N-3 ..= N+1`.
     const N: u64 = 8;
     /// In epoch `N`, past its root block (75).
     const ANCHOR_HEIGHT: u64 = 77;
@@ -638,11 +742,36 @@ mod tests {
     const PARAMS: BootstrapParams = BootstrapParams {
         step_timeout: Duration::from_secs(5),
         deadline: Duration::from_secs(30),
-        boot: true,
     };
 
-    fn epoch_list(range: RangeInclusive<EpochNumber>) -> Vec<u64> {
-        epochs(&range).collect()
+    /// Starting point of a chain of `EPOCH_HEIGHT`-block epochs, with `finalized_height` the block
+    /// height of the light-client finalized state (0 for none).
+    fn point(finalized_height: u64, stored: &[u64], peer_block_heights: &[u64]) -> StartingPoint {
+        StartingPoint {
+            blocks_per_epoch: EPOCH_HEIGHT,
+            first_epoch: EpochNumber::new(FIRST_EPOCH),
+            stored_epochs: stored.iter().copied().map(EpochNumber::new).collect(),
+            anchor: LightClientStateSol {
+                blockHeight: finalized_height,
+                ..Default::default()
+            },
+            peer_block_heights: peer_block_heights.to_vec(),
+        }
+    }
+
+    fn epoch_list(epochs: &[EpochNumber]) -> Vec<u64> {
+        epochs.iter().map(|epoch| epoch.u64()).collect()
+    }
+
+    /// Light-client catchup of every light-client epoch over the chain of `chain()`.
+    fn catchup_for(state: &LightClientStateSol) -> LightClientCatchup {
+        StartingPoint {
+            anchor: state.clone(),
+            ..point(0, &[], &[])
+        }
+        .plan()
+        .light_client_catchup
+        .unwrap()
     }
 
     #[rstest]
@@ -658,69 +787,140 @@ mod tests {
     #[case::window_only(100, 100 * 2, Some(3..=3))]
     #[case::pre_pos(100, 50, None)]
     #[case::genesis(100, 0, None)]
-    fn install_range_cases(
-        #[case] epoch_height: u64,
-        #[case] anchor_height: u64,
+    fn light_client_epochs_cases(
+        #[case] blocks_per_epoch: u64,
+        #[case] finalized_height: u64,
         #[case] expected: Option<RangeInclusive<u64>>,
     ) {
         // `first_epoch = 1` seeds epochs 1 and 2.
-        let range = install_range(anchor_height, epoch_height, EpochNumber::new(1))
-            .map(|range| epochs(&range));
-        assert_eq!(range, expected);
+        let point = StartingPoint {
+            blocks_per_epoch,
+            ..point(finalized_height, &[], &[])
+        };
+        let epochs = point
+            .light_client_epochs()
+            .map(|epochs| epochs.start().u64()..=epochs.end().u64());
+        assert_eq!(epochs, expected);
     }
 
     /// `block_reward(E)` needs the stake table of `E - 3`, and `E` ranges over `n` and `n + 1`.
     #[test]
-    fn install_range_covers_reward_inputs() {
-        let range = install_range(ANCHOR_HEIGHT, EPOCH_HEIGHT, EpochNumber::new(FIRST_EPOCH));
-        let range = epoch_list(range.unwrap());
-        assert!(range.contains(&(N - 3)));
-        assert_eq!(range.last(), Some(&(N + 1)));
+    fn light_client_epochs_cover_reward_inputs() {
+        let epochs = point(ANCHOR_HEIGHT, &[], &[])
+            .light_client_epochs()
+            .unwrap();
+        assert!(epochs.start().u64() <= N - 3);
+        assert_eq!(epochs.end().u64(), N + 1);
     }
 
     #[test]
-    fn install_range_roots_precede_the_anchor() {
-        let range = install_range(ANCHOR_HEIGHT, EPOCH_HEIGHT, EpochNumber::new(FIRST_EPOCH));
-        for epoch in epoch_list(range.unwrap()) {
-            assert!(root_block_in_epoch(epoch - 2, EPOCH_HEIGHT) < ANCHOR_HEIGHT);
+    fn light_client_roots_precede_the_anchor() {
+        let catchup = point(ANCHOR_HEIGHT, &[], &[])
+            .light_client_catchup()
+            .unwrap();
+        for epoch in catchup.missing_epochs {
+            assert!(root_block_in_epoch(epoch.u64() - 2, EPOCH_HEIGHT) < ANCHOR_HEIGHT);
         }
     }
 
-    /// Test chain of `ANCHOR_HEIGHT + 1` blocks and the anchor over it.
+    /// `finalized_height` 77 is in epoch `N = 8`: the light-client epochs are `5 ..= 9`. Epoch
+    /// numbers of the peers' tips are those of the chain's last block.
+    #[rstest]
+    #[case::fresh_join(77, &[], &[78], Some(&[5, 6, 7, 8, 9][..]), 9, None)]
+    #[case::fresh_join_behind_tip(77, &[], &[88], Some(&[5, 6, 7, 8, 9][..]), 9, Some((9, 9)))]
+    #[case::restart_full_storage(77, &[5, 6, 7, 8, 9], &[78], None, 9, None)]
+    #[case::restart_stale_storage(77, &[3, 4], &[78], Some(&[5, 6, 7, 8, 9][..]), 9, None)]
+    #[case::restart_partial_storage(77, &[5, 6, 7], &[78], Some(&[8, 9][..]), 9, None)]
+    #[case::restart_ahead_of_anchor(77, &[5, 6, 7, 8, 9, 10, 11], &[98], None, 11, None)]
+    #[case::no_anchor(0, &[3, 4], &[88], None, 4, Some((9, 9)))]
+    #[case::no_anchor_fresh(0, &[], &[88], None, 2, Some((9, 9)))]
+    #[case::pre_pos_anchor(10, &[], &[88], None, 2, Some((9, 9)))]
+    #[case::prover_lag_cap(77, &[], &[10_000], Some(&[5, 6, 7, 8, 9][..]), 9, Some((10, 1000)))]
+    #[case::no_anchor_no_cap(0, &[], &[10_000], None, 2, Some((1000, 1000)))]
+    #[case::cap_below_start(77, &[5, 6, 7, 8, 9, 10, 11], &[10_000], None, 11, Some((10, 1000)))]
+    #[case::no_peer_heights(77, &[], &[], Some(&[5, 6, 7, 8, 9][..]), 9, None)]
+    #[case::empty_peer_list(77, &[5, 6, 7, 8, 9], &[], None, 9, None)]
+    #[case::empty_chain(77, &[], &[0], Some(&[5, 6, 7, 8, 9][..]), 9, None)]
+    #[case::lying_high_peer(77, &[], &[78, 98], Some(&[5, 6, 7, 8, 9][..]), 9, Some((8, 10)))]
+    #[case::median_ignores_liar(77, &[], &[88, 88, 10_000], Some(&[5, 6, 7, 8, 9][..]), 9, Some((9, 1000)))]
+    #[case::even_takes_the_lower(77, &[], &[78, 10_000], Some(&[5, 6, 7, 8, 9][..]), 9, Some((8, 1000)))]
+    #[case::liars_in_majority(77, &[], &[78, 10_000, 10_000], Some(&[5, 6, 7, 8, 9][..]), 9, Some((10, 1000)))]
+    fn plan_cases(
+        #[case] finalized_height: u64,
+        #[case] stored: &[u64],
+        #[case] peer_block_heights: &[u64],
+        #[case] light_client_epochs: Option<&[u64]>,
+        #[case] highest_held_epoch: u64,
+        #[case] peer_tip_epochs: Option<(u64, u64)>,
+    ) {
+        let plan = point(finalized_height, stored, peer_block_heights).plan();
+
+        let missing = plan
+            .light_client_catchup
+            .map(|catchup| epoch_list(&catchup.missing_epochs));
+        assert_eq!(missing.as_deref(), light_client_epochs);
+        assert_eq!(plan.highest_held_epoch.u64(), highest_held_epoch);
+        let peer_tip_epochs_planned = plan.peer_catchup.map(|catchup| {
+            (
+                catchup.median_tip_epoch.u64(),
+                catchup.highest_tip_epoch.u64(),
+            )
+        });
+        assert_eq!(peer_tip_epochs_planned, peer_tip_epochs);
+    }
+
+    /// Steps up to the epoch after the median tip epoch are required, and the epoch after the
+    /// highest tip epoch ends peer catchup.
+    #[test]
+    fn peer_catchup_bounds() {
+        let catchup = PeerCatchup {
+            median_tip_epoch: EpochNumber::new(9),
+            highest_tip_epoch: EpochNumber::new(11),
+        };
+        assert!(catchup.required(EpochNumber::new(10)));
+        assert!(!catchup.required(EpochNumber::new(11)));
+        assert!(!catchup.reached(EpochNumber::new(11)));
+        assert!(catchup.reached(EpochNumber::new(12)));
+    }
+
+    /// Test chain of `ANCHOR_HEIGHT + 1` blocks and the light-client state over it.
     ///
-    /// Peers report that height, so the walk targets epoch `N + 1`. `mock_block_height(0)` skips
-    /// the walk.
-    async fn chain() -> (TestClient, TrustedAnchor) {
+    /// Peers report that height, so peer catchup targets epoch `N + 1`. `mock_block_height(0)`
+    /// skips peer catchup.
+    async fn chain() -> (TestClient, LightClientStateSol) {
         let client = TestClient::with_epoch_height(EPOCH_HEIGHT);
         let header = client.header(ANCHOR_HEIGHT).await.unwrap();
-        let anchor = TrustedAnchor {
-            height: header.height(),
-            block_comm_root: header
-                .get_light_client_state(ViewNumber::genesis())
-                .unwrap()
-                .block_comm_root,
+        let root = header
+            .get_light_client_state(ViewNumber::genesis())
+            .unwrap()
+            .block_comm_root;
+        let state = LightClientStateSol {
+            blockHeight: header.height(),
+            blockCommRoot: field_to_u256(root),
+            ..Default::default()
         };
-        (client, anchor)
+        (client, state)
     }
 
     #[tokio::test]
     async fn anchor_header_verification() {
-        let (client, anchor) = chain().await;
+        let (client, state) = chain().await;
+        let catchup = catchup_for(&state);
         let header = client.header(ANCHOR_HEIGHT).await.unwrap();
-        verify_anchor_header(&header, &anchor).unwrap();
+        catchup.verify_anchor_header(&header).unwrap();
 
-        let wrong_root = TrustedAnchor {
-            block_comm_root: anchor.block_comm_root + CircuitField::from(1u64),
-            ..anchor
+        let wrong_root = LightClientCatchup {
+            block_comm_root: catchup.block_comm_root + CircuitField::from(1u64),
+            ..catchup.clone()
         };
-        let err = verify_anchor_header(&header, &wrong_root).unwrap_err();
+        let err = wrong_root.verify_anchor_header(&header).unwrap_err();
         assert!(format!("{err:#}").contains("commitment root"), "{err:#}");
 
-        let wrong_height = TrustedAnchor {
-            height: ANCHOR_HEIGHT + 1,
-            ..anchor
+        let wrong_height = LightClientCatchup {
+            finalized_height: ANCHOR_HEIGHT + 1,
+            ..catchup
         };
-        let err = verify_anchor_header(&header, &wrong_height).unwrap_err();
+        let err = wrong_height.verify_anchor_header(&header).unwrap_err();
         assert!(format!("{err:#}").contains("height"), "{err:#}");
     }
 
@@ -758,7 +958,7 @@ mod tests {
                     epoch,
                     (validators.clone(), Some(RewardAmount::default()), hash),
                 );
-                // The root of epoch `e - 2` is the one `add_epoch_root` installs `e` from.
+                // The root of epoch `e - 2` is the one `add_epoch_root` derives `e` from.
                 let root = root_block_in_epoch(epoch - 2, EPOCH_HEIGHT);
                 headers.insert(epoch, client.header(root).await.unwrap());
             }
@@ -867,7 +1067,7 @@ mod tests {
     }
 
     /// A real `EpochCommittees` and coordinator over `store`, seeded like a fresh node. No peer
-    /// serves epoch roots, so the walk ends at the first epoch above the installed ones.
+    /// serves epoch roots, so peer catchup ends at the first epoch above the light-client ones.
     fn coordinator(store: SeededStore) -> EpochMembershipCoordinator<SeqTypes> {
         coordinator_over(committees(store))
     }
@@ -915,7 +1115,7 @@ mod tests {
 
     async fn bootstrap(
         coordinator: &EpochMembershipCoordinator<SeqTypes>,
-        anchor: Option<TrustedAnchor>,
+        anchor: Option<LightClientStateSol>,
         peers: &[TestClient],
         params: BootstrapParams,
     ) -> anyhow::Result<EpochNumber> {
@@ -923,10 +1123,10 @@ mod tests {
         bootstrap_epoch_window(
             coordinator,
             EPOCH_HEIGHT,
-            || async { anchor.context("no anchor") },
+            || async { anchor.clone().context("no anchor") },
             &peer_list(peers),
             &params,
-            &metrics,
+            Some(&metrics),
         )
         .await
     }
@@ -939,7 +1139,7 @@ mod tests {
     }
 
     #[test_log::test(tokio::test)]
-    async fn installs_window() {
+    async fn fresh_join_catches_up_from_light_client() {
         let (client, anchor) = chain().await;
         let coordinator = fresh_coordinator(&client).await;
 
@@ -947,19 +1147,19 @@ mod tests {
             .await
             .unwrap();
 
-        // The residual walk finds no root above the anchor, as when the prover is not lagging.
+        // Peer catchup finds no root above the anchor, as when the prover is not lagging.
         assert_eq!(current, EpochNumber::new(N));
         for epoch in (N - 3)..=(N + 1) {
             assert!(has_table(&coordinator, epoch), "epoch {epoch}");
         }
         assert_eq!(
-            coordinator.membership().highest_known_epoch(),
-            Some(EpochNumber::new(N + 1))
+            coordinator.membership().epochs_with_root().last(),
+            Some(&EpochNumber::new(N + 1))
         );
     }
 
     #[test_log::test(tokio::test)]
-    async fn peer_with_wrong_chain_is_rotated_past() {
+    async fn light_client_catchup_rotates_past_a_wrong_chain() {
         let (client, anchor) = chain().await;
         let (other, _) = chain().await;
         let coordinator = fresh_coordinator(&client).await;
@@ -975,12 +1175,13 @@ mod tests {
     #[test_log::test(tokio::test)]
     async fn invalid_proof_at_first_epoch_fails() {
         let (client, anchor) = chain().await;
-        let range = install_range(anchor.height, EPOCH_HEIGHT, EpochNumber::new(FIRST_EPOCH));
-        let range = range.unwrap();
-        let first_root = root_block_in_epoch(range.start().u64() - 2, EPOCH_HEIGHT);
+        let catchup = catchup_for(&anchor);
+        let first_root =
+            root_block_in_epoch(catchup.missing_epochs.first().u64() - 2, EPOCH_HEIGHT);
         client.return_invalid_proof(first_root as usize).await;
 
-        let err = fetch_roots_from(&client, &anchor, &epoch_list(range), EPOCH_HEIGHT)
+        let err = catchup
+            .fetch_roots(&client, EPOCH_HEIGHT)
             .await
             .unwrap_err();
 
@@ -990,9 +1191,9 @@ mod tests {
         );
     }
 
-    /// A verification failure is retried, not read as the tip, and the retry installs the window.
+    /// A verification failure is retried, not read as the tip, and the retry completes the catchup.
     #[test_log::test(tokio::test)]
-    async fn invalid_proof_is_retried() {
+    async fn light_client_catchup_retries_an_invalid_proof() {
         let (client, anchor) = chain().await;
         let coordinator = fresh_coordinator(&client).await;
         let root = root_block_in_epoch(N - 1, EPOCH_HEIGHT) as usize;
@@ -1019,13 +1220,13 @@ mod tests {
     #[test_log::test(tokio::test)]
     async fn wrong_anchor_root_fails() {
         let (client, anchor) = chain().await;
-        let range = install_range(anchor.height, EPOCH_HEIGHT, EpochNumber::new(FIRST_EPOCH));
-        let anchor = TrustedAnchor {
-            block_comm_root: anchor.block_comm_root + CircuitField::from(1u64),
-            ..anchor
+        let catchup = LightClientCatchup {
+            block_comm_root: catchup_for(&anchor).block_comm_root + CircuitField::from(1u64),
+            ..catchup_for(&anchor)
         };
 
-        let err = fetch_roots_from(&client, &anchor, &epoch_list(range.unwrap()), EPOCH_HEIGHT)
+        let err = catchup
+            .fetch_roots(&client, EPOCH_HEIGHT)
             .await
             .unwrap_err();
 
@@ -1034,7 +1235,7 @@ mod tests {
 
     /// An epoch root the peer cannot serve at first must be retried, not read as the tip.
     #[test_log::test(tokio::test)]
-    async fn transient_failure_is_retried() {
+    async fn light_client_catchup_retries_a_transient_failure() {
         let (client, anchor) = chain().await;
         let coordinator = fresh_coordinator(&client).await;
         let flaky_root = root_block_in_epoch(N - 1, EPOCH_HEIGHT) as usize;
@@ -1084,12 +1285,13 @@ mod tests {
     fn has_epoch_root(coordinator: &EpochMembershipCoordinator<SeqTypes>, epoch: u64) -> bool {
         coordinator
             .membership()
-            .has_epoch_root(EpochNumber::new(epoch))
+            .epochs_with_root()
+            .contains(&EpochNumber::new(epoch))
     }
 
     /// After a restart `reload_stake` holds the epochs, so no working peer is needed.
     #[test_log::test(tokio::test)]
-    async fn restart_skips_the_installed_window() {
+    async fn restart_boots_from_storage() {
         let (client, anchor) = chain().await;
         let store = SeededStore::for_chain(&client, (N - 4)..=(N + 1)).await;
         let mut committees = committees(store);
@@ -1098,7 +1300,7 @@ mod tests {
         client.forget_leaf(ANCHOR_HEIGHT as usize).await;
         let before = client.header_requests().await;
 
-        let no_peers = bootstrap(&coordinator, Some(anchor), &[], PARAMS).await;
+        let no_peers = bootstrap(&coordinator, Some(anchor.clone()), &[], PARAMS).await;
         let failing = bootstrap(
             &coordinator,
             Some(anchor),
@@ -1112,9 +1314,9 @@ mod tests {
         assert_eq!(client.header_requests().await, before);
     }
 
-    /// Only the epochs the membership lacks are fetched: the anchor header and one proof each.
+    /// Only the epochs storage lacks are fetched: the anchor header and one proof each.
     #[test_log::test(tokio::test)]
-    async fn only_missing_epochs_are_fetched() {
+    async fn light_client_catchup_fetches_only_planned_epochs() {
         let (client, anchor) = chain().await;
         let coordinator = coordinator(SeededStore::for_chain(&client, (N - 3)..=(N + 1)).await);
         hold(&coordinator, (N - 3)..=(N - 1)).await;
@@ -1141,7 +1343,7 @@ mod tests {
 
     /// A held epoch without its epoch root header is fetched again.
     #[test_log::test(tokio::test)]
-    async fn incomplete_entry_is_reinstalled() {
+    async fn rootless_stored_epoch_is_caught_up_from_light_client() {
         let (client, anchor) = chain().await;
         let store = SeededStore::for_chain(&client, (N - 3)..=(N + 1)).await;
         store.roots.lock().unwrap().remove(&(N + 1));
@@ -1172,7 +1374,7 @@ mod tests {
     /// After a fresh join the first epochs hold no reward, which a refetch cannot supply, so they
     /// are not fetched again.
     #[test_log::test(tokio::test)]
-    async fn epoch_without_reward_is_not_refetched() {
+    async fn rewardless_stored_epoch_is_not_refetched() {
         let (client, anchor) = chain().await;
         let store = SeededStore::for_chain(&client, (N - 3)..=(N + 1)).await;
         for table in store.tables.lock().unwrap().values_mut() {
@@ -1190,9 +1392,9 @@ mod tests {
         assert_eq!(client.header_requests().await, before);
     }
 
-    /// An install slower than `step_timeout` completes: only the fetch is bounded by it.
+    /// A light-client catchup slower than `step_timeout` completes: only the fetch is bounded by it.
     #[test_log::test(tokio::test(start_paused = true))]
-    async fn install_slower_than_the_step_timeout_completes() {
+    async fn light_client_catchup_slower_than_the_step_timeout_completes() {
         let (client, anchor) = chain().await;
         let mut store = SeededStore::for_chain(&client, (N - 3)..=(N + 1)).await;
         store.slow = Some((N + 1, PARAMS.step_timeout * 2));
@@ -1208,7 +1410,7 @@ mod tests {
 
     /// A failure below the epoch the peers' chain tip needs is retried, not read as the tip.
     #[test_log::test(tokio::test)]
-    async fn walk_retries_failures_below_the_target() {
+    async fn peer_catchup_retries_below_the_median_tip() {
         let (client, _) = chain().await;
         let store = SeededStore::for_chain(&client, (N - 4)..=(N + 1)).await;
         let withheld = store.tables.lock().unwrap().remove(&(N - 1)).unwrap();
@@ -1226,7 +1428,7 @@ mod tests {
 
         let current = bootstrap(
             &coordinator,
-            Some(TrustedAnchor::genesis()),
+            Some(LightClientStateSol::default()),
             &[client],
             PARAMS,
         )
@@ -1238,7 +1440,7 @@ mod tests {
     }
 
     #[test_log::test(tokio::test)]
-    async fn walk_below_the_target_fails_at_the_deadline() {
+    async fn peer_catchup_below_the_median_tip_fails_at_the_deadline() {
         let (client, _) = chain().await;
         let store = SeededStore::for_chain(&client, (N - 4)..=(N + 1)).await;
         store.tables.lock().unwrap().remove(&(N - 1));
@@ -1256,7 +1458,7 @@ mod tests {
 
         let err = bootstrap(
             &coordinator,
-            Some(TrustedAnchor::genesis()),
+            Some(LightClientStateSol::default()),
             &[client],
             params,
         )
@@ -1270,13 +1472,13 @@ mod tests {
     #[test_log::test(tokio::test)]
     async fn invalid_proof_mid_range_fails() {
         let (client, anchor) = chain().await;
-        let range = install_range(anchor.height, EPOCH_HEIGHT, EpochNumber::new(FIRST_EPOCH));
-        let range = range.unwrap();
+        let catchup = catchup_for(&anchor);
         client
             .return_invalid_proof(root_block_in_epoch(N - 3, EPOCH_HEIGHT) as usize)
             .await;
 
-        let err = fetch_roots_from(&client, &anchor, &epoch_list(range), EPOCH_HEIGHT)
+        let err = catchup
+            .fetch_roots(&client, EPOCH_HEIGHT)
             .await
             .unwrap_err();
 
@@ -1286,10 +1488,10 @@ mod tests {
         );
     }
 
-    /// A restart after an interrupted install holds a lone table at the start of the range, and the
-    /// install completes it.
+    /// A restart after an interrupted light-client catchup holds a lone table at the start of the
+    /// epochs, and the catchup completes them.
     #[test_log::test(tokio::test)]
-    async fn partial_install_is_completed() {
+    async fn partial_light_client_catchup_is_completed() {
         let (client, anchor) = chain().await;
         let coordinator = fresh_coordinator(&client).await;
         let first_root = client
@@ -1319,10 +1521,10 @@ mod tests {
         assert!(client.header_requests().await > before);
     }
 
-    /// Peers that agree on the tip and an uncapped target end the walk at the target, without a
-    /// probe past it, even though the store holds a later epoch.
+    /// Peers that agree on the tip and an uncapped median tip epoch end peer catchup there, without
+    /// a probe past it, even though the store holds a later epoch.
     #[test_log::test(tokio::test)]
-    async fn honest_walk_stops_at_the_target() {
+    async fn peer_catchup_stops_at_the_highest_tip() {
         let (client, anchor) = chain().await;
         client.mock_block_height(ANCHOR_HEIGHT + 1).await;
         let store = SeededStore::for_chain(&client, (N - 3)..=(N + 2)).await;
@@ -1336,9 +1538,9 @@ mod tests {
         assert!(!store.loaded(N + 2));
     }
 
-    /// A lying high peer does not fail the walk: epochs above the median's target are best-effort.
+    /// A lying high peer does not fail peer catchup: epochs above the median tip are best-effort.
     #[test_log::test(tokio::test)]
-    async fn lying_high_peer_does_not_fail_the_walk() {
+    async fn lying_high_peer_does_not_fail_peer_catchup() {
         let (client, anchor) = chain().await;
         client.mock_block_height(ANCHOR_HEIGHT + 1).await;
         let (liar, _) = chain().await;
@@ -1370,11 +1572,11 @@ mod tests {
                     bail!("L1 not ready");
                 }
                 height_requests.store(client.block_height_requests().await, Ordering::Relaxed);
-                Ok(anchor)
+                Ok(anchor.clone())
             },
             &peer_list(std::slice::from_ref(&client)),
             &PARAMS,
-            &BootstrapMetrics::new(&NoMetrics),
+            Some(&BootstrapMetrics::new(&NoMetrics)),
         )
         .await
         .unwrap();
@@ -1405,7 +1607,7 @@ mod tests {
         assert_eq!(client.block_height_requests().await, 2);
     }
 
-    /// A held epoch without its root, above the rooted ones, does not move the walk's start.
+    /// A held epoch without its root, above the rooted ones, does not move where peer catchup starts.
     #[test_log::test(tokio::test)]
     async fn rootless_top_epoch_does_not_raise_the_start() {
         let (client, anchor) = chain().await;
@@ -1424,7 +1626,7 @@ mod tests {
         assert_eq!(current, EpochNumber::new(N));
     }
 
-    /// A peer that does not answer the first pass is asked again, and its height ends the walk.
+    /// A peer that does not answer the first pass is asked again, and its height ends peer catchup.
     #[test_log::test(tokio::test(start_paused = true))]
     async fn silent_peer_answers_on_a_later_pass() {
         let (client, anchor) = chain().await;
@@ -1459,9 +1661,9 @@ mod tests {
         );
     }
 
-    /// A peer ahead of the median extends the walk, best-effort, to the epoch of its tip.
+    /// A peer ahead of the median extends peer catchup, best-effort, to the epoch of its tip.
     #[test_log::test(tokio::test)]
-    async fn walk_continues_to_the_highest_peer() {
+    async fn peer_catchup_continues_to_the_highest_tip() {
         let (client, anchor) = chain().await;
         client.mock_block_height(ANCHOR_HEIGHT + 1).await;
         let (ahead, _) = chain().await;
@@ -1477,20 +1679,26 @@ mod tests {
         assert!(!store.loaded(N + 4));
     }
 
-    /// The follower's mid-run call installs the window without boot milestones.
+    /// The follower's mid-run call, without metrics, catches up from the light client.
     #[test_log::test(tokio::test)]
-    async fn mid_run_installs_window() {
+    async fn mid_run_catches_up_from_light_client() {
         let (client, anchor) = chain().await;
         let coordinator = fresh_coordinator(&client).await;
         let params = BootstrapParams {
-            boot: false,
             deadline: Duration::from_secs(2),
             ..PARAMS
         };
 
-        let current = bootstrap(&coordinator, Some(anchor), &[client], params)
-            .await
-            .unwrap();
+        let current = bootstrap_epoch_window(
+            &coordinator,
+            EPOCH_HEIGHT,
+            || async { Ok(anchor.clone()) },
+            &peer_list(&[client]),
+            &params,
+            None,
+        )
+        .await
+        .unwrap();
 
         assert_eq!(current, EpochNumber::new(N));
         for epoch in (N - 3)..=(N + 1) {
@@ -1498,9 +1706,9 @@ mod tests {
         }
     }
 
-    /// A non-empty install range cannot be fetched without peers, so startup fails at once.
+    /// Light-client epochs cannot be fetched without peers, so startup fails at once.
     #[test_log::test(tokio::test)]
-    async fn install_without_peers_fails_immediately() {
+    async fn light_client_catchup_without_peers_fails_immediately() {
         let (client, anchor) = chain().await;
         let coordinator = fresh_coordinator(&client).await;
         let started = Instant::now();
@@ -1513,21 +1721,27 @@ mod tests {
         assert!(started.elapsed() < Duration::from_secs(1));
     }
 
-    /// Without finalized state there is nothing to install, so no peers is fine and the walk runs.
+    /// Without finalized state there is nothing to fetch, so no peers is fine and peer catchup is
+    /// skipped.
     #[test_log::test(tokio::test)]
-    async fn genesis_anchor_without_peers_walks() {
+    async fn genesis_anchor_without_peers_skips_peer_catchup() {
         let (client, _) = chain().await;
         let coordinator = fresh_coordinator(&client).await;
 
-        let current = bootstrap(&coordinator, Some(TrustedAnchor::genesis()), &[], PARAMS)
-            .await
-            .unwrap();
+        let current = bootstrap(
+            &coordinator,
+            Some(LightClientStateSol::default()),
+            &[],
+            PARAMS,
+        )
+        .await
+        .unwrap();
 
         assert_eq!(current, EpochNumber::new(FIRST_EPOCH));
         assert!(!has_table(&coordinator, N - 3));
     }
 
-    /// An anchor read that keeps failing is retried until the deadline, not read as "walk".
+    /// An anchor read that keeps failing is retried until the deadline, not read as no anchor.
     #[test_log::test(tokio::test)]
     async fn anchor_failure_aborts_at_the_deadline() {
         let (client, _) = chain().await;
@@ -1546,7 +1760,7 @@ mod tests {
         assert!(err.contains("no anchor"), "{err}");
     }
 
-    /// A failed anchor read is retried and the install then runs.
+    /// A failed anchor read is retried and light-client catchup then runs.
     #[test_log::test(tokio::test)]
     async fn anchor_failure_is_retried() {
         let (client, anchor) = chain().await;
@@ -1559,11 +1773,11 @@ mod tests {
             EPOCH_HEIGHT,
             || async {
                 ensure!(reads.fetch_add(1, Ordering::Relaxed) > 0, "L1 not ready");
-                Ok(anchor)
+                Ok(anchor.clone())
             },
             &peer_list(&[client]),
             &PARAMS,
-            &metrics,
+            Some(&metrics),
         )
         .await
         .unwrap();
@@ -1573,56 +1787,31 @@ mod tests {
         assert!(has_table(&coordinator, N + 1));
     }
 
+    /// A chain before its first epoch ends has no epochs to catch up on.
     #[test_log::test(tokio::test)]
-    async fn pre_pos_anchor_walks() {
-        let (client, _) = chain().await;
-        client.mock_block_height(0).await;
+    async fn pre_epoch_chain_returns_genesis() {
+        let (client, anchor) = chain().await;
         let coordinator = fresh_coordinator(&client).await;
-        let early = client.header(EPOCH_HEIGHT).await.unwrap();
-        let anchor = TrustedAnchor {
-            height: early.height(),
-            block_comm_root: early
-                .get_light_client_state(ViewNumber::genesis())
-                .unwrap()
-                .block_comm_root,
-        };
 
-        let current = bootstrap(&coordinator, Some(anchor), &[client], PARAMS)
-            .await
-            .unwrap();
+        let current = bootstrap_epoch_window(
+            &coordinator,
+            0,
+            || async { Ok(anchor.clone()) },
+            &peer_list(&[client]),
+            &PARAMS,
+            None,
+        )
+        .await
+        .unwrap();
 
-        assert_eq!(current, EpochNumber::new(FIRST_EPOCH));
-        assert!(!has_table(&coordinator, N - 3));
+        assert_eq!(current, EpochNumber::genesis());
     }
 
-    #[rstest]
-    #[case::one_peer(&[78], false, Some(9))]
-    #[case::no_peer(&[], false, None)]
-    #[case::empty_chain(&[0], false, None)]
-    #[case::median_ignores_one_liar(&[78, 78, 10_000], false, Some(9))]
-    #[case::even_takes_the_lower(&[78, 10_000], false, Some(9))]
-    #[case::unanchored_liar_alone(&[10_000], false, Some(1001))]
-    #[case::anchored_liar_alone(&[10_000], true, Some(N + 1 + TARGET_SLACK))]
-    #[case::anchored_liars_in_majority(&[78, 10_000, 10_000], true, Some(N + 1 + TARGET_SLACK))]
-    #[case::anchored_honest(&[78], true, Some(9))]
-    fn target_epoch_cases(
-        #[case] heights: &[u64],
-        #[case] anchored: bool,
-        #[case] expected: Option<u64>,
-    ) {
-        let anchor = TrustedAnchor {
-            height: ANCHOR_HEIGHT,
-            block_comm_root: CircuitField::from(0u64),
-        };
-        let target = target_epoch(heights.to_vec(), EPOCH_HEIGHT)
-            .map(|target| cap_target(target, anchored.then_some(&anchor), EPOCH_HEIGHT));
-        assert_eq!(target.map(|e| e.u64()), expected);
-    }
-
-    /// A peer that reports a huge chain cannot make the walk require more than the anchor's slack.
-    /// Past it the walk is best-effort and ends at the first epoch peers cannot serve.
+    /// A peer that reports a huge chain cannot make peer catchup require more than the slack past
+    /// the finalized epoch. Past it peer catchup is best-effort and ends at the first epoch peers
+    /// cannot serve.
     #[test_log::test(tokio::test)]
-    async fn huge_peer_height_is_clamped_by_the_anchor() {
+    async fn huge_peer_height_is_capped_by_the_anchor() {
         let (client, anchor) = chain().await;
         client.mock_block_height(10_000).await;
         let store = SeededStore::for_chain(&client, (N - 3)..=(N + 1 + TARGET_SLACK)).await;
