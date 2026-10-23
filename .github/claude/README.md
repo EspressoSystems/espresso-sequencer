@@ -82,8 +82,8 @@ Per PR: $0.6-2.5 with opus, about 2x with fable.
 
 ### Known limitations
 
-- Prior review comments are not replayed (empty `tmp/pr-review-comments.json`): thread handling (runbook step 1) and
-  skipping existing feedback are not evaluated.
+- Prior review comments are not replayed (empty `tmp/pr-review-comments.json`): thread handling (`## Prior threads` in
+  `review.md`) and skipping existing feedback are not evaluated.
 - The PR title and body stay visible to the reviewer and may describe the bug or a later fix (a PR that fixes one bug
   and introduces another).
 - One run per PR is noisy; results vary between runs. Compare over several runs before concluding.
