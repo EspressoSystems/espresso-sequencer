@@ -53,7 +53,7 @@ jobs:
           sparse-checkout: .github/claude
           persist-credentials: false
 
-      - uses: astral-sh/setup-uv@v10.3.2
+      - uses: astral-sh/setup-uv@v10.3.0
         with:
           cache-dependency-glob: .github/claude/uv.lock
 
@@ -187,7 +187,7 @@ jobs:
           echo "effort=$effort" >> "$GITHUB_OUTPUT"
           echo "model=$model" >> "$GITHUB_OUTPUT"
 
-      - uses: astral-sh/setup-uv@v10.3.2
+      - uses: astral-sh/setup-uv@v10.3.0
         with:
           cache-dependency-glob: .github/claude/uv.lock
 
@@ -236,7 +236,7 @@ jobs:
           sparse-checkout: .github/claude
           persist-credentials: false
 
-      - uses: astral-sh/setup-uv@v10.3.2
+      - uses: astral-sh/setup-uv@v10.3.0
         with:
           cache-dependency-glob: .github/claude/uv.lock
 
