@@ -9,7 +9,7 @@ use espresso_telemetry as telemetry;
 use espresso_types::v0::traits::{NullEventConsumer, PersistenceOptions};
 use futures::{channel::oneshot, future::BoxFuture};
 use hotshot_query_service::{
-    data_source::{ExtensibleDataSource, MetricsDataSource, storage::pruning::PrunerConfig},
+    data_source::{ExtensibleDataSource, MetricsDataSource},
     status::{HasMetrics, UpdateStatusData},
 };
 use hotshot_types::traits::metrics::{Metrics, NoMetrics};
@@ -363,8 +363,11 @@ impl Options {
             let state = state.clone();
             async move { state.node_state().await }
         };
-        let empty_state_start =
-            EmptyStateStart::for_pruning(inner_storage.get_pruning_config().as_ref());
+        let empty_state_start = if mod_opt.prune {
+            EmptyStateStart::RecentBoundary
+        } else {
+            EmptyStateStart::Genesis
+        };
         tasks.spawn(
             "merklized state storage update loop",
             update_state_storage_loop(ds.clone(), get_node_state, light_client, empty_state_start),

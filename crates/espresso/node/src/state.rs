@@ -14,10 +14,7 @@ use espresso_types::{
 use futures::{StreamExt, future::Future};
 use hotshot_query_service::{
     availability::{self, AvailabilityDataSource},
-    data_source::{
-        Transaction, VersionedDataSource,
-        storage::pruning::{PrunedHeightDataSource, PrunerCfg},
-    },
+    data_source::{Transaction, VersionedDataSource, storage::pruning::PrunedHeightDataSource},
     merklized_state::{MerklizedStateHeightPersistence, UpdateStateData},
     status::StatusDataSource,
     types::HeightIndexed,
@@ -372,24 +369,13 @@ const LOCAL_CATCHUP_TIMEOUT: Duration = Duration::from_secs(60);
 /// Where the state loop starts when it has no state of its own.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum EmptyStateStart {
-    /// From a snapshot at a recent epoch boundary, from peers. Fast, but the trees stay incomplete
-    /// for good: they have no paths for the blocks below the boundary, and no fee account the
-    /// loop has not touched since.
+    /// From a snapshot at a recent epoch boundary, from peers, for a pruned node, which serves
+    /// recent state only. Fast, but the trees stay incomplete for good: they have no paths for the
+    /// blocks below the boundary, and no fee account the loop has not touched since.
     RecentBoundary,
-    /// From genesis, on leaves from peers. Slow, but the only way to complete trees.
+    /// From genesis, on leaves from peers, for archive nodes and nodes without a pruner. Slow, but
+    /// the only way to complete trees.
     Genesis,
-}
-
-impl EmptyStateStart {
-    /// A pruned node serves recent state only, so it starts from a recent boundary. Archive nodes
-    /// and nodes without a pruner, which have no pruner config, replay from genesis for complete
-    /// trees.
-    pub(crate) fn for_pruning(cfg: Option<&PrunerCfg>) -> Self {
-        match cfg {
-            Some(_) => Self::RecentBoundary,
-            None => Self::Genesis,
-        }
-    }
 }
 
 #[tracing::instrument(skip_all)]
@@ -999,32 +985,4 @@ impl<T> SequencerStateUpdate for T where
         + UpdateStateData<SeqTypes, RewardMerkleTreeV1, { RewardMerkleTreeV1::ARITY }>
         + ChainConfigPersistence
 {
-}
-
-#[cfg(test)]
-mod test {
-    use std::time::Duration;
-
-    use hotshot_query_service::data_source::storage::pruning::PrunerCfg;
-
-    use super::EmptyStateStart;
-
-    #[test]
-    fn empty_state_start_follows_pruning() {
-        const DAY: Duration = Duration::from_secs(24 * 3600);
-        let cfg = |data, state| {
-            PrunerCfg::new()
-                .with_target_retention(data)
-                .with_state_target_retention(state)
-        };
-
-        assert_eq!(EmptyStateStart::for_pruning(None), EmptyStateStart::Genesis);
-        // The retention values do not matter, even when state outlives data.
-        for state in [DAY, 7 * DAY, 8 * DAY] {
-            assert_eq!(
-                EmptyStateStart::for_pruning(Some(&cfg(7 * DAY, state))),
-                EmptyStateStart::RecentBoundary
-            );
-        }
-    }
 }
