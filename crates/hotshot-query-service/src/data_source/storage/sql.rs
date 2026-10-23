@@ -721,11 +721,8 @@ impl SqlStorage {
         connection_type: StorageConnectionType,
     ) -> Result<Self, Error> {
         let metrics = PrometheusMetrics::default();
+        let pool_metrics = PoolMetrics::new(&*metrics.subgroup("sql".into()));
         let pruned_heights = PrunedHeightMetrics::new(&*metrics.subgroup("pruner".into()));
-        let pool_metrics = PoolMetrics::new(
-            &*metrics.subgroup("sql".into()),
-            pruned_heights.state.clone(),
-        );
 
         #[cfg(feature = "embedded-db")]
         let pool = config.pool_opt.clone();
@@ -2824,31 +2821,6 @@ mod test {
             .unwrap();
         let mut tx = storage.read().await.unwrap();
         assert_eq!(tx.load_state_start_height().await.unwrap(), Some(40));
-    }
-
-    /// The state writer's state pruned height reaches the gauge when it commits, not before, and
-    /// not when it reverts.
-    #[test_log::test(tokio::test(flavor = "multi_thread"))]
-    async fn test_state_writer_sets_state_pruned_gauge() {
-        let db = TmpDb::init().await;
-        let storage = SqlStorage::connect(db.config(), StorageConnectionType::Query)
-            .await
-            .unwrap();
-
-        let mut tx = storage.write().await.unwrap();
-        UpdateStateData::<_, MockMerkleTree, 8>::set_state_pruned_height(&mut tx, 7)
-            .await
-            .unwrap();
-        assert_eq!(pruned_height_gauge(&storage, "state_height"), 0);
-        tx.revert().await;
-        assert_eq!(pruned_height_gauge(&storage, "state_height"), 0);
-
-        let mut tx = storage.write().await.unwrap();
-        UpdateStateData::<_, MockMerkleTree, 8>::set_state_pruned_height(&mut tx, 9)
-            .await
-            .unwrap();
-        tx.commit().await.unwrap();
-        assert_eq!(pruned_height_gauge(&storage, "state_height"), 9);
     }
 
     fn pruned_height_gauge(storage: &SqlStorage, name: &str) -> usize {

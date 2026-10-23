@@ -49,6 +49,7 @@ pub trait UpdateStateData<Types: NodeType, State: MerklizedState<Types, ARITY>, 
 {
     async fn set_last_state_height(&mut self, height: usize) -> anyhow::Result<()>;
     /// Record that no state is stored at or below `height`, so that queries for it fail as pruned.
+    /// The pruner's state height gauge shows the new value after the pruner's next run.
     async fn set_state_pruned_height(&mut self, height: u64) -> anyhow::Result<()>;
     /// Record that the state starts from a snapshot at `height`, not from genesis. The trees then
     /// lack what no update since has touched, for good.
