@@ -91,6 +91,7 @@ PERSIST_OVERLAY = REPO_ROOT / "binary-upgrade-tests" / "compose.persist-storage.
 NODE_5_FS_OVERLAY = REPO_ROOT / "binary-upgrade-tests" / "compose.node-5-fs.yaml"
 NODE_5_PG_OVERLAY = REPO_ROOT / "binary-upgrade-tests" / "compose.node-5-pg.yaml"
 LC_GATING_OVERLAY = REPO_ROOT / "binary-upgrade-tests" / "compose.lc-gating.yaml"
+CDN_OPEN_OVERLAY = REPO_ROOT / "binary-upgrade-tests" / "compose.cdn-open.yaml"
 STAKE_NODE_5_OVERLAY = REPO_ROOT / "binary-upgrade-tests" / "compose.stake-node-5.yaml"
 
 
@@ -300,11 +301,11 @@ class Compose:
             "-f", str(self.base_dir / "docker-compose.yaml"),
             "-f", str(PERSIST_OVERLAY),
         ]  # fmt: skip
-        if (
-            "wait-for-lc-epoch"
-            not in (self.base_dir / "docker-compose.yaml").read_text()
-        ):
+        base_compose = (self.base_dir / "docker-compose.yaml").read_text()
+        if "wait-for-lc-epoch" not in base_compose:
             args += ["-f", str(LC_GATING_OVERLAY)]
+        if "cdn-whitelist" in base_compose:
+            args += ["-f", str(CDN_OPEN_OVERLAY)]
         for overlay in self.extra_overlays:
             args += ["-f", str(overlay)]
         return args
