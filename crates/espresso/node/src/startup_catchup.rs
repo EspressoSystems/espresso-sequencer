@@ -15,14 +15,14 @@
 //! 2. Walk: from the highest known epoch, one epoch at a time. The walk targets the epoch the peers'
 //!    chain tip needs, and a failure below it is retried until the deadline. Above it, up to the
 //!    epoch the highest reported tip needs, the first failure marks the live tip, and the walk
-//!    stops there without probing further. Without any reported height, the first failure marks
-//!    the live tip.
+//!    stops there without probing further. Without state peers, or with a chain of no blocks, the
+//!    walk is skipped. With peers, startup fails if none reports a height.
 //!
 //! Both stages share one deadline.
 
 use std::{ops::RangeInclusive, time::Duration};
 
-use anyhow::{Context, anyhow, ensure};
+use anyhow::{Context, anyhow, bail, ensure};
 use espresso_types::{Header, SeqTypes};
 use futures::future::{join_all, try_join_all};
 use hotshot_contract_adapter::{sol_types::LightClientStateSol, u256_to_field};
@@ -48,6 +48,8 @@ const INITIAL_BACKOFF: Duration = Duration::from_secs(1);
 const MAX_BACKOFF: Duration = Duration::from_secs(60);
 /// Epochs past the anchor's window that the walk target may reach.
 const TARGET_SLACK: u64 = 2;
+/// Passes over the peers when reading their block heights, with backoff in between.
+const PEER_HEIGHT_ATTEMPTS: usize = 3;
 
 /// A once-per-boot milestone: INFO on the announce target, or debug when the call is not the boot
 /// one.
@@ -182,7 +184,7 @@ where
 
     // An anchor with an empty range vouches for nothing, so it does not cap the target.
     let anchor = range.is_some().then_some(&anchor);
-    let target = walk_target(peers, anchor, epoch_height, params, metrics).await;
+    let target = walk_target(peers, anchor, epoch_height, params, metrics).await?;
     let current = walk_to_tip(coordinator, first_epoch, target, deadline, params).await?;
     if params.boot {
         metrics.window_epoch.set(current.u64() as usize);
@@ -383,31 +385,22 @@ fn verify_anchor_header(header: &Header, anchor: &TrustedAnchor) -> anyhow::Resu
 }
 
 /// The epoch whose stake table the window needs for the chain tip the peers report, capped by the
-/// anchor, and the epoch of the highest tip, or `None` when no peer answers within `step_timeout`.
+/// anchor, and the epoch of the highest tip. `None` without peers or when the chain is empty.
+///
+/// With peers, the heights are read up to `PEER_HEIGHT_ATTEMPTS` times until one answers within
+/// `step_timeout`, and startup fails if none does.
 async fn walk_target<C: Client>(
     peers: &[(Url, C)],
     anchor: Option<&TrustedAnchor>,
     epoch_height: u64,
     params: &BootstrapParams,
     metrics: &BootstrapMetrics,
-) -> Option<WalkTarget> {
-    let heights = join_all(
-        peers
-            .iter()
-            .map(|(_, peer)| timeout(params.step_timeout, peer.block_height())),
-    )
-    .await;
-    let heights: Vec<u64> = heights
-        .into_iter()
-        .filter_map(|height| height.ok()?.ok())
-        .collect();
-    if heights.is_empty() && !peers.is_empty() {
-        tracing::warn!(
-            "bootstrap: no state peer reported a block height; walking without a target"
-        );
-    }
+) -> anyhow::Result<Option<WalkTarget>> {
+    let heights = read_peer_heights(peers, params.step_timeout).await?;
     let max_height = heights.iter().max().copied();
-    let peer_target = target_epoch(heights, epoch_height)?;
+    let Some(peer_target) = target_epoch(heights, epoch_height) else {
+        return Ok(None);
+    };
     if params.boot {
         metrics.peer_target_epoch.set(peer_target.u64() as usize);
     }
@@ -419,10 +412,44 @@ async fn walk_target<C: Client>(
             "bootstrap: peers report a chain tip past the anchor's window; capping the walk target"
         );
     }
-    Some(WalkTarget {
-        required: target,
-        stop: epoch_needing(max_height?, epoch_height)?,
-    })
+    Ok(max_height.and_then(|height| {
+        Some(WalkTarget {
+            required: target,
+            stop: epoch_needing(height, epoch_height)?,
+        })
+    }))
+}
+
+/// The block heights the peers report, empty only without peers.
+async fn read_peer_heights<C: Client>(
+    peers: &[(Url, C)],
+    step_timeout: Duration,
+) -> anyhow::Result<Vec<u64>> {
+    if peers.is_empty() {
+        return Ok(vec![]);
+    }
+    let mut backoff = INITIAL_BACKOFF;
+    for attempt in 1..=PEER_HEIGHT_ATTEMPTS {
+        let heights = join_all(
+            peers
+                .iter()
+                .map(|(_, peer)| timeout(step_timeout, peer.block_height())),
+        )
+        .await;
+        let heights: Vec<u64> = heights
+            .into_iter()
+            .filter_map(|height| height.ok()?.ok())
+            .collect();
+        if !heights.is_empty() {
+            return Ok(heights);
+        }
+        tracing::warn!(attempt, "bootstrap: no state peer reported a block height");
+        if attempt < PEER_HEIGHT_ATTEMPTS {
+            sleep(backoff).await;
+            backoff = (backoff * 2).min(MAX_BACKOFF);
+        }
+    }
+    bail!("no state peer reported a block height after {PEER_HEIGHT_ATTEMPTS} attempts")
 }
 
 /// `epoch(tip) + 1` for the median of the reported chain heights. The median of an even count is
@@ -461,7 +488,7 @@ fn cap_target(
 ///
 /// Steps below the required target are retried until the deadline. From there up, the first step
 /// that peers cannot serve marks the live tip, and reaching `stop` ends the walk without probing.
-/// Without a target, the first failure marks the live tip.
+/// Without a target the walk is skipped.
 async fn walk_to_tip(
     coordinator: &EpochMembershipCoordinator<SeqTypes>,
     first_epoch: EpochNumber,
@@ -485,7 +512,7 @@ async fn walk_to_tip(
 
     let step_timeout = params.step_timeout;
     loop {
-        if target.is_some_and(|t| highest >= t.stop) {
+        if target.is_none_or(|t| highest >= t.stop) {
             break;
         }
         let next = highest + 1;
@@ -653,8 +680,8 @@ mod tests {
 
     /// Test chain of `ANCHOR_HEIGHT + 1` blocks and the anchor over it.
     ///
-    /// Peers report that height, so the walk targets epoch `N + 1`. `mock_block_height(0)` leaves
-    /// the walk without a target.
+    /// Peers report that height, so the walk targets epoch `N + 1`. `mock_block_height(0)` skips
+    /// the walk.
     async fn chain() -> (TestClient, TrustedAnchor) {
         let client = TestClient::with_epoch_height(EPOCH_HEIGHT);
         let header = client.header(ANCHOR_HEIGHT).await.unwrap();
@@ -1317,6 +1344,41 @@ mod tests {
 
         assert_eq!(current, EpochNumber::new(N + 1));
         assert!(started.elapsed() < Duration::from_secs(PARAMS.step_timeout.as_secs()));
+    }
+
+    /// A peer that does not answer the first pass is asked again, and its height ends the walk.
+    #[test_log::test(tokio::test(start_paused = true))]
+    async fn silent_peer_answers_on_a_later_pass() {
+        let (client, anchor) = chain().await;
+        client.mock_block_height(ANCHOR_HEIGHT + 1).await;
+        client.fail_block_heights(2).await;
+        let store = SeededStore::for_chain(&client, (N - 3)..=(N + 2)).await;
+        let coordinator = coordinator(store.clone());
+
+        let current = bootstrap(&coordinator, Some(anchor), &[client], PARAMS)
+            .await
+            .unwrap();
+
+        assert_eq!(current, EpochNumber::new(N));
+        assert!(!store.loaded(N + 2));
+    }
+
+    /// Peers are configured but none reports a height: startup fails instead of guessing the tip.
+    #[test_log::test(tokio::test(start_paused = true))]
+    async fn no_peer_height_fails_startup() {
+        let (client, anchor) = chain().await;
+        client.fail_block_heights(usize::MAX).await;
+        let coordinator = fresh_coordinator(&client).await;
+
+        let err = bootstrap(&coordinator, Some(anchor), &[client], PARAMS)
+            .await
+            .unwrap_err();
+
+        let err = format!("{err:#}");
+        assert!(
+            err.contains("no state peer reported a block height after 3 attempts"),
+            "{err}"
+        );
     }
 
     /// A peer ahead of the median extends the walk, best-effort, to the epoch of its tip.
