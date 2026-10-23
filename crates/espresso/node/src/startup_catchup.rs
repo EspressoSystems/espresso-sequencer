@@ -21,9 +21,11 @@
 //!    QC-verified leaves. Steps up to the epoch of the median peer's chain tip are retried until the
 //!    deadline. Above it, up to the epoch of the highest reported tip, the first failure marks the
 //!    live tip and peer catchup stops there. Without state peers, or on a chain of no blocks, peer
-//!    catchup is skipped. With peers, startup fails if none reports a block height.
+//!    catchup is skipped. With peers, the block heights are read after LC contract catchup, for a
+//!    few passes. If none answers, peer catchup is skipped with a warning: it fetches through the
+//!    same peers.
 //!
-//! The LC contract state and the state peer block heights are read concurrently. All stages share one deadline.
+//! All stages share one deadline.
 //!
 //! Called from validator boot (`SequencerContext::init`), follower boot (`init_with_source`) and the
 //! follower mid-run skip-ahead (`Follower::catch_up_skipped_epochs`, without metrics).
@@ -33,12 +35,9 @@
 
 use std::{collections::BTreeSet, ops::RangeInclusive, time::Duration};
 
-use anyhow::{Context, anyhow, bail, ensure};
+use anyhow::{Context, anyhow, ensure};
 use espresso_types::{Header, SeqTypes};
-use futures::{
-    future::{join_all, try_join_all},
-    try_join,
-};
+use futures::future::{join_all, try_join_all};
 use hotshot_contract_adapter::{sol_types::LightClientStateSol, u256_to_field};
 use hotshot_query_service::node::BlockId;
 use hotshot_types::{
@@ -172,28 +171,17 @@ struct StartupCatchup<'a, C> {
 }
 
 impl<C: Client> StartupCatchup<'_, C> {
-    /// Plan from `snapshot`, run LC contract catchup and peer catchup, and prepare the epochs
-    /// cliquenet connects to.
-    ///
-    /// A LC contract catchup slower than `step_timeout` leaves the block heights stale: they are
-    /// read again and the peer catchup is planned anew. Returns the current epoch `N`.
+    /// Run LC contract catchup, read the peer block heights, plan and run peer catchup, and
+    /// prepare the epochs cliquenet connects to. Returns the current epoch `N`.
     async fn execute(&self, mut snapshot: SourcesSnapshot) -> anyhow::Result<EpochNumber> {
+        if let Some(catchup) = snapshot.lc_contract_catchup() {
+            self.catch_up_from_lc_contract(&catchup).await?;
+        }
+        snapshot.peer_block_heights = self.read_peer_block_heights().await;
         let plan = snapshot.plan();
         self.log_plan(&snapshot, &plan);
 
-        let mut peer_catchup = plan.peer_catchup;
-        if let Some(catchup) = &plan.lc_contract_catchup {
-            let started = Instant::now();
-            self.catch_up_from_lc_contract(catchup).await?;
-            if started.elapsed() > self.params.step_timeout {
-                snapshot.peer_block_heights = self.read_peer_block_heights().await?;
-                let replan = snapshot.plan();
-                self.log_plan(&snapshot, &replan);
-                peer_catchup = replan.peer_catchup;
-            }
-        }
-
-        let highest_epoch = match peer_catchup {
+        let highest_epoch = match plan.peer_catchup {
             Some(catchup) => {
                 self.catch_up_from_peers(plan.highest_held_epoch, &catchup)
                     .await?
@@ -220,14 +208,13 @@ struct SourcesSnapshot {
     stored_epochs: BTreeSet<EpochNumber>,
     /// From the LC contract, with the header `F` at its block height. Default without any.
     lc_contract_state: LightClientStateSol,
-    /// From the state peers. Block heights (block counts). Empty only without state peers.
+    /// From the state peers. Block heights (block counts), read after LC contract catchup. Empty
+    /// without state peers, or when none answered.
     peer_block_heights: Vec<u64>,
 }
 
 impl SourcesSnapshot {
-    /// Collect the sources: stored epochs, the LC contract state and the state peers' block heights.
-    ///
-    /// The LC contract state read and the height reads run concurrently.
+    /// Collect the sources known before any catchup: stored epochs and the LC contract state.
     async fn create<C: Client, Fut>(
         catchup: &StartupCatchup<'_, C>,
         read_lc_contract_state: impl Fn() -> Fut,
@@ -242,7 +229,7 @@ impl SourcesSnapshot {
         // Epochs added after this read (mid-run reactive catchup) are fetched again, harmlessly.
         let stored_epochs = membership.epochs_with_root();
 
-        let lc_contract_state_read = retry(
+        let lc_contract_state = retry(
             catchup.deadline,
             "reading the LC contract state",
             1,
@@ -253,16 +240,15 @@ impl SourcesSnapshot {
                 );
                 async move { read.await.context("attempt timed out")? }
             },
-        );
-        let (lc_contract_state, peer_block_heights) =
-            try_join!(lc_contract_state_read, catchup.read_peer_block_heights())?;
+        )
+        .await?;
 
         let snapshot = Self {
             blocks_per_epoch: catchup.blocks_per_epoch,
             first_epoch,
             stored_epochs,
             lc_contract_state,
-            peer_block_heights,
+            peer_block_heights: vec![],
         };
         if let Some(metrics) = catchup.metrics {
             metrics
@@ -274,7 +260,6 @@ impl SourcesSnapshot {
             %first_epoch,
             stored = ?epoch_numbers(&snapshot.stored_epochs),
             lc_contract_height = snapshot.lc_contract_state.blockHeight,
-            peer_heights = ?snapshot.peer_block_heights,
             "sources snapshot",
         );
         Ok(snapshot)
@@ -503,8 +488,8 @@ impl<C: Client> StartupCatchup<'_, C> {
 const INITIAL_BACKOFF: Duration = Duration::from_secs(1);
 /// Longest wait between two retries.
 const MAX_BACKOFF: Duration = Duration::from_secs(60);
-/// Passes over the peers when reading their block heights, with backoff in between.
-const PEER_HEIGHT_PASSES: usize = 3;
+/// Time to read the peers' block heights: three passes with the first two backoffs.
+const PEER_HEIGHT_BUDGET: Duration = Duration::from_secs(5);
 
 /// Peer catchup: the epochs to derive from the peers' chain tips.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -530,47 +515,43 @@ impl PeerCatchup {
 }
 
 impl<C: Client> StartupCatchup<'_, C> {
-    /// The block heights the peers report, each read bounded by `step_timeout` and the deadline.
+    /// The block heights the peers report, each read bounded by `step_timeout`.
     ///
-    /// Empty only without peers. With peers, up to `PEER_HEIGHT_PASSES` passes run with backoff
-    /// until one peer answers. The last pass, or the deadline, fails the call.
-    async fn read_peer_block_heights(&self) -> anyhow::Result<Vec<u64>> {
+    /// Passes over the peers repeat with backoff until one answers, for at most
+    /// `PEER_HEIGHT_BUDGET` and the deadline. Empty without peers, or when none answered: peer
+    /// catchup would fetch through the same peers, so it is skipped.
+    async fn read_peer_block_heights(&self) -> Vec<u64> {
         if self.state_peers.is_empty() {
-            return Ok(vec![]);
+            return vec![];
         }
-        let mut backoff = INITIAL_BACKOFF;
-        for attempt in 1..=PEER_HEIGHT_PASSES {
-            let remaining = self.deadline.saturating_duration_since(Instant::now());
-            ensure!(
-                !remaining.is_zero(),
-                "startup catchup deadline exceeded while reading the peer block heights: no state \
-                 peer reported a block height"
-            );
-            let bound = self.params.step_timeout.min(remaining);
-            let heights = join_all(
-                self.state_peers
+        let deadline = self.deadline.min(Instant::now() + PEER_HEIGHT_BUDGET);
+        let read = retry(
+            deadline,
+            "reading the peer block heights",
+            1,
+            |_, remaining| async move {
+                let bound = self.params.step_timeout.min(remaining);
+                let reads = self
+                    .state_peers
                     .iter()
-                    .map(|(_, peer)| timeout(bound, peer.block_height())),
-            )
-            .await;
-            let heights: Vec<u64> = heights
-                .into_iter()
-                .filter_map(|height| height.ok()?.ok())
-                .collect();
-            if !heights.is_empty() {
-                return Ok(heights);
-            }
+                    .map(|(_, peer)| timeout(bound, peer.block_height()));
+                let heights: Vec<u64> = join_all(reads)
+                    .await
+                    .into_iter()
+                    .filter_map(|height| height.ok()?.ok())
+                    .collect();
+                ensure!(!heights.is_empty(), "no state peer reported a block height");
+                Ok(heights)
+            },
+        )
+        .await;
+        read.unwrap_or_else(|err| {
             tracing::warn!(
-                attempt,
-                "startup catchup: no state peer reported a block height"
+                %err,
+                "startup catchup: no state peer reported a block height; skipping peer catchup"
             );
-            if attempt < PEER_HEIGHT_PASSES {
-                let remaining = self.deadline.saturating_duration_since(Instant::now());
-                sleep(backoff.min(remaining)).await;
-                backoff = (backoff * 2).min(MAX_BACKOFF);
-            }
-        }
-        bail!("no state peer reported a block height after {PEER_HEIGHT_PASSES} attempts")
+            vec![]
+        })
     }
 
     /// Derive the stake table of one epoch at a time above `highest_held_epoch`, the highest epoch with
@@ -980,8 +961,6 @@ mod tests {
     struct SeededStore {
         tables: Arc<std::sync::Mutex<HashMap<u64, StakeTuple>>>,
         roots: Arc<std::sync::Mutex<HashMap<u64, Header>>>,
-        /// An epoch whose `load_stake` takes the given time.
-        slow: Option<(u64, Duration)>,
         /// The epochs `load_stake` was asked for.
         asked: Arc<std::sync::Mutex<Vec<u64>>>,
     }
@@ -1014,7 +993,6 @@ mod tests {
             Self {
                 tables: Arc::new(std::sync::Mutex::new(tables)),
                 roots: Arc::new(std::sync::Mutex::new(headers)),
-                slow: None,
                 asked: Arc::default(),
             }
         }
@@ -1024,11 +1002,6 @@ mod tests {
     impl MembershipPersistence for SeededStore {
         async fn load_stake(&self, epoch: EpochNumber) -> anyhow::Result<Option<StakeTuple>> {
             self.asked.lock().unwrap().push(epoch.u64());
-            if let Some((slow, delay)) = self.slow
-                && slow == epoch.u64()
-            {
-                sleep(delay).await;
-            }
             Ok(self.tables.lock().unwrap().get(&epoch.u64()).cloned())
         }
 
@@ -1601,85 +1574,6 @@ mod tests {
         assert!(started.elapsed() < PARAMS.step_timeout);
     }
 
-    /// The peer heights are read while the lc_contract_state read is still retrying.
-    #[test_log::test(tokio::test(start_paused = true))]
-    async fn peer_heights_are_read_during_the_lc_contract_state_read() {
-        let (client, lc_contract_state) = chain().await;
-        let coordinator = fresh_coordinator(&client).await;
-        let reads = AtomicUsize::new(0);
-        let height_requests = AtomicUsize::new(0);
-
-        catch_up_cliquenet_stake_tables(
-            &coordinator,
-            EPOCH_HEIGHT,
-            || async {
-                if reads.fetch_add(1, Ordering::Relaxed) == 0 {
-                    bail!("L1 not ready");
-                }
-                height_requests.store(client.block_height_requests().await, Ordering::Relaxed);
-                Ok(lc_contract_state.clone())
-            },
-            &peer_list(std::slice::from_ref(&client)),
-            &PARAMS,
-            Some(&StartupCatchupMetrics::new(&NoMetrics)),
-        )
-        .await
-        .unwrap();
-
-        assert_eq!(reads.load(Ordering::Relaxed), 2);
-        assert!(height_requests.load(Ordering::Relaxed) > 0);
-    }
-
-    /// A LC contract catchup slower than `step_timeout` completes, as only the fetch is bounded by
-    /// it, and leaves the heights stale: they are read again and the plan follows them.
-    #[test_log::test(tokio::test(start_paused = true))]
-    async fn slow_lc_contract_catchup_rereads_peer_heights() {
-        let (client, lc_contract_state) = chain().await;
-        let mut store = SeededStore::for_chain(&client, (N - 3)..=(N + 2)).await;
-        store.slow = Some((N + 1, PARAMS.step_timeout * 2));
-        let coordinator = coordinator(store);
-        hold(&coordinator, (N - 3)..=N).await;
-        let advance = client.clone();
-        tokio::spawn(async move {
-            sleep(PARAMS.step_timeout).await;
-            // Tip in epoch `N + 1`: peer catchup must now derive `N + 2`.
-            advance.mock_block_height(88).await;
-        });
-
-        let current = run_catchup(
-            &coordinator,
-            Some(lc_contract_state),
-            std::slice::from_ref(&client),
-            PARAMS,
-        )
-        .await
-        .unwrap();
-
-        assert_eq!(current, EpochNumber::new(N + 1));
-        assert!(has_epoch_root(&coordinator, N + 1));
-        assert_eq!(client.block_height_requests().await, 2);
-    }
-
-    /// The height reads stop at the deadline, even with passes and backoff left.
-    #[test_log::test(tokio::test(start_paused = true))]
-    async fn peer_height_reads_stop_at_the_deadline() {
-        let (client, lc_contract_state) = chain().await;
-        client.fail_block_heights(usize::MAX).await;
-        let coordinator = fresh_coordinator(&client).await;
-        let params = StartupCatchupParams {
-            deadline: Duration::from_millis(1500),
-            ..PARAMS
-        };
-        let started = Instant::now();
-
-        let err = run_catchup(&coordinator, Some(lc_contract_state), &[client], params)
-            .await
-            .unwrap_err();
-
-        assert!(format!("{err:#}").contains("deadline exceeded"), "{err:#}");
-        assert!(started.elapsed() <= params.deadline);
-    }
-
     /// A held epoch without its root, above the rooted ones, does not move where peer catchup starts.
     #[test_log::test(tokio::test)]
     async fn rootless_top_epoch_does_not_raise_the_start() {
@@ -1716,22 +1610,28 @@ mod tests {
         assert!(!store.loaded(N + 2));
     }
 
-    /// Peers are configured but none reports a height: startup fails instead of guessing the tip.
+    /// State peers are configured but none reports a height: startup continues from storage, within
+    /// the deadline.
+    #[rstest]
+    #[case::default_deadline(PARAMS.deadline)]
+    #[case::short_deadline(Duration::from_millis(1500))]
     #[test_log::test(tokio::test(start_paused = true))]
-    async fn no_peer_height_fails_startup() {
+    async fn no_peer_height_starts_from_storage(#[case] deadline: Duration) {
         let (client, lc_contract_state) = chain().await;
+        let store = SeededStore::for_chain(&client, (N - 4)..=(N + 1)).await;
+        let mut committees = committees(store);
+        committees.reload_stake(10).await;
+        let coordinator = coordinator_over(committees);
         client.fail_block_heights(usize::MAX).await;
-        let coordinator = fresh_coordinator(&client).await;
+        let params = StartupCatchupParams { deadline, ..PARAMS };
+        let started = Instant::now();
 
-        let err = run_catchup(&coordinator, Some(lc_contract_state), &[client], PARAMS)
+        let current = run_catchup(&coordinator, Some(lc_contract_state), &[client], params)
             .await
-            .unwrap_err();
+            .unwrap();
 
-        let err = format!("{err:#}");
-        assert!(
-            err.contains("no state peer reported a block height after 3 attempts"),
-            "{err}"
-        );
+        assert_eq!(current, EpochNumber::new(N));
+        assert!(started.elapsed() <= deadline);
     }
 
     /// A peer ahead of the median extends peer catchup, best-effort, to the epoch of its tip.
