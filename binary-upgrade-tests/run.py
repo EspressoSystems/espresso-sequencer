@@ -58,14 +58,13 @@ SAFE_STOP_WINDOW = (2, 10)
 #     wait-for-v4)
 #   - infra that doesn't use an espresso-network image (postgres, L1 anvil,
 #     block-explorer)
-#   - the CDN (broker-*, marshal-0, cdn-whitelist, cdn-open, keydb), which only
+#   - the CDN (broker-*, marshal-0, cdn-whitelist, keydb), which only
 #     the base tag's compose runs: no image for it is published any more, and
 #     the upgraded nodes ignore it
 NOUPGRADE_SERVICES = (
     "block-explorer",
     "broker-0",
     "broker-1",
-    "cdn-open",
     "cdn-whitelist",
     "marshal-0",
     "demo-l1-network",
