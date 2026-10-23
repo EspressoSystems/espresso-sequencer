@@ -299,6 +299,15 @@ impl<Mode: TransactionMode> Transaction<Mode> {
             // this tree, as when the state writer started from a snapshot without it. That is
             // missing data, as for a parent-child mismatch above, not a corrupt path.
             if nodes.is_empty() {
+                // Debug, not warn: on a node seeded at a boundary without fee state, every fee
+                // path query ends here.
+                tracing::debug!(
+                    state_type,
+                    ?key,
+                    %created,
+                    %merkle_commitment,
+                    "missing data in merklized state; no node stored on the path",
+                );
                 return Err(QueryError::Missing);
             }
             return Err(QueryError::Error {
