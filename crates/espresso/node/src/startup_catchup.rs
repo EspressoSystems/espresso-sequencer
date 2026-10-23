@@ -12,11 +12,11 @@
 //!    `F` are fetched with Merkle proofs against `F` and installed directly, except for epochs the
 //!    membership already holds. Failures to read the anchor, fetch the roots or install them are
 //!    retried until the deadline. Missing epochs without state peers fail at once.
-//! 2. Walk: from the highest known epoch, one epoch at a time. The walk targets the epoch the peers'
-//!    chain tip needs, and a failure below it is retried until the deadline. Above it, up to the
-//!    epoch the highest reported tip needs, the first failure marks the live tip, and the walk
-//!    stops there without probing further. Without state peers, or with a chain of no blocks, the
-//!    walk is skipped. With peers, startup fails if none reports a height.
+//! 2. Walk: from the highest epoch with an epoch root, one epoch at a time. The walk targets the
+//!    epoch the peers' chain tip needs, and a failure below it is retried until the deadline. Above
+//!    it, up to the epoch the highest reported tip needs, the first failure marks the live tip, and
+//!    the walk stops there without probing further. Without state peers, or with a chain of no
+//!    blocks, the walk is skipped. With peers, startup fails if none reports a height.
 //!
 //! Both stages share one deadline.
 
@@ -483,7 +483,7 @@ fn cap_target(
     })
 }
 
-/// Walk forward from the highest known epoch. Each step drives `add_epoch_root` through the
+/// Walk forward from the highest epoch with an epoch root. Each step drives `add_epoch_root` through the
 /// existing catchup machinery, persisting the new stake table.
 ///
 /// Steps below the required target are retried until the deadline. From there up, the first step
@@ -499,7 +499,11 @@ async fn walk_to_tip(
     let membership = coordinator.membership();
     // When a step runs, catchup resumes from the latest consecutive pair of stake tables we
     // hold, so a gap near the tip is bridged by that step rather than found here.
-    let mut highest = membership.highest_known_epoch().unwrap_or(first_epoch + 1);
+    let mut highest = membership
+        .epochs_with_root()
+        .last()
+        .copied()
+        .unwrap_or(first_epoch + 1);
 
     milestone!(
         params,
@@ -1344,6 +1348,25 @@ mod tests {
 
         assert_eq!(current, EpochNumber::new(N + 1));
         assert!(started.elapsed() < Duration::from_secs(PARAMS.step_timeout.as_secs()));
+    }
+
+    /// A held epoch without its root, above the rooted ones, does not move the walk's start.
+    #[test_log::test(tokio::test)]
+    async fn rootless_top_epoch_does_not_raise_the_start() {
+        let (client, anchor) = chain().await;
+        client.mock_block_height(ANCHOR_HEIGHT + 1).await;
+        let store = SeededStore::for_chain(&client, (N - 3)..=(N + 2)).await;
+        store.roots.lock().unwrap().remove(&(N + 2));
+        let coordinator = coordinator(store);
+        hold(&coordinator, (N - 3)..=(N + 2)).await;
+        assert!(has_table(&coordinator, N + 2));
+        assert!(!has_epoch_root(&coordinator, N + 2));
+
+        let current = bootstrap(&coordinator, Some(anchor), &[client], PARAMS)
+            .await
+            .unwrap();
+
+        assert_eq!(current, EpochNumber::new(N));
     }
 
     /// A peer that does not answer the first pass is asked again, and its height ends the walk.
