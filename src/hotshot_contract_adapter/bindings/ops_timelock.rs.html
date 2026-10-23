@@ -9876,855 +9876,889 @@
 <a href=#9876 id=9876 data-nosnippet>9876</a>            topics: <span class="kw-2">&amp;</span>[alloy_sol_types::Word],
 <a href=#9877 id=9877 data-nosnippet>9877</a>            data: <span class="kw-2">&amp;</span>[u8],
 <a href=#9878 id=9878 data-nosnippet>9878</a>        ) -&gt; alloy_sol_types::Result&lt;<span class="self">Self</span>&gt; {
-<a href=#9879 id=9879 data-nosnippet>9879</a>            <span class="kw">match </span>topics.first().copied() {
-<a href=#9880 id=9880 data-nosnippet>9880</a>                <span class="prelude-val">Some</span>(&lt;CallExecuted <span class="kw">as </span>alloy_sol_types::SolEvent&gt;::SIGNATURE_HASH) =&gt; {
-<a href=#9881 id=9881 data-nosnippet>9881</a>                    &lt;CallExecuted <span class="kw">as </span>alloy_sol_types::SolEvent&gt;::decode_raw_log(
-<a href=#9882 id=9882 data-nosnippet>9882</a>                            topics,
-<a href=#9883 id=9883 data-nosnippet>9883</a>                            data,
-<a href=#9884 id=9884 data-nosnippet>9884</a>                        )
-<a href=#9885 id=9885 data-nosnippet>9885</a>                        .map(<span class="self">Self</span>::CallExecuted)
-<a href=#9886 id=9886 data-nosnippet>9886</a>                }
-<a href=#9887 id=9887 data-nosnippet>9887</a>                <span class="prelude-val">Some</span>(&lt;CallSalt <span class="kw">as </span>alloy_sol_types::SolEvent&gt;::SIGNATURE_HASH) =&gt; {
-<a href=#9888 id=9888 data-nosnippet>9888</a>                    &lt;CallSalt <span class="kw">as </span>alloy_sol_types::SolEvent&gt;::decode_raw_log(topics, data)
-<a href=#9889 id=9889 data-nosnippet>9889</a>                        .map(<span class="self">Self</span>::CallSalt)
-<a href=#9890 id=9890 data-nosnippet>9890</a>                }
-<a href=#9891 id=9891 data-nosnippet>9891</a>                <span class="prelude-val">Some</span>(&lt;CallScheduled <span class="kw">as </span>alloy_sol_types::SolEvent&gt;::SIGNATURE_HASH) =&gt; {
-<a href=#9892 id=9892 data-nosnippet>9892</a>                    &lt;CallScheduled <span class="kw">as </span>alloy_sol_types::SolEvent&gt;::decode_raw_log(
+<a href=#9879 id=9879 data-nosnippet>9879</a>            &lt;<span class="self">Self </span><span class="kw">as </span>alloy_sol_types::SolEventInterface&gt;::decode_raw_log_with_config(
+<a href=#9880 id=9880 data-nosnippet>9880</a>                topics,
+<a href=#9881 id=9881 data-nosnippet>9881</a>                data,
+<a href=#9882 id=9882 data-nosnippet>9882</a>                alloy_sol_types::abi::AbiDecoderConfig::default(),
+<a href=#9883 id=9883 data-nosnippet>9883</a>            )
+<a href=#9884 id=9884 data-nosnippet>9884</a>        }
+<a href=#9885 id=9885 data-nosnippet>9885</a>        <span class="kw">fn </span>decode_raw_log_with_config(
+<a href=#9886 id=9886 data-nosnippet>9886</a>            topics: <span class="kw-2">&amp;</span>[alloy_sol_types::Word],
+<a href=#9887 id=9887 data-nosnippet>9887</a>            data: <span class="kw-2">&amp;</span>[u8],
+<a href=#9888 id=9888 data-nosnippet>9888</a>            config: alloy_sol_types::abi::AbiDecoderConfig,
+<a href=#9889 id=9889 data-nosnippet>9889</a>        ) -&gt; alloy_sol_types::Result&lt;<span class="self">Self</span>&gt; {
+<a href=#9890 id=9890 data-nosnippet>9890</a>            <span class="kw">match </span>topics.first().copied() {
+<a href=#9891 id=9891 data-nosnippet>9891</a>                <span class="prelude-val">Some</span>(&lt;CallExecuted <span class="kw">as </span>alloy_sol_types::SolEvent&gt;::SIGNATURE_HASH) =&gt; {
+<a href=#9892 id=9892 data-nosnippet>9892</a>                    &lt;CallExecuted <span class="kw">as </span>alloy_sol_types::SolEvent&gt;::decode_raw_log_with_config(
 <a href=#9893 id=9893 data-nosnippet>9893</a>                            topics,
 <a href=#9894 id=9894 data-nosnippet>9894</a>                            data,
-<a href=#9895 id=9895 data-nosnippet>9895</a>                        )
-<a href=#9896 id=9896 data-nosnippet>9896</a>                        .map(<span class="self">Self</span>::CallScheduled)
-<a href=#9897 id=9897 data-nosnippet>9897</a>                }
-<a href=#9898 id=9898 data-nosnippet>9898</a>                <span class="prelude-val">Some</span>(&lt;Cancelled <span class="kw">as </span>alloy_sol_types::SolEvent&gt;::SIGNATURE_HASH) =&gt; {
-<a href=#9899 id=9899 data-nosnippet>9899</a>                    &lt;Cancelled <span class="kw">as </span>alloy_sol_types::SolEvent&gt;::decode_raw_log(
-<a href=#9900 id=9900 data-nosnippet>9900</a>                            topics,
-<a href=#9901 id=9901 data-nosnippet>9901</a>                            data,
-<a href=#9902 id=9902 data-nosnippet>9902</a>                        )
-<a href=#9903 id=9903 data-nosnippet>9903</a>                        .map(<span class="self">Self</span>::Cancelled)
-<a href=#9904 id=9904 data-nosnippet>9904</a>                }
-<a href=#9905 id=9905 data-nosnippet>9905</a>                <span class="prelude-val">Some</span>(&lt;MinDelayChange <span class="kw">as </span>alloy_sol_types::SolEvent&gt;::SIGNATURE_HASH) =&gt; {
-<a href=#9906 id=9906 data-nosnippet>9906</a>                    &lt;MinDelayChange <span class="kw">as </span>alloy_sol_types::SolEvent&gt;::decode_raw_log(
-<a href=#9907 id=9907 data-nosnippet>9907</a>                            topics,
-<a href=#9908 id=9908 data-nosnippet>9908</a>                            data,
-<a href=#9909 id=9909 data-nosnippet>9909</a>                        )
-<a href=#9910 id=9910 data-nosnippet>9910</a>                        .map(<span class="self">Self</span>::MinDelayChange)
-<a href=#9911 id=9911 data-nosnippet>9911</a>                }
-<a href=#9912 id=9912 data-nosnippet>9912</a>                <span class="prelude-val">Some</span>(&lt;RoleAdminChanged <span class="kw">as </span>alloy_sol_types::SolEvent&gt;::SIGNATURE_HASH) =&gt; {
-<a href=#9913 id=9913 data-nosnippet>9913</a>                    &lt;RoleAdminChanged <span class="kw">as </span>alloy_sol_types::SolEvent&gt;::decode_raw_log(
-<a href=#9914 id=9914 data-nosnippet>9914</a>                            topics,
-<a href=#9915 id=9915 data-nosnippet>9915</a>                            data,
-<a href=#9916 id=9916 data-nosnippet>9916</a>                        )
-<a href=#9917 id=9917 data-nosnippet>9917</a>                        .map(<span class="self">Self</span>::RoleAdminChanged)
-<a href=#9918 id=9918 data-nosnippet>9918</a>                }
-<a href=#9919 id=9919 data-nosnippet>9919</a>                <span class="prelude-val">Some</span>(&lt;RoleGranted <span class="kw">as </span>alloy_sol_types::SolEvent&gt;::SIGNATURE_HASH) =&gt; {
-<a href=#9920 id=9920 data-nosnippet>9920</a>                    &lt;RoleGranted <span class="kw">as </span>alloy_sol_types::SolEvent&gt;::decode_raw_log(
-<a href=#9921 id=9921 data-nosnippet>9921</a>                            topics,
-<a href=#9922 id=9922 data-nosnippet>9922</a>                            data,
-<a href=#9923 id=9923 data-nosnippet>9923</a>                        )
-<a href=#9924 id=9924 data-nosnippet>9924</a>                        .map(<span class="self">Self</span>::RoleGranted)
-<a href=#9925 id=9925 data-nosnippet>9925</a>                }
-<a href=#9926 id=9926 data-nosnippet>9926</a>                <span class="prelude-val">Some</span>(&lt;RoleRevoked <span class="kw">as </span>alloy_sol_types::SolEvent&gt;::SIGNATURE_HASH) =&gt; {
-<a href=#9927 id=9927 data-nosnippet>9927</a>                    &lt;RoleRevoked <span class="kw">as </span>alloy_sol_types::SolEvent&gt;::decode_raw_log(
-<a href=#9928 id=9928 data-nosnippet>9928</a>                            topics,
-<a href=#9929 id=9929 data-nosnippet>9929</a>                            data,
-<a href=#9930 id=9930 data-nosnippet>9930</a>                        )
-<a href=#9931 id=9931 data-nosnippet>9931</a>                        .map(<span class="self">Self</span>::RoleRevoked)
-<a href=#9932 id=9932 data-nosnippet>9932</a>                }
-<a href=#9933 id=9933 data-nosnippet>9933</a>                <span class="kw">_ </span>=&gt; {
-<a href=#9934 id=9934 data-nosnippet>9934</a>                    alloy_sol_types::private::Err(alloy_sol_types::Error::InvalidLog {
-<a href=#9935 id=9935 data-nosnippet>9935</a>                        name: &lt;<span class="self">Self </span><span class="kw">as </span>alloy_sol_types::SolEventInterface&gt;::NAME,
-<a href=#9936 id=9936 data-nosnippet>9936</a>                        log: alloy_sol_types::private::Box::new(
-<a href=#9937 id=9937 data-nosnippet>9937</a>                            alloy_sol_types::private::LogData::new_unchecked(
-<a href=#9938 id=9938 data-nosnippet>9938</a>                                topics.to_vec(),
-<a href=#9939 id=9939 data-nosnippet>9939</a>                                data.to_vec().into(),
-<a href=#9940 id=9940 data-nosnippet>9940</a>                            ),
-<a href=#9941 id=9941 data-nosnippet>9941</a>                        ),
-<a href=#9942 id=9942 data-nosnippet>9942</a>                    })
-<a href=#9943 id=9943 data-nosnippet>9943</a>                }
-<a href=#9944 id=9944 data-nosnippet>9944</a>            }
-<a href=#9945 id=9945 data-nosnippet>9945</a>        }
-<a href=#9946 id=9946 data-nosnippet>9946</a>    }
-<a href=#9947 id=9947 data-nosnippet>9947</a>    <span class="attr">#[automatically_derived]
-<a href=#9948 id=9948 data-nosnippet>9948</a>    </span><span class="kw">impl </span>alloy_sol_types::private::IntoLogData <span class="kw">for </span>OpsTimelockEvents {
-<a href=#9949 id=9949 data-nosnippet>9949</a>        <span class="kw">fn </span>to_log_data(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; alloy_sol_types::private::LogData {
-<a href=#9950 id=9950 data-nosnippet>9950</a>            <span class="kw">match </span><span class="self">self </span>{
-<a href=#9951 id=9951 data-nosnippet>9951</a>                <span class="self">Self</span>::CallExecuted(inner) =&gt; {
-<a href=#9952 id=9952 data-nosnippet>9952</a>                    alloy_sol_types::private::IntoLogData::to_log_data(inner)
-<a href=#9953 id=9953 data-nosnippet>9953</a>                }
-<a href=#9954 id=9954 data-nosnippet>9954</a>                <span class="self">Self</span>::CallSalt(inner) =&gt; {
-<a href=#9955 id=9955 data-nosnippet>9955</a>                    alloy_sol_types::private::IntoLogData::to_log_data(inner)
-<a href=#9956 id=9956 data-nosnippet>9956</a>                }
-<a href=#9957 id=9957 data-nosnippet>9957</a>                <span class="self">Self</span>::CallScheduled(inner) =&gt; {
-<a href=#9958 id=9958 data-nosnippet>9958</a>                    alloy_sol_types::private::IntoLogData::to_log_data(inner)
-<a href=#9959 id=9959 data-nosnippet>9959</a>                }
-<a href=#9960 id=9960 data-nosnippet>9960</a>                <span class="self">Self</span>::Cancelled(inner) =&gt; {
-<a href=#9961 id=9961 data-nosnippet>9961</a>                    alloy_sol_types::private::IntoLogData::to_log_data(inner)
-<a href=#9962 id=9962 data-nosnippet>9962</a>                }
-<a href=#9963 id=9963 data-nosnippet>9963</a>                <span class="self">Self</span>::MinDelayChange(inner) =&gt; {
-<a href=#9964 id=9964 data-nosnippet>9964</a>                    alloy_sol_types::private::IntoLogData::to_log_data(inner)
-<a href=#9965 id=9965 data-nosnippet>9965</a>                }
-<a href=#9966 id=9966 data-nosnippet>9966</a>                <span class="self">Self</span>::RoleAdminChanged(inner) =&gt; {
-<a href=#9967 id=9967 data-nosnippet>9967</a>                    alloy_sol_types::private::IntoLogData::to_log_data(inner)
-<a href=#9968 id=9968 data-nosnippet>9968</a>                }
-<a href=#9969 id=9969 data-nosnippet>9969</a>                <span class="self">Self</span>::RoleGranted(inner) =&gt; {
-<a href=#9970 id=9970 data-nosnippet>9970</a>                    alloy_sol_types::private::IntoLogData::to_log_data(inner)
-<a href=#9971 id=9971 data-nosnippet>9971</a>                }
-<a href=#9972 id=9972 data-nosnippet>9972</a>                <span class="self">Self</span>::RoleRevoked(inner) =&gt; {
-<a href=#9973 id=9973 data-nosnippet>9973</a>                    alloy_sol_types::private::IntoLogData::to_log_data(inner)
-<a href=#9974 id=9974 data-nosnippet>9974</a>                }
-<a href=#9975 id=9975 data-nosnippet>9975</a>            }
-<a href=#9976 id=9976 data-nosnippet>9976</a>        }
-<a href=#9977 id=9977 data-nosnippet>9977</a>        <span class="kw">fn </span>into_log_data(<span class="self">self</span>) -&gt; alloy_sol_types::private::LogData {
-<a href=#9978 id=9978 data-nosnippet>9978</a>            <span class="kw">match </span><span class="self">self </span>{
-<a href=#9979 id=9979 data-nosnippet>9979</a>                <span class="self">Self</span>::CallExecuted(inner) =&gt; {
-<a href=#9980 id=9980 data-nosnippet>9980</a>                    alloy_sol_types::private::IntoLogData::into_log_data(inner)
-<a href=#9981 id=9981 data-nosnippet>9981</a>                }
-<a href=#9982 id=9982 data-nosnippet>9982</a>                <span class="self">Self</span>::CallSalt(inner) =&gt; {
-<a href=#9983 id=9983 data-nosnippet>9983</a>                    alloy_sol_types::private::IntoLogData::into_log_data(inner)
-<a href=#9984 id=9984 data-nosnippet>9984</a>                }
-<a href=#9985 id=9985 data-nosnippet>9985</a>                <span class="self">Self</span>::CallScheduled(inner) =&gt; {
-<a href=#9986 id=9986 data-nosnippet>9986</a>                    alloy_sol_types::private::IntoLogData::into_log_data(inner)
+<a href=#9895 id=9895 data-nosnippet>9895</a>                            config,
+<a href=#9896 id=9896 data-nosnippet>9896</a>                        )
+<a href=#9897 id=9897 data-nosnippet>9897</a>                        .map(<span class="self">Self</span>::CallExecuted)
+<a href=#9898 id=9898 data-nosnippet>9898</a>                }
+<a href=#9899 id=9899 data-nosnippet>9899</a>                <span class="prelude-val">Some</span>(&lt;CallSalt <span class="kw">as </span>alloy_sol_types::SolEvent&gt;::SIGNATURE_HASH) =&gt; {
+<a href=#9900 id=9900 data-nosnippet>9900</a>                    &lt;CallSalt <span class="kw">as </span>alloy_sol_types::SolEvent&gt;::decode_raw_log_with_config(
+<a href=#9901 id=9901 data-nosnippet>9901</a>                            topics,
+<a href=#9902 id=9902 data-nosnippet>9902</a>                            data,
+<a href=#9903 id=9903 data-nosnippet>9903</a>                            config,
+<a href=#9904 id=9904 data-nosnippet>9904</a>                        )
+<a href=#9905 id=9905 data-nosnippet>9905</a>                        .map(<span class="self">Self</span>::CallSalt)
+<a href=#9906 id=9906 data-nosnippet>9906</a>                }
+<a href=#9907 id=9907 data-nosnippet>9907</a>                <span class="prelude-val">Some</span>(&lt;CallScheduled <span class="kw">as </span>alloy_sol_types::SolEvent&gt;::SIGNATURE_HASH) =&gt; {
+<a href=#9908 id=9908 data-nosnippet>9908</a>                    &lt;CallScheduled <span class="kw">as </span>alloy_sol_types::SolEvent&gt;::decode_raw_log_with_config(
+<a href=#9909 id=9909 data-nosnippet>9909</a>                            topics,
+<a href=#9910 id=9910 data-nosnippet>9910</a>                            data,
+<a href=#9911 id=9911 data-nosnippet>9911</a>                            config,
+<a href=#9912 id=9912 data-nosnippet>9912</a>                        )
+<a href=#9913 id=9913 data-nosnippet>9913</a>                        .map(<span class="self">Self</span>::CallScheduled)
+<a href=#9914 id=9914 data-nosnippet>9914</a>                }
+<a href=#9915 id=9915 data-nosnippet>9915</a>                <span class="prelude-val">Some</span>(&lt;Cancelled <span class="kw">as </span>alloy_sol_types::SolEvent&gt;::SIGNATURE_HASH) =&gt; {
+<a href=#9916 id=9916 data-nosnippet>9916</a>                    &lt;Cancelled <span class="kw">as </span>alloy_sol_types::SolEvent&gt;::decode_raw_log_with_config(
+<a href=#9917 id=9917 data-nosnippet>9917</a>                            topics,
+<a href=#9918 id=9918 data-nosnippet>9918</a>                            data,
+<a href=#9919 id=9919 data-nosnippet>9919</a>                            config,
+<a href=#9920 id=9920 data-nosnippet>9920</a>                        )
+<a href=#9921 id=9921 data-nosnippet>9921</a>                        .map(<span class="self">Self</span>::Cancelled)
+<a href=#9922 id=9922 data-nosnippet>9922</a>                }
+<a href=#9923 id=9923 data-nosnippet>9923</a>                <span class="prelude-val">Some</span>(&lt;MinDelayChange <span class="kw">as </span>alloy_sol_types::SolEvent&gt;::SIGNATURE_HASH) =&gt; {
+<a href=#9924 id=9924 data-nosnippet>9924</a>                    &lt;MinDelayChange <span class="kw">as </span>alloy_sol_types::SolEvent&gt;::decode_raw_log_with_config(
+<a href=#9925 id=9925 data-nosnippet>9925</a>                            topics,
+<a href=#9926 id=9926 data-nosnippet>9926</a>                            data,
+<a href=#9927 id=9927 data-nosnippet>9927</a>                            config,
+<a href=#9928 id=9928 data-nosnippet>9928</a>                        )
+<a href=#9929 id=9929 data-nosnippet>9929</a>                        .map(<span class="self">Self</span>::MinDelayChange)
+<a href=#9930 id=9930 data-nosnippet>9930</a>                }
+<a href=#9931 id=9931 data-nosnippet>9931</a>                <span class="prelude-val">Some</span>(&lt;RoleAdminChanged <span class="kw">as </span>alloy_sol_types::SolEvent&gt;::SIGNATURE_HASH) =&gt; {
+<a href=#9932 id=9932 data-nosnippet>9932</a>                    &lt;RoleAdminChanged <span class="kw">as </span>alloy_sol_types::SolEvent&gt;::decode_raw_log_with_config(
+<a href=#9933 id=9933 data-nosnippet>9933</a>                            topics,
+<a href=#9934 id=9934 data-nosnippet>9934</a>                            data,
+<a href=#9935 id=9935 data-nosnippet>9935</a>                            config,
+<a href=#9936 id=9936 data-nosnippet>9936</a>                        )
+<a href=#9937 id=9937 data-nosnippet>9937</a>                        .map(<span class="self">Self</span>::RoleAdminChanged)
+<a href=#9938 id=9938 data-nosnippet>9938</a>                }
+<a href=#9939 id=9939 data-nosnippet>9939</a>                <span class="prelude-val">Some</span>(&lt;RoleGranted <span class="kw">as </span>alloy_sol_types::SolEvent&gt;::SIGNATURE_HASH) =&gt; {
+<a href=#9940 id=9940 data-nosnippet>9940</a>                    &lt;RoleGranted <span class="kw">as </span>alloy_sol_types::SolEvent&gt;::decode_raw_log_with_config(
+<a href=#9941 id=9941 data-nosnippet>9941</a>                            topics,
+<a href=#9942 id=9942 data-nosnippet>9942</a>                            data,
+<a href=#9943 id=9943 data-nosnippet>9943</a>                            config,
+<a href=#9944 id=9944 data-nosnippet>9944</a>                        )
+<a href=#9945 id=9945 data-nosnippet>9945</a>                        .map(<span class="self">Self</span>::RoleGranted)
+<a href=#9946 id=9946 data-nosnippet>9946</a>                }
+<a href=#9947 id=9947 data-nosnippet>9947</a>                <span class="prelude-val">Some</span>(&lt;RoleRevoked <span class="kw">as </span>alloy_sol_types::SolEvent&gt;::SIGNATURE_HASH) =&gt; {
+<a href=#9948 id=9948 data-nosnippet>9948</a>                    &lt;RoleRevoked <span class="kw">as </span>alloy_sol_types::SolEvent&gt;::decode_raw_log_with_config(
+<a href=#9949 id=9949 data-nosnippet>9949</a>                            topics,
+<a href=#9950 id=9950 data-nosnippet>9950</a>                            data,
+<a href=#9951 id=9951 data-nosnippet>9951</a>                            config,
+<a href=#9952 id=9952 data-nosnippet>9952</a>                        )
+<a href=#9953 id=9953 data-nosnippet>9953</a>                        .map(<span class="self">Self</span>::RoleRevoked)
+<a href=#9954 id=9954 data-nosnippet>9954</a>                }
+<a href=#9955 id=9955 data-nosnippet>9955</a>                <span class="kw">_ </span>=&gt; {
+<a href=#9956 id=9956 data-nosnippet>9956</a>                    <span class="kw">if </span>topics
+<a href=#9957 id=9957 data-nosnippet>9957</a>                        .len()
+<a href=#9958 id=9958 data-nosnippet>9958</a>                        .checked_mul(alloy_sol_types::Word::len_bytes())
+<a href=#9959 id=9959 data-nosnippet>9959</a>                        .and_then(|len| len.checked_add(data.len()))
+<a href=#9960 id=9960 data-nosnippet>9960</a>                        .is_none_or(|len| len &gt; config.get_memory_limit())
+<a href=#9961 id=9961 data-nosnippet>9961</a>                    {
+<a href=#9962 id=9962 data-nosnippet>9962</a>                        <span class="kw">return </span>alloy_sol_types::private::Err(
+<a href=#9963 id=9963 data-nosnippet>9963</a>                            alloy_sol_types::Error::MemoryLimitExceeded(
+<a href=#9964 id=9964 data-nosnippet>9964</a>                                config.get_memory_limit(),
+<a href=#9965 id=9965 data-nosnippet>9965</a>                            ),
+<a href=#9966 id=9966 data-nosnippet>9966</a>                        );
+<a href=#9967 id=9967 data-nosnippet>9967</a>                    }
+<a href=#9968 id=9968 data-nosnippet>9968</a>                    alloy_sol_types::private::Err(alloy_sol_types::Error::InvalidLog {
+<a href=#9969 id=9969 data-nosnippet>9969</a>                        name: &lt;<span class="self">Self </span><span class="kw">as </span>alloy_sol_types::SolEventInterface&gt;::NAME,
+<a href=#9970 id=9970 data-nosnippet>9970</a>                        log: alloy_sol_types::private::Box::new(
+<a href=#9971 id=9971 data-nosnippet>9971</a>                            alloy_sol_types::private::LogData::new_unchecked(
+<a href=#9972 id=9972 data-nosnippet>9972</a>                                topics.to_vec(),
+<a href=#9973 id=9973 data-nosnippet>9973</a>                                data.to_vec().into(),
+<a href=#9974 id=9974 data-nosnippet>9974</a>                            ),
+<a href=#9975 id=9975 data-nosnippet>9975</a>                        ),
+<a href=#9976 id=9976 data-nosnippet>9976</a>                    })
+<a href=#9977 id=9977 data-nosnippet>9977</a>                }
+<a href=#9978 id=9978 data-nosnippet>9978</a>            }
+<a href=#9979 id=9979 data-nosnippet>9979</a>        }
+<a href=#9980 id=9980 data-nosnippet>9980</a>    }
+<a href=#9981 id=9981 data-nosnippet>9981</a>    <span class="attr">#[automatically_derived]
+<a href=#9982 id=9982 data-nosnippet>9982</a>    </span><span class="kw">impl </span>alloy_sol_types::private::IntoLogData <span class="kw">for </span>OpsTimelockEvents {
+<a href=#9983 id=9983 data-nosnippet>9983</a>        <span class="kw">fn </span>to_log_data(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; alloy_sol_types::private::LogData {
+<a href=#9984 id=9984 data-nosnippet>9984</a>            <span class="kw">match </span><span class="self">self </span>{
+<a href=#9985 id=9985 data-nosnippet>9985</a>                <span class="self">Self</span>::CallExecuted(inner) =&gt; {
+<a href=#9986 id=9986 data-nosnippet>9986</a>                    alloy_sol_types::private::IntoLogData::to_log_data(inner)
 <a href=#9987 id=9987 data-nosnippet>9987</a>                }
-<a href=#9988 id=9988 data-nosnippet>9988</a>                <span class="self">Self</span>::Cancelled(inner) =&gt; {
-<a href=#9989 id=9989 data-nosnippet>9989</a>                    alloy_sol_types::private::IntoLogData::into_log_data(inner)
+<a href=#9988 id=9988 data-nosnippet>9988</a>                <span class="self">Self</span>::CallSalt(inner) =&gt; {
+<a href=#9989 id=9989 data-nosnippet>9989</a>                    alloy_sol_types::private::IntoLogData::to_log_data(inner)
 <a href=#9990 id=9990 data-nosnippet>9990</a>                }
-<a href=#9991 id=9991 data-nosnippet>9991</a>                <span class="self">Self</span>::MinDelayChange(inner) =&gt; {
-<a href=#9992 id=9992 data-nosnippet>9992</a>                    alloy_sol_types::private::IntoLogData::into_log_data(inner)
+<a href=#9991 id=9991 data-nosnippet>9991</a>                <span class="self">Self</span>::CallScheduled(inner) =&gt; {
+<a href=#9992 id=9992 data-nosnippet>9992</a>                    alloy_sol_types::private::IntoLogData::to_log_data(inner)
 <a href=#9993 id=9993 data-nosnippet>9993</a>                }
-<a href=#9994 id=9994 data-nosnippet>9994</a>                <span class="self">Self</span>::RoleAdminChanged(inner) =&gt; {
-<a href=#9995 id=9995 data-nosnippet>9995</a>                    alloy_sol_types::private::IntoLogData::into_log_data(inner)
+<a href=#9994 id=9994 data-nosnippet>9994</a>                <span class="self">Self</span>::Cancelled(inner) =&gt; {
+<a href=#9995 id=9995 data-nosnippet>9995</a>                    alloy_sol_types::private::IntoLogData::to_log_data(inner)
 <a href=#9996 id=9996 data-nosnippet>9996</a>                }
-<a href=#9997 id=9997 data-nosnippet>9997</a>                <span class="self">Self</span>::RoleGranted(inner) =&gt; {
-<a href=#9998 id=9998 data-nosnippet>9998</a>                    alloy_sol_types::private::IntoLogData::into_log_data(inner)
+<a href=#9997 id=9997 data-nosnippet>9997</a>                <span class="self">Self</span>::MinDelayChange(inner) =&gt; {
+<a href=#9998 id=9998 data-nosnippet>9998</a>                    alloy_sol_types::private::IntoLogData::to_log_data(inner)
 <a href=#9999 id=9999 data-nosnippet>9999</a>                }
-<a href=#10000 id=10000 data-nosnippet>10000</a>                <span class="self">Self</span>::RoleRevoked(inner) =&gt; {
-<a href=#10001 id=10001 data-nosnippet>10001</a>                    alloy_sol_types::private::IntoLogData::into_log_data(inner)
+<a href=#10000 id=10000 data-nosnippet>10000</a>                <span class="self">Self</span>::RoleAdminChanged(inner) =&gt; {
+<a href=#10001 id=10001 data-nosnippet>10001</a>                    alloy_sol_types::private::IntoLogData::to_log_data(inner)
 <a href=#10002 id=10002 data-nosnippet>10002</a>                }
-<a href=#10003 id=10003 data-nosnippet>10003</a>            }
-<a href=#10004 id=10004 data-nosnippet>10004</a>        }
-<a href=#10005 id=10005 data-nosnippet>10005</a>    }
-<a href=#10006 id=10006 data-nosnippet>10006</a>    <span class="attr">#[automatically_derived]
-<a href=#10007 id=10007 data-nosnippet>10007</a>    </span><span class="kw">impl </span>OpsTimelockEvents {
-<a href=#10008 id=10008 data-nosnippet>10008</a>        <span class="doccomment">/**Creates a [`CallExecuted`] event.
-<a href=#10009 id=10009 data-nosnippet>10009</a>
-<a href=#10010 id=10010 data-nosnippet>10010</a>```solidity
-<a href=#10011 id=10011 data-nosnippet>10011</a>event CallExecuted(bytes32,uint256,address,uint256,bytes)
-<a href=#10012 id=10012 data-nosnippet>10012</a>```*/
-<a href=#10013 id=10013 data-nosnippet>10013</a>        </span><span class="attr">#[inline]
-<a href=#10014 id=10014 data-nosnippet>10014</a>        </span><span class="kw">pub fn </span>call_executed(
-<a href=#10015 id=10015 data-nosnippet>10015</a>            id: alloy::sol_types::private::FixedBytes&lt;<span class="number">32</span>&gt;,
-<a href=#10016 id=10016 data-nosnippet>10016</a>            index: alloy::sol_types::private::primitives::aliases::U256,
-<a href=#10017 id=10017 data-nosnippet>10017</a>            target: alloy::sol_types::private::Address,
-<a href=#10018 id=10018 data-nosnippet>10018</a>            value: alloy::sol_types::private::primitives::aliases::U256,
-<a href=#10019 id=10019 data-nosnippet>10019</a>            data: alloy::sol_types::private::Bytes,
-<a href=#10020 id=10020 data-nosnippet>10020</a>        ) -&gt; <span class="self">Self </span>{
-<a href=#10021 id=10021 data-nosnippet>10021</a>            <span class="self">Self</span>::CallExecuted(CallExecuted {
-<a href=#10022 id=10022 data-nosnippet>10022</a>                id: id,
-<a href=#10023 id=10023 data-nosnippet>10023</a>                index: index,
-<a href=#10024 id=10024 data-nosnippet>10024</a>                target: target,
-<a href=#10025 id=10025 data-nosnippet>10025</a>                value: value,
-<a href=#10026 id=10026 data-nosnippet>10026</a>                data: data,
-<a href=#10027 id=10027 data-nosnippet>10027</a>            })
-<a href=#10028 id=10028 data-nosnippet>10028</a>        }
-<a href=#10029 id=10029 data-nosnippet>10029</a>        <span class="doccomment">/**Creates a [`CallSalt`] event.
-<a href=#10030 id=10030 data-nosnippet>10030</a>
-<a href=#10031 id=10031 data-nosnippet>10031</a>```solidity
-<a href=#10032 id=10032 data-nosnippet>10032</a>event CallSalt(bytes32,bytes32)
-<a href=#10033 id=10033 data-nosnippet>10033</a>```*/
-<a href=#10034 id=10034 data-nosnippet>10034</a>        </span><span class="attr">#[inline]
-<a href=#10035 id=10035 data-nosnippet>10035</a>        </span><span class="kw">pub fn </span>call_salt(
-<a href=#10036 id=10036 data-nosnippet>10036</a>            id: alloy::sol_types::private::FixedBytes&lt;<span class="number">32</span>&gt;,
-<a href=#10037 id=10037 data-nosnippet>10037</a>            salt: alloy::sol_types::private::FixedBytes&lt;<span class="number">32</span>&gt;,
-<a href=#10038 id=10038 data-nosnippet>10038</a>        ) -&gt; <span class="self">Self </span>{
-<a href=#10039 id=10039 data-nosnippet>10039</a>            <span class="self">Self</span>::CallSalt(CallSalt { id: id, salt: salt })
-<a href=#10040 id=10040 data-nosnippet>10040</a>        }
-<a href=#10041 id=10041 data-nosnippet>10041</a>        <span class="doccomment">/**Creates a [`CallScheduled`] event.
-<a href=#10042 id=10042 data-nosnippet>10042</a>
-<a href=#10043 id=10043 data-nosnippet>10043</a>```solidity
-<a href=#10044 id=10044 data-nosnippet>10044</a>event CallScheduled(bytes32,uint256,address,uint256,bytes,bytes32,uint256)
-<a href=#10045 id=10045 data-nosnippet>10045</a>```*/
-<a href=#10046 id=10046 data-nosnippet>10046</a>        </span><span class="attr">#[inline]
-<a href=#10047 id=10047 data-nosnippet>10047</a>        </span><span class="kw">pub fn </span>call_scheduled(
-<a href=#10048 id=10048 data-nosnippet>10048</a>            id: alloy::sol_types::private::FixedBytes&lt;<span class="number">32</span>&gt;,
-<a href=#10049 id=10049 data-nosnippet>10049</a>            index: alloy::sol_types::private::primitives::aliases::U256,
-<a href=#10050 id=10050 data-nosnippet>10050</a>            target: alloy::sol_types::private::Address,
-<a href=#10051 id=10051 data-nosnippet>10051</a>            value: alloy::sol_types::private::primitives::aliases::U256,
-<a href=#10052 id=10052 data-nosnippet>10052</a>            data: alloy::sol_types::private::Bytes,
-<a href=#10053 id=10053 data-nosnippet>10053</a>            predecessor: alloy::sol_types::private::FixedBytes&lt;<span class="number">32</span>&gt;,
-<a href=#10054 id=10054 data-nosnippet>10054</a>            delay: alloy::sol_types::private::primitives::aliases::U256,
-<a href=#10055 id=10055 data-nosnippet>10055</a>        ) -&gt; <span class="self">Self </span>{
-<a href=#10056 id=10056 data-nosnippet>10056</a>            <span class="self">Self</span>::CallScheduled(CallScheduled {
-<a href=#10057 id=10057 data-nosnippet>10057</a>                id: id,
-<a href=#10058 id=10058 data-nosnippet>10058</a>                index: index,
-<a href=#10059 id=10059 data-nosnippet>10059</a>                target: target,
-<a href=#10060 id=10060 data-nosnippet>10060</a>                value: value,
-<a href=#10061 id=10061 data-nosnippet>10061</a>                data: data,
-<a href=#10062 id=10062 data-nosnippet>10062</a>                predecessor: predecessor,
-<a href=#10063 id=10063 data-nosnippet>10063</a>                delay: delay,
-<a href=#10064 id=10064 data-nosnippet>10064</a>            })
-<a href=#10065 id=10065 data-nosnippet>10065</a>        }
-<a href=#10066 id=10066 data-nosnippet>10066</a>        <span class="doccomment">/**Creates a [`Cancelled`] event.
-<a href=#10067 id=10067 data-nosnippet>10067</a>
-<a href=#10068 id=10068 data-nosnippet>10068</a>```solidity
-<a href=#10069 id=10069 data-nosnippet>10069</a>event Cancelled(bytes32)
-<a href=#10070 id=10070 data-nosnippet>10070</a>```*/
-<a href=#10071 id=10071 data-nosnippet>10071</a>        </span><span class="attr">#[inline]
-<a href=#10072 id=10072 data-nosnippet>10072</a>        </span><span class="kw">pub fn </span>cancelled(id: alloy::sol_types::private::FixedBytes&lt;<span class="number">32</span>&gt;) -&gt; <span class="self">Self </span>{
-<a href=#10073 id=10073 data-nosnippet>10073</a>            <span class="self">Self</span>::Cancelled(Cancelled { id: id })
+<a href=#10003 id=10003 data-nosnippet>10003</a>                <span class="self">Self</span>::RoleGranted(inner) =&gt; {
+<a href=#10004 id=10004 data-nosnippet>10004</a>                    alloy_sol_types::private::IntoLogData::to_log_data(inner)
+<a href=#10005 id=10005 data-nosnippet>10005</a>                }
+<a href=#10006 id=10006 data-nosnippet>10006</a>                <span class="self">Self</span>::RoleRevoked(inner) =&gt; {
+<a href=#10007 id=10007 data-nosnippet>10007</a>                    alloy_sol_types::private::IntoLogData::to_log_data(inner)
+<a href=#10008 id=10008 data-nosnippet>10008</a>                }
+<a href=#10009 id=10009 data-nosnippet>10009</a>            }
+<a href=#10010 id=10010 data-nosnippet>10010</a>        }
+<a href=#10011 id=10011 data-nosnippet>10011</a>        <span class="kw">fn </span>into_log_data(<span class="self">self</span>) -&gt; alloy_sol_types::private::LogData {
+<a href=#10012 id=10012 data-nosnippet>10012</a>            <span class="kw">match </span><span class="self">self </span>{
+<a href=#10013 id=10013 data-nosnippet>10013</a>                <span class="self">Self</span>::CallExecuted(inner) =&gt; {
+<a href=#10014 id=10014 data-nosnippet>10014</a>                    alloy_sol_types::private::IntoLogData::into_log_data(inner)
+<a href=#10015 id=10015 data-nosnippet>10015</a>                }
+<a href=#10016 id=10016 data-nosnippet>10016</a>                <span class="self">Self</span>::CallSalt(inner) =&gt; {
+<a href=#10017 id=10017 data-nosnippet>10017</a>                    alloy_sol_types::private::IntoLogData::into_log_data(inner)
+<a href=#10018 id=10018 data-nosnippet>10018</a>                }
+<a href=#10019 id=10019 data-nosnippet>10019</a>                <span class="self">Self</span>::CallScheduled(inner) =&gt; {
+<a href=#10020 id=10020 data-nosnippet>10020</a>                    alloy_sol_types::private::IntoLogData::into_log_data(inner)
+<a href=#10021 id=10021 data-nosnippet>10021</a>                }
+<a href=#10022 id=10022 data-nosnippet>10022</a>                <span class="self">Self</span>::Cancelled(inner) =&gt; {
+<a href=#10023 id=10023 data-nosnippet>10023</a>                    alloy_sol_types::private::IntoLogData::into_log_data(inner)
+<a href=#10024 id=10024 data-nosnippet>10024</a>                }
+<a href=#10025 id=10025 data-nosnippet>10025</a>                <span class="self">Self</span>::MinDelayChange(inner) =&gt; {
+<a href=#10026 id=10026 data-nosnippet>10026</a>                    alloy_sol_types::private::IntoLogData::into_log_data(inner)
+<a href=#10027 id=10027 data-nosnippet>10027</a>                }
+<a href=#10028 id=10028 data-nosnippet>10028</a>                <span class="self">Self</span>::RoleAdminChanged(inner) =&gt; {
+<a href=#10029 id=10029 data-nosnippet>10029</a>                    alloy_sol_types::private::IntoLogData::into_log_data(inner)
+<a href=#10030 id=10030 data-nosnippet>10030</a>                }
+<a href=#10031 id=10031 data-nosnippet>10031</a>                <span class="self">Self</span>::RoleGranted(inner) =&gt; {
+<a href=#10032 id=10032 data-nosnippet>10032</a>                    alloy_sol_types::private::IntoLogData::into_log_data(inner)
+<a href=#10033 id=10033 data-nosnippet>10033</a>                }
+<a href=#10034 id=10034 data-nosnippet>10034</a>                <span class="self">Self</span>::RoleRevoked(inner) =&gt; {
+<a href=#10035 id=10035 data-nosnippet>10035</a>                    alloy_sol_types::private::IntoLogData::into_log_data(inner)
+<a href=#10036 id=10036 data-nosnippet>10036</a>                }
+<a href=#10037 id=10037 data-nosnippet>10037</a>            }
+<a href=#10038 id=10038 data-nosnippet>10038</a>        }
+<a href=#10039 id=10039 data-nosnippet>10039</a>    }
+<a href=#10040 id=10040 data-nosnippet>10040</a>    <span class="attr">#[automatically_derived]
+<a href=#10041 id=10041 data-nosnippet>10041</a>    </span><span class="kw">impl </span>OpsTimelockEvents {
+<a href=#10042 id=10042 data-nosnippet>10042</a>        <span class="doccomment">/**Creates a [`CallExecuted`] event.
+<a href=#10043 id=10043 data-nosnippet>10043</a>
+<a href=#10044 id=10044 data-nosnippet>10044</a>```solidity
+<a href=#10045 id=10045 data-nosnippet>10045</a>event CallExecuted(bytes32,uint256,address,uint256,bytes)
+<a href=#10046 id=10046 data-nosnippet>10046</a>```*/
+<a href=#10047 id=10047 data-nosnippet>10047</a>        </span><span class="attr">#[inline]
+<a href=#10048 id=10048 data-nosnippet>10048</a>        </span><span class="kw">pub fn </span>call_executed(
+<a href=#10049 id=10049 data-nosnippet>10049</a>            id: alloy::sol_types::private::FixedBytes&lt;<span class="number">32</span>&gt;,
+<a href=#10050 id=10050 data-nosnippet>10050</a>            index: alloy::sol_types::private::primitives::aliases::U256,
+<a href=#10051 id=10051 data-nosnippet>10051</a>            target: alloy::sol_types::private::Address,
+<a href=#10052 id=10052 data-nosnippet>10052</a>            value: alloy::sol_types::private::primitives::aliases::U256,
+<a href=#10053 id=10053 data-nosnippet>10053</a>            data: alloy::sol_types::private::Bytes,
+<a href=#10054 id=10054 data-nosnippet>10054</a>        ) -&gt; <span class="self">Self </span>{
+<a href=#10055 id=10055 data-nosnippet>10055</a>            <span class="self">Self</span>::CallExecuted(CallExecuted {
+<a href=#10056 id=10056 data-nosnippet>10056</a>                id: id,
+<a href=#10057 id=10057 data-nosnippet>10057</a>                index: index,
+<a href=#10058 id=10058 data-nosnippet>10058</a>                target: target,
+<a href=#10059 id=10059 data-nosnippet>10059</a>                value: value,
+<a href=#10060 id=10060 data-nosnippet>10060</a>                data: data,
+<a href=#10061 id=10061 data-nosnippet>10061</a>            })
+<a href=#10062 id=10062 data-nosnippet>10062</a>        }
+<a href=#10063 id=10063 data-nosnippet>10063</a>        <span class="doccomment">/**Creates a [`CallSalt`] event.
+<a href=#10064 id=10064 data-nosnippet>10064</a>
+<a href=#10065 id=10065 data-nosnippet>10065</a>```solidity
+<a href=#10066 id=10066 data-nosnippet>10066</a>event CallSalt(bytes32,bytes32)
+<a href=#10067 id=10067 data-nosnippet>10067</a>```*/
+<a href=#10068 id=10068 data-nosnippet>10068</a>        </span><span class="attr">#[inline]
+<a href=#10069 id=10069 data-nosnippet>10069</a>        </span><span class="kw">pub fn </span>call_salt(
+<a href=#10070 id=10070 data-nosnippet>10070</a>            id: alloy::sol_types::private::FixedBytes&lt;<span class="number">32</span>&gt;,
+<a href=#10071 id=10071 data-nosnippet>10071</a>            salt: alloy::sol_types::private::FixedBytes&lt;<span class="number">32</span>&gt;,
+<a href=#10072 id=10072 data-nosnippet>10072</a>        ) -&gt; <span class="self">Self </span>{
+<a href=#10073 id=10073 data-nosnippet>10073</a>            <span class="self">Self</span>::CallSalt(CallSalt { id: id, salt: salt })
 <a href=#10074 id=10074 data-nosnippet>10074</a>        }
-<a href=#10075 id=10075 data-nosnippet>10075</a>        <span class="doccomment">/**Creates a [`MinDelayChange`] event.
+<a href=#10075 id=10075 data-nosnippet>10075</a>        <span class="doccomment">/**Creates a [`CallScheduled`] event.
 <a href=#10076 id=10076 data-nosnippet>10076</a>
 <a href=#10077 id=10077 data-nosnippet>10077</a>```solidity
-<a href=#10078 id=10078 data-nosnippet>10078</a>event MinDelayChange(uint256,uint256)
+<a href=#10078 id=10078 data-nosnippet>10078</a>event CallScheduled(bytes32,uint256,address,uint256,bytes,bytes32,uint256)
 <a href=#10079 id=10079 data-nosnippet>10079</a>```*/
 <a href=#10080 id=10080 data-nosnippet>10080</a>        </span><span class="attr">#[inline]
-<a href=#10081 id=10081 data-nosnippet>10081</a>        </span><span class="kw">pub fn </span>min_delay_change(
-<a href=#10082 id=10082 data-nosnippet>10082</a>            old_duration: alloy::sol_types::private::primitives::aliases::U256,
-<a href=#10083 id=10083 data-nosnippet>10083</a>            new_duration: alloy::sol_types::private::primitives::aliases::U256,
-<a href=#10084 id=10084 data-nosnippet>10084</a>        ) -&gt; <span class="self">Self </span>{
-<a href=#10085 id=10085 data-nosnippet>10085</a>            <span class="self">Self</span>::MinDelayChange(MinDelayChange {
-<a href=#10086 id=10086 data-nosnippet>10086</a>                oldDuration: old_duration,
-<a href=#10087 id=10087 data-nosnippet>10087</a>                newDuration: new_duration,
-<a href=#10088 id=10088 data-nosnippet>10088</a>            })
-<a href=#10089 id=10089 data-nosnippet>10089</a>        }
-<a href=#10090 id=10090 data-nosnippet>10090</a>        <span class="doccomment">/**Creates a [`RoleAdminChanged`] event.
-<a href=#10091 id=10091 data-nosnippet>10091</a>
-<a href=#10092 id=10092 data-nosnippet>10092</a>```solidity
-<a href=#10093 id=10093 data-nosnippet>10093</a>event RoleAdminChanged(bytes32,bytes32,bytes32)
-<a href=#10094 id=10094 data-nosnippet>10094</a>```*/
-<a href=#10095 id=10095 data-nosnippet>10095</a>        </span><span class="attr">#[inline]
-<a href=#10096 id=10096 data-nosnippet>10096</a>        </span><span class="kw">pub fn </span>role_admin_changed(
-<a href=#10097 id=10097 data-nosnippet>10097</a>            role: alloy::sol_types::private::FixedBytes&lt;<span class="number">32</span>&gt;,
-<a href=#10098 id=10098 data-nosnippet>10098</a>            previous_admin_role: alloy::sol_types::private::FixedBytes&lt;<span class="number">32</span>&gt;,
-<a href=#10099 id=10099 data-nosnippet>10099</a>            new_admin_role: alloy::sol_types::private::FixedBytes&lt;<span class="number">32</span>&gt;,
-<a href=#10100 id=10100 data-nosnippet>10100</a>        ) -&gt; <span class="self">Self </span>{
-<a href=#10101 id=10101 data-nosnippet>10101</a>            <span class="self">Self</span>::RoleAdminChanged(RoleAdminChanged {
-<a href=#10102 id=10102 data-nosnippet>10102</a>                role: role,
-<a href=#10103 id=10103 data-nosnippet>10103</a>                previousAdminRole: previous_admin_role,
-<a href=#10104 id=10104 data-nosnippet>10104</a>                newAdminRole: new_admin_role,
-<a href=#10105 id=10105 data-nosnippet>10105</a>            })
-<a href=#10106 id=10106 data-nosnippet>10106</a>        }
-<a href=#10107 id=10107 data-nosnippet>10107</a>        <span class="doccomment">/**Creates a [`RoleGranted`] event.
-<a href=#10108 id=10108 data-nosnippet>10108</a>
-<a href=#10109 id=10109 data-nosnippet>10109</a>```solidity
-<a href=#10110 id=10110 data-nosnippet>10110</a>event RoleGranted(bytes32,address,address)
-<a href=#10111 id=10111 data-nosnippet>10111</a>```*/
-<a href=#10112 id=10112 data-nosnippet>10112</a>        </span><span class="attr">#[inline]
-<a href=#10113 id=10113 data-nosnippet>10113</a>        </span><span class="kw">pub fn </span>role_granted(
-<a href=#10114 id=10114 data-nosnippet>10114</a>            role: alloy::sol_types::private::FixedBytes&lt;<span class="number">32</span>&gt;,
-<a href=#10115 id=10115 data-nosnippet>10115</a>            account: alloy::sol_types::private::Address,
-<a href=#10116 id=10116 data-nosnippet>10116</a>            sender: alloy::sol_types::private::Address,
-<a href=#10117 id=10117 data-nosnippet>10117</a>        ) -&gt; <span class="self">Self </span>{
-<a href=#10118 id=10118 data-nosnippet>10118</a>            <span class="self">Self</span>::RoleGranted(RoleGranted {
-<a href=#10119 id=10119 data-nosnippet>10119</a>                role: role,
-<a href=#10120 id=10120 data-nosnippet>10120</a>                account: account,
-<a href=#10121 id=10121 data-nosnippet>10121</a>                sender: sender,
+<a href=#10081 id=10081 data-nosnippet>10081</a>        </span><span class="kw">pub fn </span>call_scheduled(
+<a href=#10082 id=10082 data-nosnippet>10082</a>            id: alloy::sol_types::private::FixedBytes&lt;<span class="number">32</span>&gt;,
+<a href=#10083 id=10083 data-nosnippet>10083</a>            index: alloy::sol_types::private::primitives::aliases::U256,
+<a href=#10084 id=10084 data-nosnippet>10084</a>            target: alloy::sol_types::private::Address,
+<a href=#10085 id=10085 data-nosnippet>10085</a>            value: alloy::sol_types::private::primitives::aliases::U256,
+<a href=#10086 id=10086 data-nosnippet>10086</a>            data: alloy::sol_types::private::Bytes,
+<a href=#10087 id=10087 data-nosnippet>10087</a>            predecessor: alloy::sol_types::private::FixedBytes&lt;<span class="number">32</span>&gt;,
+<a href=#10088 id=10088 data-nosnippet>10088</a>            delay: alloy::sol_types::private::primitives::aliases::U256,
+<a href=#10089 id=10089 data-nosnippet>10089</a>        ) -&gt; <span class="self">Self </span>{
+<a href=#10090 id=10090 data-nosnippet>10090</a>            <span class="self">Self</span>::CallScheduled(CallScheduled {
+<a href=#10091 id=10091 data-nosnippet>10091</a>                id: id,
+<a href=#10092 id=10092 data-nosnippet>10092</a>                index: index,
+<a href=#10093 id=10093 data-nosnippet>10093</a>                target: target,
+<a href=#10094 id=10094 data-nosnippet>10094</a>                value: value,
+<a href=#10095 id=10095 data-nosnippet>10095</a>                data: data,
+<a href=#10096 id=10096 data-nosnippet>10096</a>                predecessor: predecessor,
+<a href=#10097 id=10097 data-nosnippet>10097</a>                delay: delay,
+<a href=#10098 id=10098 data-nosnippet>10098</a>            })
+<a href=#10099 id=10099 data-nosnippet>10099</a>        }
+<a href=#10100 id=10100 data-nosnippet>10100</a>        <span class="doccomment">/**Creates a [`Cancelled`] event.
+<a href=#10101 id=10101 data-nosnippet>10101</a>
+<a href=#10102 id=10102 data-nosnippet>10102</a>```solidity
+<a href=#10103 id=10103 data-nosnippet>10103</a>event Cancelled(bytes32)
+<a href=#10104 id=10104 data-nosnippet>10104</a>```*/
+<a href=#10105 id=10105 data-nosnippet>10105</a>        </span><span class="attr">#[inline]
+<a href=#10106 id=10106 data-nosnippet>10106</a>        </span><span class="kw">pub fn </span>cancelled(id: alloy::sol_types::private::FixedBytes&lt;<span class="number">32</span>&gt;) -&gt; <span class="self">Self </span>{
+<a href=#10107 id=10107 data-nosnippet>10107</a>            <span class="self">Self</span>::Cancelled(Cancelled { id: id })
+<a href=#10108 id=10108 data-nosnippet>10108</a>        }
+<a href=#10109 id=10109 data-nosnippet>10109</a>        <span class="doccomment">/**Creates a [`MinDelayChange`] event.
+<a href=#10110 id=10110 data-nosnippet>10110</a>
+<a href=#10111 id=10111 data-nosnippet>10111</a>```solidity
+<a href=#10112 id=10112 data-nosnippet>10112</a>event MinDelayChange(uint256,uint256)
+<a href=#10113 id=10113 data-nosnippet>10113</a>```*/
+<a href=#10114 id=10114 data-nosnippet>10114</a>        </span><span class="attr">#[inline]
+<a href=#10115 id=10115 data-nosnippet>10115</a>        </span><span class="kw">pub fn </span>min_delay_change(
+<a href=#10116 id=10116 data-nosnippet>10116</a>            old_duration: alloy::sol_types::private::primitives::aliases::U256,
+<a href=#10117 id=10117 data-nosnippet>10117</a>            new_duration: alloy::sol_types::private::primitives::aliases::U256,
+<a href=#10118 id=10118 data-nosnippet>10118</a>        ) -&gt; <span class="self">Self </span>{
+<a href=#10119 id=10119 data-nosnippet>10119</a>            <span class="self">Self</span>::MinDelayChange(MinDelayChange {
+<a href=#10120 id=10120 data-nosnippet>10120</a>                oldDuration: old_duration,
+<a href=#10121 id=10121 data-nosnippet>10121</a>                newDuration: new_duration,
 <a href=#10122 id=10122 data-nosnippet>10122</a>            })
 <a href=#10123 id=10123 data-nosnippet>10123</a>        }
-<a href=#10124 id=10124 data-nosnippet>10124</a>        <span class="doccomment">/**Creates a [`RoleRevoked`] event.
+<a href=#10124 id=10124 data-nosnippet>10124</a>        <span class="doccomment">/**Creates a [`RoleAdminChanged`] event.
 <a href=#10125 id=10125 data-nosnippet>10125</a>
 <a href=#10126 id=10126 data-nosnippet>10126</a>```solidity
-<a href=#10127 id=10127 data-nosnippet>10127</a>event RoleRevoked(bytes32,address,address)
+<a href=#10127 id=10127 data-nosnippet>10127</a>event RoleAdminChanged(bytes32,bytes32,bytes32)
 <a href=#10128 id=10128 data-nosnippet>10128</a>```*/
 <a href=#10129 id=10129 data-nosnippet>10129</a>        </span><span class="attr">#[inline]
-<a href=#10130 id=10130 data-nosnippet>10130</a>        </span><span class="kw">pub fn </span>role_revoked(
+<a href=#10130 id=10130 data-nosnippet>10130</a>        </span><span class="kw">pub fn </span>role_admin_changed(
 <a href=#10131 id=10131 data-nosnippet>10131</a>            role: alloy::sol_types::private::FixedBytes&lt;<span class="number">32</span>&gt;,
-<a href=#10132 id=10132 data-nosnippet>10132</a>            account: alloy::sol_types::private::Address,
-<a href=#10133 id=10133 data-nosnippet>10133</a>            sender: alloy::sol_types::private::Address,
+<a href=#10132 id=10132 data-nosnippet>10132</a>            previous_admin_role: alloy::sol_types::private::FixedBytes&lt;<span class="number">32</span>&gt;,
+<a href=#10133 id=10133 data-nosnippet>10133</a>            new_admin_role: alloy::sol_types::private::FixedBytes&lt;<span class="number">32</span>&gt;,
 <a href=#10134 id=10134 data-nosnippet>10134</a>        ) -&gt; <span class="self">Self </span>{
-<a href=#10135 id=10135 data-nosnippet>10135</a>            <span class="self">Self</span>::RoleRevoked(RoleRevoked {
+<a href=#10135 id=10135 data-nosnippet>10135</a>            <span class="self">Self</span>::RoleAdminChanged(RoleAdminChanged {
 <a href=#10136 id=10136 data-nosnippet>10136</a>                role: role,
-<a href=#10137 id=10137 data-nosnippet>10137</a>                account: account,
-<a href=#10138 id=10138 data-nosnippet>10138</a>                sender: sender,
+<a href=#10137 id=10137 data-nosnippet>10137</a>                previousAdminRole: previous_admin_role,
+<a href=#10138 id=10138 data-nosnippet>10138</a>                newAdminRole: new_admin_role,
 <a href=#10139 id=10139 data-nosnippet>10139</a>            })
 <a href=#10140 id=10140 data-nosnippet>10140</a>        }
-<a href=#10141 id=10141 data-nosnippet>10141</a>    }
-<a href=#10142 id=10142 data-nosnippet>10142</a>    <span class="kw">use </span>alloy::contract <span class="kw">as </span>alloy_contract;
-<a href=#10143 id=10143 data-nosnippet>10143</a>    <span class="doccomment">/**Creates a new wrapper around an on-chain [`OpsTimelock`](self) contract instance.
-<a href=#10144 id=10144 data-nosnippet>10144</a>
-<a href=#10145 id=10145 data-nosnippet>10145</a>See the [wrapper's documentation](`OpsTimelockInstance`) for more details.*/
-<a href=#10146 id=10146 data-nosnippet>10146</a>    </span><span class="attr">#[inline]
-<a href=#10147 id=10147 data-nosnippet>10147</a>    </span><span class="kw">pub const fn </span>new&lt;
-<a href=#10148 id=10148 data-nosnippet>10148</a>        P: alloy_contract::private::Provider&lt;N&gt;,
-<a href=#10149 id=10149 data-nosnippet>10149</a>        N: alloy_contract::private::Network,
-<a href=#10150 id=10150 data-nosnippet>10150</a>    &gt;(
-<a href=#10151 id=10151 data-nosnippet>10151</a>        address: alloy_sol_types::private::Address,
-<a href=#10152 id=10152 data-nosnippet>10152</a>        __provider: P,
-<a href=#10153 id=10153 data-nosnippet>10153</a>    ) -&gt; OpsTimelockInstance&lt;P, N&gt; {
-<a href=#10154 id=10154 data-nosnippet>10154</a>        OpsTimelockInstance::&lt;P, N&gt;::new(address, __provider)
-<a href=#10155 id=10155 data-nosnippet>10155</a>    }
-<a href=#10156 id=10156 data-nosnippet>10156</a>    <span class="doccomment">/**Deploys this contract using the given `provider` and constructor arguments, if any.
-<a href=#10157 id=10157 data-nosnippet>10157</a>
-<a href=#10158 id=10158 data-nosnippet>10158</a>Returns a new instance of the contract, if the deployment was successful.
+<a href=#10141 id=10141 data-nosnippet>10141</a>        <span class="doccomment">/**Creates a [`RoleGranted`] event.
+<a href=#10142 id=10142 data-nosnippet>10142</a>
+<a href=#10143 id=10143 data-nosnippet>10143</a>```solidity
+<a href=#10144 id=10144 data-nosnippet>10144</a>event RoleGranted(bytes32,address,address)
+<a href=#10145 id=10145 data-nosnippet>10145</a>```*/
+<a href=#10146 id=10146 data-nosnippet>10146</a>        </span><span class="attr">#[inline]
+<a href=#10147 id=10147 data-nosnippet>10147</a>        </span><span class="kw">pub fn </span>role_granted(
+<a href=#10148 id=10148 data-nosnippet>10148</a>            role: alloy::sol_types::private::FixedBytes&lt;<span class="number">32</span>&gt;,
+<a href=#10149 id=10149 data-nosnippet>10149</a>            account: alloy::sol_types::private::Address,
+<a href=#10150 id=10150 data-nosnippet>10150</a>            sender: alloy::sol_types::private::Address,
+<a href=#10151 id=10151 data-nosnippet>10151</a>        ) -&gt; <span class="self">Self </span>{
+<a href=#10152 id=10152 data-nosnippet>10152</a>            <span class="self">Self</span>::RoleGranted(RoleGranted {
+<a href=#10153 id=10153 data-nosnippet>10153</a>                role: role,
+<a href=#10154 id=10154 data-nosnippet>10154</a>                account: account,
+<a href=#10155 id=10155 data-nosnippet>10155</a>                sender: sender,
+<a href=#10156 id=10156 data-nosnippet>10156</a>            })
+<a href=#10157 id=10157 data-nosnippet>10157</a>        }
+<a href=#10158 id=10158 data-nosnippet>10158</a>        <span class="doccomment">/**Creates a [`RoleRevoked`] event.
 <a href=#10159 id=10159 data-nosnippet>10159</a>
-<a href=#10160 id=10160 data-nosnippet>10160</a>For more fine-grained control over the deployment process, use [`deploy_builder`] instead.*/
-<a href=#10161 id=10161 data-nosnippet>10161</a>    </span><span class="attr">#[inline]
-<a href=#10162 id=10162 data-nosnippet>10162</a>    </span><span class="kw">pub fn </span>deploy&lt;
-<a href=#10163 id=10163 data-nosnippet>10163</a>        P: alloy_contract::private::Provider&lt;N&gt;,
-<a href=#10164 id=10164 data-nosnippet>10164</a>        N: alloy_contract::private::Network,
-<a href=#10165 id=10165 data-nosnippet>10165</a>    &gt;(
-<a href=#10166 id=10166 data-nosnippet>10166</a>        __provider: P,
-<a href=#10167 id=10167 data-nosnippet>10167</a>        minDelay: alloy::sol_types::private::primitives::aliases::U256,
-<a href=#10168 id=10168 data-nosnippet>10168</a>        proposers: alloy::sol_types::private::Vec&lt;alloy::sol_types::private::Address&gt;,
-<a href=#10169 id=10169 data-nosnippet>10169</a>        executors: alloy::sol_types::private::Vec&lt;alloy::sol_types::private::Address&gt;,
-<a href=#10170 id=10170 data-nosnippet>10170</a>        admin: alloy::sol_types::private::Address,
-<a href=#10171 id=10171 data-nosnippet>10171</a>    ) -&gt; <span class="kw">impl </span>::core::future::Future&lt;
-<a href=#10172 id=10172 data-nosnippet>10172</a>        Output = alloy_contract::Result&lt;OpsTimelockInstance&lt;P, N&gt;&gt;,
-<a href=#10173 id=10173 data-nosnippet>10173</a>    &gt; {
-<a href=#10174 id=10174 data-nosnippet>10174</a>        OpsTimelockInstance::&lt;
-<a href=#10175 id=10175 data-nosnippet>10175</a>            P,
-<a href=#10176 id=10176 data-nosnippet>10176</a>            N,
-<a href=#10177 id=10177 data-nosnippet>10177</a>        &gt;::deploy(__provider, minDelay, proposers, executors, admin)
-<a href=#10178 id=10178 data-nosnippet>10178</a>    }
-<a href=#10179 id=10179 data-nosnippet>10179</a>    <span class="doccomment">/**Creates a `RawCallBuilder` for deploying this contract using the given `provider`
-<a href=#10180 id=10180 data-nosnippet>10180</a>and constructor arguments, if any.
-<a href=#10181 id=10181 data-nosnippet>10181</a>
-<a href=#10182 id=10182 data-nosnippet>10182</a>This is a simple wrapper around creating a `RawCallBuilder` with the data set to
-<a href=#10183 id=10183 data-nosnippet>10183</a>the bytecode concatenated with the constructor's ABI-encoded arguments.*/
-<a href=#10184 id=10184 data-nosnippet>10184</a>    </span><span class="attr">#[inline]
-<a href=#10185 id=10185 data-nosnippet>10185</a>    </span><span class="kw">pub fn </span>deploy_builder&lt;
-<a href=#10186 id=10186 data-nosnippet>10186</a>        P: alloy_contract::private::Provider&lt;N&gt;,
-<a href=#10187 id=10187 data-nosnippet>10187</a>        N: alloy_contract::private::Network,
-<a href=#10188 id=10188 data-nosnippet>10188</a>    &gt;(
-<a href=#10189 id=10189 data-nosnippet>10189</a>        __provider: P,
-<a href=#10190 id=10190 data-nosnippet>10190</a>        minDelay: alloy::sol_types::private::primitives::aliases::U256,
-<a href=#10191 id=10191 data-nosnippet>10191</a>        proposers: alloy::sol_types::private::Vec&lt;alloy::sol_types::private::Address&gt;,
-<a href=#10192 id=10192 data-nosnippet>10192</a>        executors: alloy::sol_types::private::Vec&lt;alloy::sol_types::private::Address&gt;,
-<a href=#10193 id=10193 data-nosnippet>10193</a>        admin: alloy::sol_types::private::Address,
-<a href=#10194 id=10194 data-nosnippet>10194</a>    ) -&gt; alloy_contract::RawCallBuilder&lt;P, N&gt; {
-<a href=#10195 id=10195 data-nosnippet>10195</a>        OpsTimelockInstance::&lt;
-<a href=#10196 id=10196 data-nosnippet>10196</a>            P,
-<a href=#10197 id=10197 data-nosnippet>10197</a>            N,
-<a href=#10198 id=10198 data-nosnippet>10198</a>        &gt;::deploy_builder(__provider, minDelay, proposers, executors, admin)
-<a href=#10199 id=10199 data-nosnippet>10199</a>    }
-<a href=#10200 id=10200 data-nosnippet>10200</a>    <span class="doccomment">/**A [`OpsTimelock`](self) instance.
-<a href=#10201 id=10201 data-nosnippet>10201</a>
-<a href=#10202 id=10202 data-nosnippet>10202</a>Contains type-safe methods for interacting with an on-chain instance of the
-<a href=#10203 id=10203 data-nosnippet>10203</a>[`OpsTimelock`](self) contract located at a given `address`, using a given
-<a href=#10204 id=10204 data-nosnippet>10204</a>provider `P`.
-<a href=#10205 id=10205 data-nosnippet>10205</a>
-<a href=#10206 id=10206 data-nosnippet>10206</a>If the contract bytecode is available (see the [`sol!`](alloy_sol_types::sol!)
-<a href=#10207 id=10207 data-nosnippet>10207</a>documentation on how to provide it), the `deploy` and `deploy_builder` methods can
-<a href=#10208 id=10208 data-nosnippet>10208</a>be used to deploy a new instance of the contract.
-<a href=#10209 id=10209 data-nosnippet>10209</a>
-<a href=#10210 id=10210 data-nosnippet>10210</a>See the [module-level documentation](self) for all the available methods.*/
-<a href=#10211 id=10211 data-nosnippet>10211</a>    </span><span class="attr">#[derive(Clone)]
-<a href=#10212 id=10212 data-nosnippet>10212</a>    </span><span class="kw">pub struct </span>OpsTimelockInstance&lt;P, N = alloy_contract::private::Ethereum&gt; {
-<a href=#10213 id=10213 data-nosnippet>10213</a>        address: alloy_sol_types::private::Address,
-<a href=#10214 id=10214 data-nosnippet>10214</a>        provider: P,
-<a href=#10215 id=10215 data-nosnippet>10215</a>        _network: ::core::marker::PhantomData&lt;N&gt;,
-<a href=#10216 id=10216 data-nosnippet>10216</a>    }
-<a href=#10217 id=10217 data-nosnippet>10217</a>    <span class="attr">#[automatically_derived]
-<a href=#10218 id=10218 data-nosnippet>10218</a>    </span><span class="kw">impl</span>&lt;P, N&gt; ::core::fmt::Debug <span class="kw">for </span>OpsTimelockInstance&lt;P, N&gt; {
-<a href=#10219 id=10219 data-nosnippet>10219</a>        <span class="attr">#[inline]
-<a href=#10220 id=10220 data-nosnippet>10220</a>        </span><span class="kw">fn </span>fmt(<span class="kw-2">&amp;</span><span class="self">self</span>, f: <span class="kw-2">&amp;mut </span>::core::fmt::Formatter&lt;<span class="lifetime">'_</span>&gt;) -&gt; ::core::fmt::Result {
-<a href=#10221 id=10221 data-nosnippet>10221</a>            f.debug_tuple(<span class="string">"OpsTimelockInstance"</span>).field(<span class="kw-2">&amp;</span><span class="self">self</span>.address).finish()
-<a href=#10222 id=10222 data-nosnippet>10222</a>        }
-<a href=#10223 id=10223 data-nosnippet>10223</a>    }
-<a href=#10224 id=10224 data-nosnippet>10224</a>    <span class="doccomment">/// Instantiation and getters/setters.
-<a href=#10225 id=10225 data-nosnippet>10225</a>    </span><span class="kw">impl</span>&lt;
-<a href=#10226 id=10226 data-nosnippet>10226</a>        P: alloy_contract::private::Provider&lt;N&gt;,
-<a href=#10227 id=10227 data-nosnippet>10227</a>        N: alloy_contract::private::Network,
-<a href=#10228 id=10228 data-nosnippet>10228</a>    &gt; OpsTimelockInstance&lt;P, N&gt; {
-<a href=#10229 id=10229 data-nosnippet>10229</a>        <span class="doccomment">/**Creates a new wrapper around an on-chain [`OpsTimelock`](self) contract instance.
-<a href=#10230 id=10230 data-nosnippet>10230</a>
-<a href=#10231 id=10231 data-nosnippet>10231</a>See the [wrapper's documentation](`OpsTimelockInstance`) for more details.*/
-<a href=#10232 id=10232 data-nosnippet>10232</a>        </span><span class="attr">#[inline]
-<a href=#10233 id=10233 data-nosnippet>10233</a>        </span><span class="kw">pub const fn </span>new(
-<a href=#10234 id=10234 data-nosnippet>10234</a>            address: alloy_sol_types::private::Address,
-<a href=#10235 id=10235 data-nosnippet>10235</a>            __provider: P,
-<a href=#10236 id=10236 data-nosnippet>10236</a>        ) -&gt; <span class="self">Self </span>{
-<a href=#10237 id=10237 data-nosnippet>10237</a>            <span class="self">Self </span>{
-<a href=#10238 id=10238 data-nosnippet>10238</a>                address,
-<a href=#10239 id=10239 data-nosnippet>10239</a>                provider: __provider,
-<a href=#10240 id=10240 data-nosnippet>10240</a>                _network: ::core::marker::PhantomData,
-<a href=#10241 id=10241 data-nosnippet>10241</a>            }
-<a href=#10242 id=10242 data-nosnippet>10242</a>        }
-<a href=#10243 id=10243 data-nosnippet>10243</a>        <span class="doccomment">/**Deploys this contract using the given `provider` and constructor arguments, if any.
-<a href=#10244 id=10244 data-nosnippet>10244</a>
-<a href=#10245 id=10245 data-nosnippet>10245</a>Returns a new instance of the contract, if the deployment was successful.
-<a href=#10246 id=10246 data-nosnippet>10246</a>
-<a href=#10247 id=10247 data-nosnippet>10247</a>For more fine-grained control over the deployment process, use [`deploy_builder`] instead.*/
-<a href=#10248 id=10248 data-nosnippet>10248</a>        </span><span class="attr">#[inline]
-<a href=#10249 id=10249 data-nosnippet>10249</a>        </span><span class="kw">pub async fn </span>deploy(
-<a href=#10250 id=10250 data-nosnippet>10250</a>            __provider: P,
-<a href=#10251 id=10251 data-nosnippet>10251</a>            minDelay: alloy::sol_types::private::primitives::aliases::U256,
-<a href=#10252 id=10252 data-nosnippet>10252</a>            proposers: alloy::sol_types::private::Vec&lt;
-<a href=#10253 id=10253 data-nosnippet>10253</a>                alloy::sol_types::private::Address,
-<a href=#10254 id=10254 data-nosnippet>10254</a>            &gt;,
-<a href=#10255 id=10255 data-nosnippet>10255</a>            executors: alloy::sol_types::private::Vec&lt;
-<a href=#10256 id=10256 data-nosnippet>10256</a>                alloy::sol_types::private::Address,
-<a href=#10257 id=10257 data-nosnippet>10257</a>            &gt;,
-<a href=#10258 id=10258 data-nosnippet>10258</a>            admin: alloy::sol_types::private::Address,
-<a href=#10259 id=10259 data-nosnippet>10259</a>        ) -&gt; alloy_contract::Result&lt;OpsTimelockInstance&lt;P, N&gt;&gt; {
-<a href=#10260 id=10260 data-nosnippet>10260</a>            <span class="kw">let </span>call_builder = <span class="self">Self</span>::deploy_builder(
-<a href=#10261 id=10261 data-nosnippet>10261</a>                __provider,
-<a href=#10262 id=10262 data-nosnippet>10262</a>                minDelay,
-<a href=#10263 id=10263 data-nosnippet>10263</a>                proposers,
-<a href=#10264 id=10264 data-nosnippet>10264</a>                executors,
-<a href=#10265 id=10265 data-nosnippet>10265</a>                admin,
-<a href=#10266 id=10266 data-nosnippet>10266</a>            );
-<a href=#10267 id=10267 data-nosnippet>10267</a>            <span class="kw">let </span>contract_address = call_builder.deploy().<span class="kw">await</span><span class="question-mark">?</span>;
-<a href=#10268 id=10268 data-nosnippet>10268</a>            <span class="prelude-val">Ok</span>(<span class="self">Self</span>::new(contract_address, call_builder.provider))
-<a href=#10269 id=10269 data-nosnippet>10269</a>        }
-<a href=#10270 id=10270 data-nosnippet>10270</a>        <span class="doccomment">/**Creates a `RawCallBuilder` for deploying this contract using the given `provider`
-<a href=#10271 id=10271 data-nosnippet>10271</a>and constructor arguments, if any.
-<a href=#10272 id=10272 data-nosnippet>10272</a>
-<a href=#10273 id=10273 data-nosnippet>10273</a>This is a simple wrapper around creating a `RawCallBuilder` with the data set to
-<a href=#10274 id=10274 data-nosnippet>10274</a>the bytecode concatenated with the constructor's ABI-encoded arguments.*/
-<a href=#10275 id=10275 data-nosnippet>10275</a>        </span><span class="attr">#[inline]
-<a href=#10276 id=10276 data-nosnippet>10276</a>        </span><span class="kw">pub fn </span>deploy_builder(
-<a href=#10277 id=10277 data-nosnippet>10277</a>            __provider: P,
-<a href=#10278 id=10278 data-nosnippet>10278</a>            minDelay: alloy::sol_types::private::primitives::aliases::U256,
-<a href=#10279 id=10279 data-nosnippet>10279</a>            proposers: alloy::sol_types::private::Vec&lt;
-<a href=#10280 id=10280 data-nosnippet>10280</a>                alloy::sol_types::private::Address,
-<a href=#10281 id=10281 data-nosnippet>10281</a>            &gt;,
-<a href=#10282 id=10282 data-nosnippet>10282</a>            executors: alloy::sol_types::private::Vec&lt;
-<a href=#10283 id=10283 data-nosnippet>10283</a>                alloy::sol_types::private::Address,
-<a href=#10284 id=10284 data-nosnippet>10284</a>            &gt;,
-<a href=#10285 id=10285 data-nosnippet>10285</a>            admin: alloy::sol_types::private::Address,
-<a href=#10286 id=10286 data-nosnippet>10286</a>        ) -&gt; alloy_contract::RawCallBuilder&lt;P, N&gt; {
-<a href=#10287 id=10287 data-nosnippet>10287</a>            alloy_contract::RawCallBuilder::new_raw_deploy(
-<a href=#10288 id=10288 data-nosnippet>10288</a>                __provider,
-<a href=#10289 id=10289 data-nosnippet>10289</a>                [
-<a href=#10290 id=10290 data-nosnippet>10290</a>                    <span class="kw-2">&amp;</span>BYTECODE[..],
-<a href=#10291 id=10291 data-nosnippet>10291</a>                    <span class="kw-2">&amp;</span>alloy_sol_types::SolConstructor::abi_encode(
-<a href=#10292 id=10292 data-nosnippet>10292</a>                        <span class="kw-2">&amp;</span>constructorCall {
-<a href=#10293 id=10293 data-nosnippet>10293</a>                            minDelay,
-<a href=#10294 id=10294 data-nosnippet>10294</a>                            proposers,
-<a href=#10295 id=10295 data-nosnippet>10295</a>                            executors,
-<a href=#10296 id=10296 data-nosnippet>10296</a>                            admin,
-<a href=#10297 id=10297 data-nosnippet>10297</a>                        },
-<a href=#10298 id=10298 data-nosnippet>10298</a>                    )[..],
-<a href=#10299 id=10299 data-nosnippet>10299</a>                ]
-<a href=#10300 id=10300 data-nosnippet>10300</a>                    .concat()
-<a href=#10301 id=10301 data-nosnippet>10301</a>                    .into(),
-<a href=#10302 id=10302 data-nosnippet>10302</a>            )
+<a href=#10160 id=10160 data-nosnippet>10160</a>```solidity
+<a href=#10161 id=10161 data-nosnippet>10161</a>event RoleRevoked(bytes32,address,address)
+<a href=#10162 id=10162 data-nosnippet>10162</a>```*/
+<a href=#10163 id=10163 data-nosnippet>10163</a>        </span><span class="attr">#[inline]
+<a href=#10164 id=10164 data-nosnippet>10164</a>        </span><span class="kw">pub fn </span>role_revoked(
+<a href=#10165 id=10165 data-nosnippet>10165</a>            role: alloy::sol_types::private::FixedBytes&lt;<span class="number">32</span>&gt;,
+<a href=#10166 id=10166 data-nosnippet>10166</a>            account: alloy::sol_types::private::Address,
+<a href=#10167 id=10167 data-nosnippet>10167</a>            sender: alloy::sol_types::private::Address,
+<a href=#10168 id=10168 data-nosnippet>10168</a>        ) -&gt; <span class="self">Self </span>{
+<a href=#10169 id=10169 data-nosnippet>10169</a>            <span class="self">Self</span>::RoleRevoked(RoleRevoked {
+<a href=#10170 id=10170 data-nosnippet>10170</a>                role: role,
+<a href=#10171 id=10171 data-nosnippet>10171</a>                account: account,
+<a href=#10172 id=10172 data-nosnippet>10172</a>                sender: sender,
+<a href=#10173 id=10173 data-nosnippet>10173</a>            })
+<a href=#10174 id=10174 data-nosnippet>10174</a>        }
+<a href=#10175 id=10175 data-nosnippet>10175</a>    }
+<a href=#10176 id=10176 data-nosnippet>10176</a>    <span class="kw">use </span>alloy::contract <span class="kw">as </span>alloy_contract;
+<a href=#10177 id=10177 data-nosnippet>10177</a>    <span class="doccomment">/**Creates a new wrapper around an on-chain [`OpsTimelock`](self) contract instance.
+<a href=#10178 id=10178 data-nosnippet>10178</a>
+<a href=#10179 id=10179 data-nosnippet>10179</a>See the [wrapper's documentation](`OpsTimelockInstance`) for more details.*/
+<a href=#10180 id=10180 data-nosnippet>10180</a>    </span><span class="attr">#[inline]
+<a href=#10181 id=10181 data-nosnippet>10181</a>    </span><span class="kw">pub const fn </span>new&lt;
+<a href=#10182 id=10182 data-nosnippet>10182</a>        P: alloy_contract::private::Provider&lt;N&gt;,
+<a href=#10183 id=10183 data-nosnippet>10183</a>        N: alloy_contract::private::Network,
+<a href=#10184 id=10184 data-nosnippet>10184</a>    &gt;(
+<a href=#10185 id=10185 data-nosnippet>10185</a>        address: alloy_sol_types::private::Address,
+<a href=#10186 id=10186 data-nosnippet>10186</a>        __provider: P,
+<a href=#10187 id=10187 data-nosnippet>10187</a>    ) -&gt; OpsTimelockInstance&lt;P, N&gt; {
+<a href=#10188 id=10188 data-nosnippet>10188</a>        OpsTimelockInstance::&lt;P, N&gt;::new(address, __provider)
+<a href=#10189 id=10189 data-nosnippet>10189</a>    }
+<a href=#10190 id=10190 data-nosnippet>10190</a>    <span class="doccomment">/**Deploys this contract using the given `provider` and constructor arguments, if any.
+<a href=#10191 id=10191 data-nosnippet>10191</a>
+<a href=#10192 id=10192 data-nosnippet>10192</a>Returns a new instance of the contract, if the deployment was successful.
+<a href=#10193 id=10193 data-nosnippet>10193</a>
+<a href=#10194 id=10194 data-nosnippet>10194</a>For more fine-grained control over the deployment process, use [`deploy_builder`] instead.*/
+<a href=#10195 id=10195 data-nosnippet>10195</a>    </span><span class="attr">#[inline]
+<a href=#10196 id=10196 data-nosnippet>10196</a>    </span><span class="kw">pub fn </span>deploy&lt;
+<a href=#10197 id=10197 data-nosnippet>10197</a>        P: alloy_contract::private::Provider&lt;N&gt;,
+<a href=#10198 id=10198 data-nosnippet>10198</a>        N: alloy_contract::private::Network,
+<a href=#10199 id=10199 data-nosnippet>10199</a>    &gt;(
+<a href=#10200 id=10200 data-nosnippet>10200</a>        __provider: P,
+<a href=#10201 id=10201 data-nosnippet>10201</a>        minDelay: alloy::sol_types::private::primitives::aliases::U256,
+<a href=#10202 id=10202 data-nosnippet>10202</a>        proposers: alloy::sol_types::private::Vec&lt;alloy::sol_types::private::Address&gt;,
+<a href=#10203 id=10203 data-nosnippet>10203</a>        executors: alloy::sol_types::private::Vec&lt;alloy::sol_types::private::Address&gt;,
+<a href=#10204 id=10204 data-nosnippet>10204</a>        admin: alloy::sol_types::private::Address,
+<a href=#10205 id=10205 data-nosnippet>10205</a>    ) -&gt; <span class="kw">impl </span>::core::future::Future&lt;
+<a href=#10206 id=10206 data-nosnippet>10206</a>        Output = alloy_contract::Result&lt;OpsTimelockInstance&lt;P, N&gt;&gt;,
+<a href=#10207 id=10207 data-nosnippet>10207</a>    &gt; {
+<a href=#10208 id=10208 data-nosnippet>10208</a>        OpsTimelockInstance::&lt;
+<a href=#10209 id=10209 data-nosnippet>10209</a>            P,
+<a href=#10210 id=10210 data-nosnippet>10210</a>            N,
+<a href=#10211 id=10211 data-nosnippet>10211</a>        &gt;::deploy(__provider, minDelay, proposers, executors, admin)
+<a href=#10212 id=10212 data-nosnippet>10212</a>    }
+<a href=#10213 id=10213 data-nosnippet>10213</a>    <span class="doccomment">/**Creates a `RawCallBuilder` for deploying this contract using the given `provider`
+<a href=#10214 id=10214 data-nosnippet>10214</a>and constructor arguments, if any.
+<a href=#10215 id=10215 data-nosnippet>10215</a>
+<a href=#10216 id=10216 data-nosnippet>10216</a>This is a simple wrapper around creating a `RawCallBuilder` with the data set to
+<a href=#10217 id=10217 data-nosnippet>10217</a>the bytecode concatenated with the constructor's ABI-encoded arguments.*/
+<a href=#10218 id=10218 data-nosnippet>10218</a>    </span><span class="attr">#[inline]
+<a href=#10219 id=10219 data-nosnippet>10219</a>    </span><span class="kw">pub fn </span>deploy_builder&lt;
+<a href=#10220 id=10220 data-nosnippet>10220</a>        P: alloy_contract::private::Provider&lt;N&gt;,
+<a href=#10221 id=10221 data-nosnippet>10221</a>        N: alloy_contract::private::Network,
+<a href=#10222 id=10222 data-nosnippet>10222</a>    &gt;(
+<a href=#10223 id=10223 data-nosnippet>10223</a>        __provider: P,
+<a href=#10224 id=10224 data-nosnippet>10224</a>        minDelay: alloy::sol_types::private::primitives::aliases::U256,
+<a href=#10225 id=10225 data-nosnippet>10225</a>        proposers: alloy::sol_types::private::Vec&lt;alloy::sol_types::private::Address&gt;,
+<a href=#10226 id=10226 data-nosnippet>10226</a>        executors: alloy::sol_types::private::Vec&lt;alloy::sol_types::private::Address&gt;,
+<a href=#10227 id=10227 data-nosnippet>10227</a>        admin: alloy::sol_types::private::Address,
+<a href=#10228 id=10228 data-nosnippet>10228</a>    ) -&gt; alloy_contract::RawCallBuilder&lt;P, N&gt; {
+<a href=#10229 id=10229 data-nosnippet>10229</a>        OpsTimelockInstance::&lt;
+<a href=#10230 id=10230 data-nosnippet>10230</a>            P,
+<a href=#10231 id=10231 data-nosnippet>10231</a>            N,
+<a href=#10232 id=10232 data-nosnippet>10232</a>        &gt;::deploy_builder(__provider, minDelay, proposers, executors, admin)
+<a href=#10233 id=10233 data-nosnippet>10233</a>    }
+<a href=#10234 id=10234 data-nosnippet>10234</a>    <span class="doccomment">/**A [`OpsTimelock`](self) instance.
+<a href=#10235 id=10235 data-nosnippet>10235</a>
+<a href=#10236 id=10236 data-nosnippet>10236</a>Contains type-safe methods for interacting with an on-chain instance of the
+<a href=#10237 id=10237 data-nosnippet>10237</a>[`OpsTimelock`](self) contract located at a given `address`, using a given
+<a href=#10238 id=10238 data-nosnippet>10238</a>provider `P`.
+<a href=#10239 id=10239 data-nosnippet>10239</a>
+<a href=#10240 id=10240 data-nosnippet>10240</a>If the contract bytecode is available (see the [`sol!`](alloy_sol_types::sol!)
+<a href=#10241 id=10241 data-nosnippet>10241</a>documentation on how to provide it), the `deploy` and `deploy_builder` methods can
+<a href=#10242 id=10242 data-nosnippet>10242</a>be used to deploy a new instance of the contract.
+<a href=#10243 id=10243 data-nosnippet>10243</a>
+<a href=#10244 id=10244 data-nosnippet>10244</a>See the [module-level documentation](self) for all the available methods.*/
+<a href=#10245 id=10245 data-nosnippet>10245</a>    </span><span class="attr">#[derive(Clone)]
+<a href=#10246 id=10246 data-nosnippet>10246</a>    </span><span class="kw">pub struct </span>OpsTimelockInstance&lt;P, N = alloy_contract::private::Ethereum&gt; {
+<a href=#10247 id=10247 data-nosnippet>10247</a>        address: alloy_sol_types::private::Address,
+<a href=#10248 id=10248 data-nosnippet>10248</a>        provider: P,
+<a href=#10249 id=10249 data-nosnippet>10249</a>        _network: ::core::marker::PhantomData&lt;N&gt;,
+<a href=#10250 id=10250 data-nosnippet>10250</a>    }
+<a href=#10251 id=10251 data-nosnippet>10251</a>    <span class="attr">#[automatically_derived]
+<a href=#10252 id=10252 data-nosnippet>10252</a>    </span><span class="kw">impl</span>&lt;P, N&gt; ::core::fmt::Debug <span class="kw">for </span>OpsTimelockInstance&lt;P, N&gt; {
+<a href=#10253 id=10253 data-nosnippet>10253</a>        <span class="attr">#[inline]
+<a href=#10254 id=10254 data-nosnippet>10254</a>        </span><span class="kw">fn </span>fmt(<span class="kw-2">&amp;</span><span class="self">self</span>, f: <span class="kw-2">&amp;mut </span>::core::fmt::Formatter&lt;<span class="lifetime">'_</span>&gt;) -&gt; ::core::fmt::Result {
+<a href=#10255 id=10255 data-nosnippet>10255</a>            f.debug_tuple(<span class="string">"OpsTimelockInstance"</span>).field(<span class="kw-2">&amp;</span><span class="self">self</span>.address).finish()
+<a href=#10256 id=10256 data-nosnippet>10256</a>        }
+<a href=#10257 id=10257 data-nosnippet>10257</a>    }
+<a href=#10258 id=10258 data-nosnippet>10258</a>    <span class="doccomment">/// Instantiation and getters/setters.
+<a href=#10259 id=10259 data-nosnippet>10259</a>    </span><span class="kw">impl</span>&lt;
+<a href=#10260 id=10260 data-nosnippet>10260</a>        P: alloy_contract::private::Provider&lt;N&gt;,
+<a href=#10261 id=10261 data-nosnippet>10261</a>        N: alloy_contract::private::Network,
+<a href=#10262 id=10262 data-nosnippet>10262</a>    &gt; OpsTimelockInstance&lt;P, N&gt; {
+<a href=#10263 id=10263 data-nosnippet>10263</a>        <span class="doccomment">/**Creates a new wrapper around an on-chain [`OpsTimelock`](self) contract instance.
+<a href=#10264 id=10264 data-nosnippet>10264</a>
+<a href=#10265 id=10265 data-nosnippet>10265</a>See the [wrapper's documentation](`OpsTimelockInstance`) for more details.*/
+<a href=#10266 id=10266 data-nosnippet>10266</a>        </span><span class="attr">#[inline]
+<a href=#10267 id=10267 data-nosnippet>10267</a>        </span><span class="kw">pub const fn </span>new(
+<a href=#10268 id=10268 data-nosnippet>10268</a>            address: alloy_sol_types::private::Address,
+<a href=#10269 id=10269 data-nosnippet>10269</a>            __provider: P,
+<a href=#10270 id=10270 data-nosnippet>10270</a>        ) -&gt; <span class="self">Self </span>{
+<a href=#10271 id=10271 data-nosnippet>10271</a>            <span class="self">Self </span>{
+<a href=#10272 id=10272 data-nosnippet>10272</a>                address,
+<a href=#10273 id=10273 data-nosnippet>10273</a>                provider: __provider,
+<a href=#10274 id=10274 data-nosnippet>10274</a>                _network: ::core::marker::PhantomData,
+<a href=#10275 id=10275 data-nosnippet>10275</a>            }
+<a href=#10276 id=10276 data-nosnippet>10276</a>        }
+<a href=#10277 id=10277 data-nosnippet>10277</a>        <span class="doccomment">/**Deploys this contract using the given `provider` and constructor arguments, if any.
+<a href=#10278 id=10278 data-nosnippet>10278</a>
+<a href=#10279 id=10279 data-nosnippet>10279</a>Returns a new instance of the contract, if the deployment was successful.
+<a href=#10280 id=10280 data-nosnippet>10280</a>
+<a href=#10281 id=10281 data-nosnippet>10281</a>For more fine-grained control over the deployment process, use [`deploy_builder`] instead.*/
+<a href=#10282 id=10282 data-nosnippet>10282</a>        </span><span class="attr">#[inline]
+<a href=#10283 id=10283 data-nosnippet>10283</a>        </span><span class="kw">pub async fn </span>deploy(
+<a href=#10284 id=10284 data-nosnippet>10284</a>            __provider: P,
+<a href=#10285 id=10285 data-nosnippet>10285</a>            minDelay: alloy::sol_types::private::primitives::aliases::U256,
+<a href=#10286 id=10286 data-nosnippet>10286</a>            proposers: alloy::sol_types::private::Vec&lt;
+<a href=#10287 id=10287 data-nosnippet>10287</a>                alloy::sol_types::private::Address,
+<a href=#10288 id=10288 data-nosnippet>10288</a>            &gt;,
+<a href=#10289 id=10289 data-nosnippet>10289</a>            executors: alloy::sol_types::private::Vec&lt;
+<a href=#10290 id=10290 data-nosnippet>10290</a>                alloy::sol_types::private::Address,
+<a href=#10291 id=10291 data-nosnippet>10291</a>            &gt;,
+<a href=#10292 id=10292 data-nosnippet>10292</a>            admin: alloy::sol_types::private::Address,
+<a href=#10293 id=10293 data-nosnippet>10293</a>        ) -&gt; alloy_contract::Result&lt;OpsTimelockInstance&lt;P, N&gt;&gt; {
+<a href=#10294 id=10294 data-nosnippet>10294</a>            <span class="kw">let </span>call_builder = <span class="self">Self</span>::deploy_builder(
+<a href=#10295 id=10295 data-nosnippet>10295</a>                __provider,
+<a href=#10296 id=10296 data-nosnippet>10296</a>                minDelay,
+<a href=#10297 id=10297 data-nosnippet>10297</a>                proposers,
+<a href=#10298 id=10298 data-nosnippet>10298</a>                executors,
+<a href=#10299 id=10299 data-nosnippet>10299</a>                admin,
+<a href=#10300 id=10300 data-nosnippet>10300</a>            );
+<a href=#10301 id=10301 data-nosnippet>10301</a>            <span class="kw">let </span>contract_address = call_builder.deploy().<span class="kw">await</span><span class="question-mark">?</span>;
+<a href=#10302 id=10302 data-nosnippet>10302</a>            <span class="prelude-val">Ok</span>(<span class="self">Self</span>::new(contract_address, call_builder.provider))
 <a href=#10303 id=10303 data-nosnippet>10303</a>        }
-<a href=#10304 id=10304 data-nosnippet>10304</a>        <span class="doccomment">/// Returns a reference to the address.
-<a href=#10305 id=10305 data-nosnippet>10305</a>        </span><span class="attr">#[inline]
-<a href=#10306 id=10306 data-nosnippet>10306</a>        </span><span class="kw">pub const fn </span>address(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>alloy_sol_types::private::Address {
-<a href=#10307 id=10307 data-nosnippet>10307</a>            <span class="kw-2">&amp;</span><span class="self">self</span>.address
-<a href=#10308 id=10308 data-nosnippet>10308</a>        }
-<a href=#10309 id=10309 data-nosnippet>10309</a>        <span class="doccomment">/// Sets the address.
-<a href=#10310 id=10310 data-nosnippet>10310</a>        </span><span class="attr">#[inline]
-<a href=#10311 id=10311 data-nosnippet>10311</a>        </span><span class="kw">pub fn </span>set_address(<span class="kw-2">&amp;mut </span><span class="self">self</span>, address: alloy_sol_types::private::Address) {
-<a href=#10312 id=10312 data-nosnippet>10312</a>            <span class="self">self</span>.address = address;
-<a href=#10313 id=10313 data-nosnippet>10313</a>        }
-<a href=#10314 id=10314 data-nosnippet>10314</a>        <span class="doccomment">/// Sets the address and returns `self`.
-<a href=#10315 id=10315 data-nosnippet>10315</a>        </span><span class="kw">pub fn </span>at(<span class="kw-2">mut </span><span class="self">self</span>, address: alloy_sol_types::private::Address) -&gt; <span class="self">Self </span>{
-<a href=#10316 id=10316 data-nosnippet>10316</a>            <span class="self">self</span>.set_address(address);
-<a href=#10317 id=10317 data-nosnippet>10317</a>            <span class="self">self
-<a href=#10318 id=10318 data-nosnippet>10318</a>        </span>}
-<a href=#10319 id=10319 data-nosnippet>10319</a>        <span class="doccomment">/// Returns a reference to the provider.
-<a href=#10320 id=10320 data-nosnippet>10320</a>        </span><span class="attr">#[inline]
-<a href=#10321 id=10321 data-nosnippet>10321</a>        </span><span class="kw">pub const fn </span>provider(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>P {
-<a href=#10322 id=10322 data-nosnippet>10322</a>            <span class="kw-2">&amp;</span><span class="self">self</span>.provider
-<a href=#10323 id=10323 data-nosnippet>10323</a>        }
-<a href=#10324 id=10324 data-nosnippet>10324</a>    }
-<a href=#10325 id=10325 data-nosnippet>10325</a>    <span class="kw">impl</span>&lt;P: ::core::clone::Clone, N&gt; OpsTimelockInstance&lt;<span class="kw-2">&amp;</span>P, N&gt; {
-<a href=#10326 id=10326 data-nosnippet>10326</a>        <span class="doccomment">/// Clones the provider and returns a new instance with the cloned provider.
-<a href=#10327 id=10327 data-nosnippet>10327</a>        </span><span class="attr">#[inline]
-<a href=#10328 id=10328 data-nosnippet>10328</a>        </span><span class="kw">pub fn </span>with_cloned_provider(<span class="self">self</span>) -&gt; OpsTimelockInstance&lt;P, N&gt; {
-<a href=#10329 id=10329 data-nosnippet>10329</a>            OpsTimelockInstance {
-<a href=#10330 id=10330 data-nosnippet>10330</a>                address: <span class="self">self</span>.address,
-<a href=#10331 id=10331 data-nosnippet>10331</a>                provider: ::core::clone::Clone::clone(<span class="kw-2">&amp;</span><span class="self">self</span>.provider),
-<a href=#10332 id=10332 data-nosnippet>10332</a>                _network: ::core::marker::PhantomData,
-<a href=#10333 id=10333 data-nosnippet>10333</a>            }
-<a href=#10334 id=10334 data-nosnippet>10334</a>        }
-<a href=#10335 id=10335 data-nosnippet>10335</a>    }
-<a href=#10336 id=10336 data-nosnippet>10336</a>    <span class="doccomment">/// Function calls.
-<a href=#10337 id=10337 data-nosnippet>10337</a>    </span><span class="kw">impl</span>&lt;
-<a href=#10338 id=10338 data-nosnippet>10338</a>        P: alloy_contract::private::Provider&lt;N&gt;,
-<a href=#10339 id=10339 data-nosnippet>10339</a>        N: alloy_contract::private::Network,
-<a href=#10340 id=10340 data-nosnippet>10340</a>    &gt; OpsTimelockInstance&lt;P, N&gt; {
-<a href=#10341 id=10341 data-nosnippet>10341</a>        <span class="doccomment">/// Creates a new call builder using this contract instance's provider and address.
-<a href=#10342 id=10342 data-nosnippet>10342</a>        ///
-<a href=#10343 id=10343 data-nosnippet>10343</a>        /// Note that the call can be any function call, not just those defined in this
-<a href=#10344 id=10344 data-nosnippet>10344</a>        /// contract. Prefer using the other methods for building type-safe contract calls.
-<a href=#10345 id=10345 data-nosnippet>10345</a>        </span><span class="kw">pub fn </span>call_builder&lt;C: alloy_sol_types::SolCall&gt;(
-<a href=#10346 id=10346 data-nosnippet>10346</a>            <span class="kw-2">&amp;</span><span class="self">self</span>,
-<a href=#10347 id=10347 data-nosnippet>10347</a>            call: <span class="kw-2">&amp;</span>C,
-<a href=#10348 id=10348 data-nosnippet>10348</a>        ) -&gt; alloy_contract::SolCallBuilder&lt;<span class="kw-2">&amp;</span>P, C, N&gt; {
-<a href=#10349 id=10349 data-nosnippet>10349</a>            alloy_contract::SolCallBuilder::new_sol(<span class="kw-2">&amp;</span><span class="self">self</span>.provider, <span class="kw-2">&amp;</span><span class="self">self</span>.address, call)
-<a href=#10350 id=10350 data-nosnippet>10350</a>        }
-<a href=#10351 id=10351 data-nosnippet>10351</a>        <span class="doccomment">///Creates a new call builder for the [`CANCELLER_ROLE`] function.
-<a href=#10352 id=10352 data-nosnippet>10352</a>        </span><span class="kw">pub fn </span>CANCELLER_ROLE(
-<a href=#10353 id=10353 data-nosnippet>10353</a>            <span class="kw-2">&amp;</span><span class="self">self</span>,
-<a href=#10354 id=10354 data-nosnippet>10354</a>        ) -&gt; alloy_contract::SolCallBuilder&lt;<span class="kw-2">&amp;</span>P, CANCELLER_ROLECall, N&gt; {
-<a href=#10355 id=10355 data-nosnippet>10355</a>            <span class="self">self</span>.call_builder(<span class="kw-2">&amp;</span>CANCELLER_ROLECall)
-<a href=#10356 id=10356 data-nosnippet>10356</a>        }
-<a href=#10357 id=10357 data-nosnippet>10357</a>        <span class="doccomment">///Creates a new call builder for the [`DEFAULT_ADMIN_ROLE`] function.
-<a href=#10358 id=10358 data-nosnippet>10358</a>        </span><span class="kw">pub fn </span>DEFAULT_ADMIN_ROLE(
-<a href=#10359 id=10359 data-nosnippet>10359</a>            <span class="kw-2">&amp;</span><span class="self">self</span>,
-<a href=#10360 id=10360 data-nosnippet>10360</a>        ) -&gt; alloy_contract::SolCallBuilder&lt;<span class="kw-2">&amp;</span>P, DEFAULT_ADMIN_ROLECall, N&gt; {
-<a href=#10361 id=10361 data-nosnippet>10361</a>            <span class="self">self</span>.call_builder(<span class="kw-2">&amp;</span>DEFAULT_ADMIN_ROLECall)
-<a href=#10362 id=10362 data-nosnippet>10362</a>        }
-<a href=#10363 id=10363 data-nosnippet>10363</a>        <span class="doccomment">///Creates a new call builder for the [`EXECUTOR_ROLE`] function.
-<a href=#10364 id=10364 data-nosnippet>10364</a>        </span><span class="kw">pub fn </span>EXECUTOR_ROLE(
-<a href=#10365 id=10365 data-nosnippet>10365</a>            <span class="kw-2">&amp;</span><span class="self">self</span>,
-<a href=#10366 id=10366 data-nosnippet>10366</a>        ) -&gt; alloy_contract::SolCallBuilder&lt;<span class="kw-2">&amp;</span>P, EXECUTOR_ROLECall, N&gt; {
-<a href=#10367 id=10367 data-nosnippet>10367</a>            <span class="self">self</span>.call_builder(<span class="kw-2">&amp;</span>EXECUTOR_ROLECall)
+<a href=#10304 id=10304 data-nosnippet>10304</a>        <span class="doccomment">/**Creates a `RawCallBuilder` for deploying this contract using the given `provider`
+<a href=#10305 id=10305 data-nosnippet>10305</a>and constructor arguments, if any.
+<a href=#10306 id=10306 data-nosnippet>10306</a>
+<a href=#10307 id=10307 data-nosnippet>10307</a>This is a simple wrapper around creating a `RawCallBuilder` with the data set to
+<a href=#10308 id=10308 data-nosnippet>10308</a>the bytecode concatenated with the constructor's ABI-encoded arguments.*/
+<a href=#10309 id=10309 data-nosnippet>10309</a>        </span><span class="attr">#[inline]
+<a href=#10310 id=10310 data-nosnippet>10310</a>        </span><span class="kw">pub fn </span>deploy_builder(
+<a href=#10311 id=10311 data-nosnippet>10311</a>            __provider: P,
+<a href=#10312 id=10312 data-nosnippet>10312</a>            minDelay: alloy::sol_types::private::primitives::aliases::U256,
+<a href=#10313 id=10313 data-nosnippet>10313</a>            proposers: alloy::sol_types::private::Vec&lt;
+<a href=#10314 id=10314 data-nosnippet>10314</a>                alloy::sol_types::private::Address,
+<a href=#10315 id=10315 data-nosnippet>10315</a>            &gt;,
+<a href=#10316 id=10316 data-nosnippet>10316</a>            executors: alloy::sol_types::private::Vec&lt;
+<a href=#10317 id=10317 data-nosnippet>10317</a>                alloy::sol_types::private::Address,
+<a href=#10318 id=10318 data-nosnippet>10318</a>            &gt;,
+<a href=#10319 id=10319 data-nosnippet>10319</a>            admin: alloy::sol_types::private::Address,
+<a href=#10320 id=10320 data-nosnippet>10320</a>        ) -&gt; alloy_contract::RawCallBuilder&lt;P, N&gt; {
+<a href=#10321 id=10321 data-nosnippet>10321</a>            alloy_contract::RawCallBuilder::new_raw_deploy(
+<a href=#10322 id=10322 data-nosnippet>10322</a>                __provider,
+<a href=#10323 id=10323 data-nosnippet>10323</a>                [
+<a href=#10324 id=10324 data-nosnippet>10324</a>                    <span class="kw-2">&amp;</span>BYTECODE[..],
+<a href=#10325 id=10325 data-nosnippet>10325</a>                    <span class="kw-2">&amp;</span>alloy_sol_types::SolConstructor::abi_encode(
+<a href=#10326 id=10326 data-nosnippet>10326</a>                        <span class="kw-2">&amp;</span>constructorCall {
+<a href=#10327 id=10327 data-nosnippet>10327</a>                            minDelay,
+<a href=#10328 id=10328 data-nosnippet>10328</a>                            proposers,
+<a href=#10329 id=10329 data-nosnippet>10329</a>                            executors,
+<a href=#10330 id=10330 data-nosnippet>10330</a>                            admin,
+<a href=#10331 id=10331 data-nosnippet>10331</a>                        },
+<a href=#10332 id=10332 data-nosnippet>10332</a>                    )[..],
+<a href=#10333 id=10333 data-nosnippet>10333</a>                ]
+<a href=#10334 id=10334 data-nosnippet>10334</a>                    .concat()
+<a href=#10335 id=10335 data-nosnippet>10335</a>                    .into(),
+<a href=#10336 id=10336 data-nosnippet>10336</a>            )
+<a href=#10337 id=10337 data-nosnippet>10337</a>        }
+<a href=#10338 id=10338 data-nosnippet>10338</a>        <span class="doccomment">/// Returns a reference to the address.
+<a href=#10339 id=10339 data-nosnippet>10339</a>        </span><span class="attr">#[inline]
+<a href=#10340 id=10340 data-nosnippet>10340</a>        </span><span class="kw">pub const fn </span>address(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>alloy_sol_types::private::Address {
+<a href=#10341 id=10341 data-nosnippet>10341</a>            <span class="kw-2">&amp;</span><span class="self">self</span>.address
+<a href=#10342 id=10342 data-nosnippet>10342</a>        }
+<a href=#10343 id=10343 data-nosnippet>10343</a>        <span class="doccomment">/// Sets the address.
+<a href=#10344 id=10344 data-nosnippet>10344</a>        </span><span class="attr">#[inline]
+<a href=#10345 id=10345 data-nosnippet>10345</a>        </span><span class="kw">pub fn </span>set_address(<span class="kw-2">&amp;mut </span><span class="self">self</span>, address: alloy_sol_types::private::Address) {
+<a href=#10346 id=10346 data-nosnippet>10346</a>            <span class="self">self</span>.address = address;
+<a href=#10347 id=10347 data-nosnippet>10347</a>        }
+<a href=#10348 id=10348 data-nosnippet>10348</a>        <span class="doccomment">/// Sets the address and returns `self`.
+<a href=#10349 id=10349 data-nosnippet>10349</a>        </span><span class="kw">pub fn </span>at(<span class="kw-2">mut </span><span class="self">self</span>, address: alloy_sol_types::private::Address) -&gt; <span class="self">Self </span>{
+<a href=#10350 id=10350 data-nosnippet>10350</a>            <span class="self">self</span>.set_address(address);
+<a href=#10351 id=10351 data-nosnippet>10351</a>            <span class="self">self
+<a href=#10352 id=10352 data-nosnippet>10352</a>        </span>}
+<a href=#10353 id=10353 data-nosnippet>10353</a>        <span class="doccomment">/// Returns a reference to the provider.
+<a href=#10354 id=10354 data-nosnippet>10354</a>        </span><span class="attr">#[inline]
+<a href=#10355 id=10355 data-nosnippet>10355</a>        </span><span class="kw">pub const fn </span>provider(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>P {
+<a href=#10356 id=10356 data-nosnippet>10356</a>            <span class="kw-2">&amp;</span><span class="self">self</span>.provider
+<a href=#10357 id=10357 data-nosnippet>10357</a>        }
+<a href=#10358 id=10358 data-nosnippet>10358</a>    }
+<a href=#10359 id=10359 data-nosnippet>10359</a>    <span class="kw">impl</span>&lt;P: ::core::clone::Clone, N&gt; OpsTimelockInstance&lt;<span class="kw-2">&amp;</span>P, N&gt; {
+<a href=#10360 id=10360 data-nosnippet>10360</a>        <span class="doccomment">/// Clones the provider and returns a new instance with the cloned provider.
+<a href=#10361 id=10361 data-nosnippet>10361</a>        </span><span class="attr">#[inline]
+<a href=#10362 id=10362 data-nosnippet>10362</a>        </span><span class="kw">pub fn </span>with_cloned_provider(<span class="self">self</span>) -&gt; OpsTimelockInstance&lt;P, N&gt; {
+<a href=#10363 id=10363 data-nosnippet>10363</a>            OpsTimelockInstance {
+<a href=#10364 id=10364 data-nosnippet>10364</a>                address: <span class="self">self</span>.address,
+<a href=#10365 id=10365 data-nosnippet>10365</a>                provider: ::core::clone::Clone::clone(<span class="kw-2">&amp;</span><span class="self">self</span>.provider),
+<a href=#10366 id=10366 data-nosnippet>10366</a>                _network: ::core::marker::PhantomData,
+<a href=#10367 id=10367 data-nosnippet>10367</a>            }
 <a href=#10368 id=10368 data-nosnippet>10368</a>        }
-<a href=#10369 id=10369 data-nosnippet>10369</a>        <span class="doccomment">///Creates a new call builder for the [`PROPOSER_ROLE`] function.
-<a href=#10370 id=10370 data-nosnippet>10370</a>        </span><span class="kw">pub fn </span>PROPOSER_ROLE(
-<a href=#10371 id=10371 data-nosnippet>10371</a>            <span class="kw-2">&amp;</span><span class="self">self</span>,
-<a href=#10372 id=10372 data-nosnippet>10372</a>        ) -&gt; alloy_contract::SolCallBuilder&lt;<span class="kw-2">&amp;</span>P, PROPOSER_ROLECall, N&gt; {
-<a href=#10373 id=10373 data-nosnippet>10373</a>            <span class="self">self</span>.call_builder(<span class="kw-2">&amp;</span>PROPOSER_ROLECall)
-<a href=#10374 id=10374 data-nosnippet>10374</a>        }
-<a href=#10375 id=10375 data-nosnippet>10375</a>        <span class="doccomment">///Creates a new call builder for the [`cancel`] function.
-<a href=#10376 id=10376 data-nosnippet>10376</a>        </span><span class="kw">pub fn </span>cancel(
-<a href=#10377 id=10377 data-nosnippet>10377</a>            <span class="kw-2">&amp;</span><span class="self">self</span>,
-<a href=#10378 id=10378 data-nosnippet>10378</a>            id: alloy::sol_types::private::FixedBytes&lt;<span class="number">32</span>&gt;,
-<a href=#10379 id=10379 data-nosnippet>10379</a>        ) -&gt; alloy_contract::SolCallBuilder&lt;<span class="kw-2">&amp;</span>P, cancelCall, N&gt; {
-<a href=#10380 id=10380 data-nosnippet>10380</a>            <span class="self">self</span>.call_builder(<span class="kw-2">&amp;</span>cancelCall { id })
-<a href=#10381 id=10381 data-nosnippet>10381</a>        }
-<a href=#10382 id=10382 data-nosnippet>10382</a>        <span class="doccomment">///Creates a new call builder for the [`execute`] function.
-<a href=#10383 id=10383 data-nosnippet>10383</a>        </span><span class="kw">pub fn </span>execute(
-<a href=#10384 id=10384 data-nosnippet>10384</a>            <span class="kw-2">&amp;</span><span class="self">self</span>,
-<a href=#10385 id=10385 data-nosnippet>10385</a>            target: alloy::sol_types::private::Address,
-<a href=#10386 id=10386 data-nosnippet>10386</a>            value: alloy::sol_types::private::primitives::aliases::U256,
-<a href=#10387 id=10387 data-nosnippet>10387</a>            payload: alloy::sol_types::private::Bytes,
-<a href=#10388 id=10388 data-nosnippet>10388</a>            predecessor: alloy::sol_types::private::FixedBytes&lt;<span class="number">32</span>&gt;,
-<a href=#10389 id=10389 data-nosnippet>10389</a>            salt: alloy::sol_types::private::FixedBytes&lt;<span class="number">32</span>&gt;,
-<a href=#10390 id=10390 data-nosnippet>10390</a>        ) -&gt; alloy_contract::SolCallBuilder&lt;<span class="kw-2">&amp;</span>P, executeCall, N&gt; {
-<a href=#10391 id=10391 data-nosnippet>10391</a>            <span class="self">self</span>.call_builder(
-<a href=#10392 id=10392 data-nosnippet>10392</a>                <span class="kw-2">&amp;</span>executeCall {
-<a href=#10393 id=10393 data-nosnippet>10393</a>                    target,
-<a href=#10394 id=10394 data-nosnippet>10394</a>                    value,
-<a href=#10395 id=10395 data-nosnippet>10395</a>                    payload,
-<a href=#10396 id=10396 data-nosnippet>10396</a>                    predecessor,
-<a href=#10397 id=10397 data-nosnippet>10397</a>                    salt,
-<a href=#10398 id=10398 data-nosnippet>10398</a>                },
-<a href=#10399 id=10399 data-nosnippet>10399</a>            )
-<a href=#10400 id=10400 data-nosnippet>10400</a>        }
-<a href=#10401 id=10401 data-nosnippet>10401</a>        <span class="doccomment">///Creates a new call builder for the [`executeBatch`] function.
-<a href=#10402 id=10402 data-nosnippet>10402</a>        </span><span class="kw">pub fn </span>executeBatch(
-<a href=#10403 id=10403 data-nosnippet>10403</a>            <span class="kw-2">&amp;</span><span class="self">self</span>,
-<a href=#10404 id=10404 data-nosnippet>10404</a>            targets: alloy::sol_types::private::Vec&lt;alloy::sol_types::private::Address&gt;,
-<a href=#10405 id=10405 data-nosnippet>10405</a>            values: alloy::sol_types::private::Vec&lt;
-<a href=#10406 id=10406 data-nosnippet>10406</a>                alloy::sol_types::private::primitives::aliases::U256,
-<a href=#10407 id=10407 data-nosnippet>10407</a>            &gt;,
-<a href=#10408 id=10408 data-nosnippet>10408</a>            payloads: alloy::sol_types::private::Vec&lt;alloy::sol_types::private::Bytes&gt;,
-<a href=#10409 id=10409 data-nosnippet>10409</a>            predecessor: alloy::sol_types::private::FixedBytes&lt;<span class="number">32</span>&gt;,
-<a href=#10410 id=10410 data-nosnippet>10410</a>            salt: alloy::sol_types::private::FixedBytes&lt;<span class="number">32</span>&gt;,
-<a href=#10411 id=10411 data-nosnippet>10411</a>        ) -&gt; alloy_contract::SolCallBuilder&lt;<span class="kw-2">&amp;</span>P, executeBatchCall, N&gt; {
-<a href=#10412 id=10412 data-nosnippet>10412</a>            <span class="self">self</span>.call_builder(
-<a href=#10413 id=10413 data-nosnippet>10413</a>                <span class="kw-2">&amp;</span>executeBatchCall {
-<a href=#10414 id=10414 data-nosnippet>10414</a>                    targets,
-<a href=#10415 id=10415 data-nosnippet>10415</a>                    values,
-<a href=#10416 id=10416 data-nosnippet>10416</a>                    payloads,
-<a href=#10417 id=10417 data-nosnippet>10417</a>                    predecessor,
-<a href=#10418 id=10418 data-nosnippet>10418</a>                    salt,
-<a href=#10419 id=10419 data-nosnippet>10419</a>                },
-<a href=#10420 id=10420 data-nosnippet>10420</a>            )
-<a href=#10421 id=10421 data-nosnippet>10421</a>        }
-<a href=#10422 id=10422 data-nosnippet>10422</a>        <span class="doccomment">///Creates a new call builder for the [`getMinDelay`] function.
-<a href=#10423 id=10423 data-nosnippet>10423</a>        </span><span class="kw">pub fn </span>getMinDelay(
-<a href=#10424 id=10424 data-nosnippet>10424</a>            <span class="kw-2">&amp;</span><span class="self">self</span>,
-<a href=#10425 id=10425 data-nosnippet>10425</a>        ) -&gt; alloy_contract::SolCallBuilder&lt;<span class="kw-2">&amp;</span>P, getMinDelayCall, N&gt; {
-<a href=#10426 id=10426 data-nosnippet>10426</a>            <span class="self">self</span>.call_builder(<span class="kw-2">&amp;</span>getMinDelayCall)
-<a href=#10427 id=10427 data-nosnippet>10427</a>        }
-<a href=#10428 id=10428 data-nosnippet>10428</a>        <span class="doccomment">///Creates a new call builder for the [`getOperationState`] function.
-<a href=#10429 id=10429 data-nosnippet>10429</a>        </span><span class="kw">pub fn </span>getOperationState(
-<a href=#10430 id=10430 data-nosnippet>10430</a>            <span class="kw-2">&amp;</span><span class="self">self</span>,
-<a href=#10431 id=10431 data-nosnippet>10431</a>            id: alloy::sol_types::private::FixedBytes&lt;<span class="number">32</span>&gt;,
-<a href=#10432 id=10432 data-nosnippet>10432</a>        ) -&gt; alloy_contract::SolCallBuilder&lt;<span class="kw-2">&amp;</span>P, getOperationStateCall, N&gt; {
-<a href=#10433 id=10433 data-nosnippet>10433</a>            <span class="self">self</span>.call_builder(<span class="kw-2">&amp;</span>getOperationStateCall { id })
+<a href=#10369 id=10369 data-nosnippet>10369</a>    }
+<a href=#10370 id=10370 data-nosnippet>10370</a>    <span class="doccomment">/// Function calls.
+<a href=#10371 id=10371 data-nosnippet>10371</a>    </span><span class="kw">impl</span>&lt;
+<a href=#10372 id=10372 data-nosnippet>10372</a>        P: alloy_contract::private::Provider&lt;N&gt;,
+<a href=#10373 id=10373 data-nosnippet>10373</a>        N: alloy_contract::private::Network,
+<a href=#10374 id=10374 data-nosnippet>10374</a>    &gt; OpsTimelockInstance&lt;P, N&gt; {
+<a href=#10375 id=10375 data-nosnippet>10375</a>        <span class="doccomment">/// Creates a new call builder using this contract instance's provider and address.
+<a href=#10376 id=10376 data-nosnippet>10376</a>        ///
+<a href=#10377 id=10377 data-nosnippet>10377</a>        /// Note that the call can be any function call, not just those defined in this
+<a href=#10378 id=10378 data-nosnippet>10378</a>        /// contract. Prefer using the other methods for building type-safe contract calls.
+<a href=#10379 id=10379 data-nosnippet>10379</a>        </span><span class="kw">pub fn </span>call_builder&lt;C: alloy_sol_types::SolCall&gt;(
+<a href=#10380 id=10380 data-nosnippet>10380</a>            <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#10381 id=10381 data-nosnippet>10381</a>            call: <span class="kw-2">&amp;</span>C,
+<a href=#10382 id=10382 data-nosnippet>10382</a>        ) -&gt; alloy_contract::SolCallBuilder&lt;<span class="kw-2">&amp;</span>P, C, N&gt; {
+<a href=#10383 id=10383 data-nosnippet>10383</a>            alloy_contract::SolCallBuilder::new_sol(<span class="kw-2">&amp;</span><span class="self">self</span>.provider, <span class="kw-2">&amp;</span><span class="self">self</span>.address, call)
+<a href=#10384 id=10384 data-nosnippet>10384</a>        }
+<a href=#10385 id=10385 data-nosnippet>10385</a>        <span class="doccomment">///Creates a new call builder for the [`CANCELLER_ROLE`] function.
+<a href=#10386 id=10386 data-nosnippet>10386</a>        </span><span class="kw">pub fn </span>CANCELLER_ROLE(
+<a href=#10387 id=10387 data-nosnippet>10387</a>            <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#10388 id=10388 data-nosnippet>10388</a>        ) -&gt; alloy_contract::SolCallBuilder&lt;<span class="kw-2">&amp;</span>P, CANCELLER_ROLECall, N&gt; {
+<a href=#10389 id=10389 data-nosnippet>10389</a>            <span class="self">self</span>.call_builder(<span class="kw-2">&amp;</span>CANCELLER_ROLECall)
+<a href=#10390 id=10390 data-nosnippet>10390</a>        }
+<a href=#10391 id=10391 data-nosnippet>10391</a>        <span class="doccomment">///Creates a new call builder for the [`DEFAULT_ADMIN_ROLE`] function.
+<a href=#10392 id=10392 data-nosnippet>10392</a>        </span><span class="kw">pub fn </span>DEFAULT_ADMIN_ROLE(
+<a href=#10393 id=10393 data-nosnippet>10393</a>            <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#10394 id=10394 data-nosnippet>10394</a>        ) -&gt; alloy_contract::SolCallBuilder&lt;<span class="kw-2">&amp;</span>P, DEFAULT_ADMIN_ROLECall, N&gt; {
+<a href=#10395 id=10395 data-nosnippet>10395</a>            <span class="self">self</span>.call_builder(<span class="kw-2">&amp;</span>DEFAULT_ADMIN_ROLECall)
+<a href=#10396 id=10396 data-nosnippet>10396</a>        }
+<a href=#10397 id=10397 data-nosnippet>10397</a>        <span class="doccomment">///Creates a new call builder for the [`EXECUTOR_ROLE`] function.
+<a href=#10398 id=10398 data-nosnippet>10398</a>        </span><span class="kw">pub fn </span>EXECUTOR_ROLE(
+<a href=#10399 id=10399 data-nosnippet>10399</a>            <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#10400 id=10400 data-nosnippet>10400</a>        ) -&gt; alloy_contract::SolCallBuilder&lt;<span class="kw-2">&amp;</span>P, EXECUTOR_ROLECall, N&gt; {
+<a href=#10401 id=10401 data-nosnippet>10401</a>            <span class="self">self</span>.call_builder(<span class="kw-2">&amp;</span>EXECUTOR_ROLECall)
+<a href=#10402 id=10402 data-nosnippet>10402</a>        }
+<a href=#10403 id=10403 data-nosnippet>10403</a>        <span class="doccomment">///Creates a new call builder for the [`PROPOSER_ROLE`] function.
+<a href=#10404 id=10404 data-nosnippet>10404</a>        </span><span class="kw">pub fn </span>PROPOSER_ROLE(
+<a href=#10405 id=10405 data-nosnippet>10405</a>            <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#10406 id=10406 data-nosnippet>10406</a>        ) -&gt; alloy_contract::SolCallBuilder&lt;<span class="kw-2">&amp;</span>P, PROPOSER_ROLECall, N&gt; {
+<a href=#10407 id=10407 data-nosnippet>10407</a>            <span class="self">self</span>.call_builder(<span class="kw-2">&amp;</span>PROPOSER_ROLECall)
+<a href=#10408 id=10408 data-nosnippet>10408</a>        }
+<a href=#10409 id=10409 data-nosnippet>10409</a>        <span class="doccomment">///Creates a new call builder for the [`cancel`] function.
+<a href=#10410 id=10410 data-nosnippet>10410</a>        </span><span class="kw">pub fn </span>cancel(
+<a href=#10411 id=10411 data-nosnippet>10411</a>            <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#10412 id=10412 data-nosnippet>10412</a>            id: alloy::sol_types::private::FixedBytes&lt;<span class="number">32</span>&gt;,
+<a href=#10413 id=10413 data-nosnippet>10413</a>        ) -&gt; alloy_contract::SolCallBuilder&lt;<span class="kw-2">&amp;</span>P, cancelCall, N&gt; {
+<a href=#10414 id=10414 data-nosnippet>10414</a>            <span class="self">self</span>.call_builder(<span class="kw-2">&amp;</span>cancelCall { id })
+<a href=#10415 id=10415 data-nosnippet>10415</a>        }
+<a href=#10416 id=10416 data-nosnippet>10416</a>        <span class="doccomment">///Creates a new call builder for the [`execute`] function.
+<a href=#10417 id=10417 data-nosnippet>10417</a>        </span><span class="kw">pub fn </span>execute(
+<a href=#10418 id=10418 data-nosnippet>10418</a>            <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#10419 id=10419 data-nosnippet>10419</a>            target: alloy::sol_types::private::Address,
+<a href=#10420 id=10420 data-nosnippet>10420</a>            value: alloy::sol_types::private::primitives::aliases::U256,
+<a href=#10421 id=10421 data-nosnippet>10421</a>            payload: alloy::sol_types::private::Bytes,
+<a href=#10422 id=10422 data-nosnippet>10422</a>            predecessor: alloy::sol_types::private::FixedBytes&lt;<span class="number">32</span>&gt;,
+<a href=#10423 id=10423 data-nosnippet>10423</a>            salt: alloy::sol_types::private::FixedBytes&lt;<span class="number">32</span>&gt;,
+<a href=#10424 id=10424 data-nosnippet>10424</a>        ) -&gt; alloy_contract::SolCallBuilder&lt;<span class="kw-2">&amp;</span>P, executeCall, N&gt; {
+<a href=#10425 id=10425 data-nosnippet>10425</a>            <span class="self">self</span>.call_builder(
+<a href=#10426 id=10426 data-nosnippet>10426</a>                <span class="kw-2">&amp;</span>executeCall {
+<a href=#10427 id=10427 data-nosnippet>10427</a>                    target,
+<a href=#10428 id=10428 data-nosnippet>10428</a>                    value,
+<a href=#10429 id=10429 data-nosnippet>10429</a>                    payload,
+<a href=#10430 id=10430 data-nosnippet>10430</a>                    predecessor,
+<a href=#10431 id=10431 data-nosnippet>10431</a>                    salt,
+<a href=#10432 id=10432 data-nosnippet>10432</a>                },
+<a href=#10433 id=10433 data-nosnippet>10433</a>            )
 <a href=#10434 id=10434 data-nosnippet>10434</a>        }
-<a href=#10435 id=10435 data-nosnippet>10435</a>        <span class="doccomment">///Creates a new call builder for the [`getRoleAdmin`] function.
-<a href=#10436 id=10436 data-nosnippet>10436</a>        </span><span class="kw">pub fn </span>getRoleAdmin(
+<a href=#10435 id=10435 data-nosnippet>10435</a>        <span class="doccomment">///Creates a new call builder for the [`executeBatch`] function.
+<a href=#10436 id=10436 data-nosnippet>10436</a>        </span><span class="kw">pub fn </span>executeBatch(
 <a href=#10437 id=10437 data-nosnippet>10437</a>            <span class="kw-2">&amp;</span><span class="self">self</span>,
-<a href=#10438 id=10438 data-nosnippet>10438</a>            role: alloy::sol_types::private::FixedBytes&lt;<span class="number">32</span>&gt;,
-<a href=#10439 id=10439 data-nosnippet>10439</a>        ) -&gt; alloy_contract::SolCallBuilder&lt;<span class="kw-2">&amp;</span>P, getRoleAdminCall, N&gt; {
-<a href=#10440 id=10440 data-nosnippet>10440</a>            <span class="self">self</span>.call_builder(<span class="kw-2">&amp;</span>getRoleAdminCall { role })
-<a href=#10441 id=10441 data-nosnippet>10441</a>        }
-<a href=#10442 id=10442 data-nosnippet>10442</a>        <span class="doccomment">///Creates a new call builder for the [`getTimestamp`] function.
-<a href=#10443 id=10443 data-nosnippet>10443</a>        </span><span class="kw">pub fn </span>getTimestamp(
-<a href=#10444 id=10444 data-nosnippet>10444</a>            <span class="kw-2">&amp;</span><span class="self">self</span>,
-<a href=#10445 id=10445 data-nosnippet>10445</a>            id: alloy::sol_types::private::FixedBytes&lt;<span class="number">32</span>&gt;,
-<a href=#10446 id=10446 data-nosnippet>10446</a>        ) -&gt; alloy_contract::SolCallBuilder&lt;<span class="kw-2">&amp;</span>P, getTimestampCall, N&gt; {
-<a href=#10447 id=10447 data-nosnippet>10447</a>            <span class="self">self</span>.call_builder(<span class="kw-2">&amp;</span>getTimestampCall { id })
-<a href=#10448 id=10448 data-nosnippet>10448</a>        }
-<a href=#10449 id=10449 data-nosnippet>10449</a>        <span class="doccomment">///Creates a new call builder for the [`grantRole`] function.
-<a href=#10450 id=10450 data-nosnippet>10450</a>        </span><span class="kw">pub fn </span>grantRole(
-<a href=#10451 id=10451 data-nosnippet>10451</a>            <span class="kw-2">&amp;</span><span class="self">self</span>,
-<a href=#10452 id=10452 data-nosnippet>10452</a>            role: alloy::sol_types::private::FixedBytes&lt;<span class="number">32</span>&gt;,
-<a href=#10453 id=10453 data-nosnippet>10453</a>            account: alloy::sol_types::private::Address,
-<a href=#10454 id=10454 data-nosnippet>10454</a>        ) -&gt; alloy_contract::SolCallBuilder&lt;<span class="kw-2">&amp;</span>P, grantRoleCall, N&gt; {
-<a href=#10455 id=10455 data-nosnippet>10455</a>            <span class="self">self</span>.call_builder(<span class="kw-2">&amp;</span>grantRoleCall { role, account })
-<a href=#10456 id=10456 data-nosnippet>10456</a>        }
-<a href=#10457 id=10457 data-nosnippet>10457</a>        <span class="doccomment">///Creates a new call builder for the [`hasRole`] function.
-<a href=#10458 id=10458 data-nosnippet>10458</a>        </span><span class="kw">pub fn </span>hasRole(
-<a href=#10459 id=10459 data-nosnippet>10459</a>            <span class="kw-2">&amp;</span><span class="self">self</span>,
-<a href=#10460 id=10460 data-nosnippet>10460</a>            role: alloy::sol_types::private::FixedBytes&lt;<span class="number">32</span>&gt;,
-<a href=#10461 id=10461 data-nosnippet>10461</a>            account: alloy::sol_types::private::Address,
-<a href=#10462 id=10462 data-nosnippet>10462</a>        ) -&gt; alloy_contract::SolCallBuilder&lt;<span class="kw-2">&amp;</span>P, hasRoleCall, N&gt; {
-<a href=#10463 id=10463 data-nosnippet>10463</a>            <span class="self">self</span>.call_builder(<span class="kw-2">&amp;</span>hasRoleCall { role, account })
-<a href=#10464 id=10464 data-nosnippet>10464</a>        }
-<a href=#10465 id=10465 data-nosnippet>10465</a>        <span class="doccomment">///Creates a new call builder for the [`hashOperation`] function.
-<a href=#10466 id=10466 data-nosnippet>10466</a>        </span><span class="kw">pub fn </span>hashOperation(
-<a href=#10467 id=10467 data-nosnippet>10467</a>            <span class="kw-2">&amp;</span><span class="self">self</span>,
-<a href=#10468 id=10468 data-nosnippet>10468</a>            target: alloy::sol_types::private::Address,
-<a href=#10469 id=10469 data-nosnippet>10469</a>            value: alloy::sol_types::private::primitives::aliases::U256,
-<a href=#10470 id=10470 data-nosnippet>10470</a>            data: alloy::sol_types::private::Bytes,
-<a href=#10471 id=10471 data-nosnippet>10471</a>            predecessor: alloy::sol_types::private::FixedBytes&lt;<span class="number">32</span>&gt;,
-<a href=#10472 id=10472 data-nosnippet>10472</a>            salt: alloy::sol_types::private::FixedBytes&lt;<span class="number">32</span>&gt;,
-<a href=#10473 id=10473 data-nosnippet>10473</a>        ) -&gt; alloy_contract::SolCallBuilder&lt;<span class="kw-2">&amp;</span>P, hashOperationCall, N&gt; {
-<a href=#10474 id=10474 data-nosnippet>10474</a>            <span class="self">self</span>.call_builder(
-<a href=#10475 id=10475 data-nosnippet>10475</a>                <span class="kw-2">&amp;</span>hashOperationCall {
-<a href=#10476 id=10476 data-nosnippet>10476</a>                    target,
-<a href=#10477 id=10477 data-nosnippet>10477</a>                    value,
-<a href=#10478 id=10478 data-nosnippet>10478</a>                    data,
-<a href=#10479 id=10479 data-nosnippet>10479</a>                    predecessor,
-<a href=#10480 id=10480 data-nosnippet>10480</a>                    salt,
-<a href=#10481 id=10481 data-nosnippet>10481</a>                },
-<a href=#10482 id=10482 data-nosnippet>10482</a>            )
-<a href=#10483 id=10483 data-nosnippet>10483</a>        }
-<a href=#10484 id=10484 data-nosnippet>10484</a>        <span class="doccomment">///Creates a new call builder for the [`hashOperationBatch`] function.
-<a href=#10485 id=10485 data-nosnippet>10485</a>        </span><span class="kw">pub fn </span>hashOperationBatch(
-<a href=#10486 id=10486 data-nosnippet>10486</a>            <span class="kw-2">&amp;</span><span class="self">self</span>,
-<a href=#10487 id=10487 data-nosnippet>10487</a>            targets: alloy::sol_types::private::Vec&lt;alloy::sol_types::private::Address&gt;,
-<a href=#10488 id=10488 data-nosnippet>10488</a>            values: alloy::sol_types::private::Vec&lt;
-<a href=#10489 id=10489 data-nosnippet>10489</a>                alloy::sol_types::private::primitives::aliases::U256,
-<a href=#10490 id=10490 data-nosnippet>10490</a>            &gt;,
-<a href=#10491 id=10491 data-nosnippet>10491</a>            payloads: alloy::sol_types::private::Vec&lt;alloy::sol_types::private::Bytes&gt;,
-<a href=#10492 id=10492 data-nosnippet>10492</a>            predecessor: alloy::sol_types::private::FixedBytes&lt;<span class="number">32</span>&gt;,
-<a href=#10493 id=10493 data-nosnippet>10493</a>            salt: alloy::sol_types::private::FixedBytes&lt;<span class="number">32</span>&gt;,
-<a href=#10494 id=10494 data-nosnippet>10494</a>        ) -&gt; alloy_contract::SolCallBuilder&lt;<span class="kw-2">&amp;</span>P, hashOperationBatchCall, N&gt; {
-<a href=#10495 id=10495 data-nosnippet>10495</a>            <span class="self">self</span>.call_builder(
-<a href=#10496 id=10496 data-nosnippet>10496</a>                <span class="kw-2">&amp;</span>hashOperationBatchCall {
-<a href=#10497 id=10497 data-nosnippet>10497</a>                    targets,
-<a href=#10498 id=10498 data-nosnippet>10498</a>                    values,
-<a href=#10499 id=10499 data-nosnippet>10499</a>                    payloads,
-<a href=#10500 id=10500 data-nosnippet>10500</a>                    predecessor,
-<a href=#10501 id=10501 data-nosnippet>10501</a>                    salt,
-<a href=#10502 id=10502 data-nosnippet>10502</a>                },
-<a href=#10503 id=10503 data-nosnippet>10503</a>            )
-<a href=#10504 id=10504 data-nosnippet>10504</a>        }
-<a href=#10505 id=10505 data-nosnippet>10505</a>        <span class="doccomment">///Creates a new call builder for the [`isOperation`] function.
-<a href=#10506 id=10506 data-nosnippet>10506</a>        </span><span class="kw">pub fn </span>isOperation(
-<a href=#10507 id=10507 data-nosnippet>10507</a>            <span class="kw-2">&amp;</span><span class="self">self</span>,
-<a href=#10508 id=10508 data-nosnippet>10508</a>            id: alloy::sol_types::private::FixedBytes&lt;<span class="number">32</span>&gt;,
-<a href=#10509 id=10509 data-nosnippet>10509</a>        ) -&gt; alloy_contract::SolCallBuilder&lt;<span class="kw-2">&amp;</span>P, isOperationCall, N&gt; {
-<a href=#10510 id=10510 data-nosnippet>10510</a>            <span class="self">self</span>.call_builder(<span class="kw-2">&amp;</span>isOperationCall { id })
-<a href=#10511 id=10511 data-nosnippet>10511</a>        }
-<a href=#10512 id=10512 data-nosnippet>10512</a>        <span class="doccomment">///Creates a new call builder for the [`isOperationDone`] function.
-<a href=#10513 id=10513 data-nosnippet>10513</a>        </span><span class="kw">pub fn </span>isOperationDone(
-<a href=#10514 id=10514 data-nosnippet>10514</a>            <span class="kw-2">&amp;</span><span class="self">self</span>,
-<a href=#10515 id=10515 data-nosnippet>10515</a>            id: alloy::sol_types::private::FixedBytes&lt;<span class="number">32</span>&gt;,
-<a href=#10516 id=10516 data-nosnippet>10516</a>        ) -&gt; alloy_contract::SolCallBuilder&lt;<span class="kw-2">&amp;</span>P, isOperationDoneCall, N&gt; {
-<a href=#10517 id=10517 data-nosnippet>10517</a>            <span class="self">self</span>.call_builder(<span class="kw-2">&amp;</span>isOperationDoneCall { id })
-<a href=#10518 id=10518 data-nosnippet>10518</a>        }
-<a href=#10519 id=10519 data-nosnippet>10519</a>        <span class="doccomment">///Creates a new call builder for the [`isOperationPending`] function.
-<a href=#10520 id=10520 data-nosnippet>10520</a>        </span><span class="kw">pub fn </span>isOperationPending(
-<a href=#10521 id=10521 data-nosnippet>10521</a>            <span class="kw-2">&amp;</span><span class="self">self</span>,
-<a href=#10522 id=10522 data-nosnippet>10522</a>            id: alloy::sol_types::private::FixedBytes&lt;<span class="number">32</span>&gt;,
-<a href=#10523 id=10523 data-nosnippet>10523</a>        ) -&gt; alloy_contract::SolCallBuilder&lt;<span class="kw-2">&amp;</span>P, isOperationPendingCall, N&gt; {
-<a href=#10524 id=10524 data-nosnippet>10524</a>            <span class="self">self</span>.call_builder(<span class="kw-2">&amp;</span>isOperationPendingCall { id })
-<a href=#10525 id=10525 data-nosnippet>10525</a>        }
-<a href=#10526 id=10526 data-nosnippet>10526</a>        <span class="doccomment">///Creates a new call builder for the [`isOperationReady`] function.
-<a href=#10527 id=10527 data-nosnippet>10527</a>        </span><span class="kw">pub fn </span>isOperationReady(
-<a href=#10528 id=10528 data-nosnippet>10528</a>            <span class="kw-2">&amp;</span><span class="self">self</span>,
-<a href=#10529 id=10529 data-nosnippet>10529</a>            id: alloy::sol_types::private::FixedBytes&lt;<span class="number">32</span>&gt;,
-<a href=#10530 id=10530 data-nosnippet>10530</a>        ) -&gt; alloy_contract::SolCallBuilder&lt;<span class="kw-2">&amp;</span>P, isOperationReadyCall, N&gt; {
-<a href=#10531 id=10531 data-nosnippet>10531</a>            <span class="self">self</span>.call_builder(<span class="kw-2">&amp;</span>isOperationReadyCall { id })
-<a href=#10532 id=10532 data-nosnippet>10532</a>        }
-<a href=#10533 id=10533 data-nosnippet>10533</a>        <span class="doccomment">///Creates a new call builder for the [`onERC1155BatchReceived`] function.
-<a href=#10534 id=10534 data-nosnippet>10534</a>        </span><span class="kw">pub fn </span>onERC1155BatchReceived(
-<a href=#10535 id=10535 data-nosnippet>10535</a>            <span class="kw-2">&amp;</span><span class="self">self</span>,
-<a href=#10536 id=10536 data-nosnippet>10536</a>            _0: alloy::sol_types::private::Address,
-<a href=#10537 id=10537 data-nosnippet>10537</a>            _1: alloy::sol_types::private::Address,
-<a href=#10538 id=10538 data-nosnippet>10538</a>            _2: alloy::sol_types::private::Vec&lt;
-<a href=#10539 id=10539 data-nosnippet>10539</a>                alloy::sol_types::private::primitives::aliases::U256,
-<a href=#10540 id=10540 data-nosnippet>10540</a>            &gt;,
-<a href=#10541 id=10541 data-nosnippet>10541</a>            _3: alloy::sol_types::private::Vec&lt;
-<a href=#10542 id=10542 data-nosnippet>10542</a>                alloy::sol_types::private::primitives::aliases::U256,
-<a href=#10543 id=10543 data-nosnippet>10543</a>            &gt;,
-<a href=#10544 id=10544 data-nosnippet>10544</a>            _4: alloy::sol_types::private::Bytes,
-<a href=#10545 id=10545 data-nosnippet>10545</a>        ) -&gt; alloy_contract::SolCallBuilder&lt;<span class="kw-2">&amp;</span>P, onERC1155BatchReceivedCall, N&gt; {
-<a href=#10546 id=10546 data-nosnippet>10546</a>            <span class="self">self</span>.call_builder(
-<a href=#10547 id=10547 data-nosnippet>10547</a>                <span class="kw-2">&amp;</span>onERC1155BatchReceivedCall {
-<a href=#10548 id=10548 data-nosnippet>10548</a>                    _0,
-<a href=#10549 id=10549 data-nosnippet>10549</a>                    _1,
-<a href=#10550 id=10550 data-nosnippet>10550</a>                    _2,
-<a href=#10551 id=10551 data-nosnippet>10551</a>                    _3,
-<a href=#10552 id=10552 data-nosnippet>10552</a>                    _4,
-<a href=#10553 id=10553 data-nosnippet>10553</a>                },
-<a href=#10554 id=10554 data-nosnippet>10554</a>            )
-<a href=#10555 id=10555 data-nosnippet>10555</a>        }
-<a href=#10556 id=10556 data-nosnippet>10556</a>        <span class="doccomment">///Creates a new call builder for the [`onERC1155Received`] function.
-<a href=#10557 id=10557 data-nosnippet>10557</a>        </span><span class="kw">pub fn </span>onERC1155Received(
-<a href=#10558 id=10558 data-nosnippet>10558</a>            <span class="kw-2">&amp;</span><span class="self">self</span>,
-<a href=#10559 id=10559 data-nosnippet>10559</a>            _0: alloy::sol_types::private::Address,
-<a href=#10560 id=10560 data-nosnippet>10560</a>            _1: alloy::sol_types::private::Address,
-<a href=#10561 id=10561 data-nosnippet>10561</a>            _2: alloy::sol_types::private::primitives::aliases::U256,
-<a href=#10562 id=10562 data-nosnippet>10562</a>            _3: alloy::sol_types::private::primitives::aliases::U256,
-<a href=#10563 id=10563 data-nosnippet>10563</a>            _4: alloy::sol_types::private::Bytes,
-<a href=#10564 id=10564 data-nosnippet>10564</a>        ) -&gt; alloy_contract::SolCallBuilder&lt;<span class="kw-2">&amp;</span>P, onERC1155ReceivedCall, N&gt; {
-<a href=#10565 id=10565 data-nosnippet>10565</a>            <span class="self">self</span>.call_builder(
-<a href=#10566 id=10566 data-nosnippet>10566</a>                <span class="kw-2">&amp;</span>onERC1155ReceivedCall {
-<a href=#10567 id=10567 data-nosnippet>10567</a>                    _0,
-<a href=#10568 id=10568 data-nosnippet>10568</a>                    _1,
-<a href=#10569 id=10569 data-nosnippet>10569</a>                    _2,
-<a href=#10570 id=10570 data-nosnippet>10570</a>                    _3,
-<a href=#10571 id=10571 data-nosnippet>10571</a>                    _4,
-<a href=#10572 id=10572 data-nosnippet>10572</a>                },
-<a href=#10573 id=10573 data-nosnippet>10573</a>            )
-<a href=#10574 id=10574 data-nosnippet>10574</a>        }
-<a href=#10575 id=10575 data-nosnippet>10575</a>        <span class="doccomment">///Creates a new call builder for the [`onERC721Received`] function.
-<a href=#10576 id=10576 data-nosnippet>10576</a>        </span><span class="kw">pub fn </span>onERC721Received(
-<a href=#10577 id=10577 data-nosnippet>10577</a>            <span class="kw-2">&amp;</span><span class="self">self</span>,
-<a href=#10578 id=10578 data-nosnippet>10578</a>            _0: alloy::sol_types::private::Address,
-<a href=#10579 id=10579 data-nosnippet>10579</a>            _1: alloy::sol_types::private::Address,
-<a href=#10580 id=10580 data-nosnippet>10580</a>            _2: alloy::sol_types::private::primitives::aliases::U256,
-<a href=#10581 id=10581 data-nosnippet>10581</a>            _3: alloy::sol_types::private::Bytes,
-<a href=#10582 id=10582 data-nosnippet>10582</a>        ) -&gt; alloy_contract::SolCallBuilder&lt;<span class="kw-2">&amp;</span>P, onERC721ReceivedCall, N&gt; {
-<a href=#10583 id=10583 data-nosnippet>10583</a>            <span class="self">self</span>.call_builder(
-<a href=#10584 id=10584 data-nosnippet>10584</a>                <span class="kw-2">&amp;</span>onERC721ReceivedCall {
-<a href=#10585 id=10585 data-nosnippet>10585</a>                    _0,
-<a href=#10586 id=10586 data-nosnippet>10586</a>                    _1,
-<a href=#10587 id=10587 data-nosnippet>10587</a>                    _2,
-<a href=#10588 id=10588 data-nosnippet>10588</a>                    _3,
-<a href=#10589 id=10589 data-nosnippet>10589</a>                },
-<a href=#10590 id=10590 data-nosnippet>10590</a>            )
-<a href=#10591 id=10591 data-nosnippet>10591</a>        }
-<a href=#10592 id=10592 data-nosnippet>10592</a>        <span class="doccomment">///Creates a new call builder for the [`renounceRole`] function.
-<a href=#10593 id=10593 data-nosnippet>10593</a>        </span><span class="kw">pub fn </span>renounceRole(
-<a href=#10594 id=10594 data-nosnippet>10594</a>            <span class="kw-2">&amp;</span><span class="self">self</span>,
-<a href=#10595 id=10595 data-nosnippet>10595</a>            role: alloy::sol_types::private::FixedBytes&lt;<span class="number">32</span>&gt;,
-<a href=#10596 id=10596 data-nosnippet>10596</a>            callerConfirmation: alloy::sol_types::private::Address,
-<a href=#10597 id=10597 data-nosnippet>10597</a>        ) -&gt; alloy_contract::SolCallBuilder&lt;<span class="kw-2">&amp;</span>P, renounceRoleCall, N&gt; {
-<a href=#10598 id=10598 data-nosnippet>10598</a>            <span class="self">self</span>.call_builder(
-<a href=#10599 id=10599 data-nosnippet>10599</a>                <span class="kw-2">&amp;</span>renounceRoleCall {
-<a href=#10600 id=10600 data-nosnippet>10600</a>                    role,
-<a href=#10601 id=10601 data-nosnippet>10601</a>                    callerConfirmation,
-<a href=#10602 id=10602 data-nosnippet>10602</a>                },
-<a href=#10603 id=10603 data-nosnippet>10603</a>            )
-<a href=#10604 id=10604 data-nosnippet>10604</a>        }
-<a href=#10605 id=10605 data-nosnippet>10605</a>        <span class="doccomment">///Creates a new call builder for the [`revokeRole`] function.
-<a href=#10606 id=10606 data-nosnippet>10606</a>        </span><span class="kw">pub fn </span>revokeRole(
-<a href=#10607 id=10607 data-nosnippet>10607</a>            <span class="kw-2">&amp;</span><span class="self">self</span>,
-<a href=#10608 id=10608 data-nosnippet>10608</a>            role: alloy::sol_types::private::FixedBytes&lt;<span class="number">32</span>&gt;,
-<a href=#10609 id=10609 data-nosnippet>10609</a>            account: alloy::sol_types::private::Address,
-<a href=#10610 id=10610 data-nosnippet>10610</a>        ) -&gt; alloy_contract::SolCallBuilder&lt;<span class="kw-2">&amp;</span>P, revokeRoleCall, N&gt; {
-<a href=#10611 id=10611 data-nosnippet>10611</a>            <span class="self">self</span>.call_builder(<span class="kw-2">&amp;</span>revokeRoleCall { role, account })
-<a href=#10612 id=10612 data-nosnippet>10612</a>        }
-<a href=#10613 id=10613 data-nosnippet>10613</a>        <span class="doccomment">///Creates a new call builder for the [`schedule`] function.
-<a href=#10614 id=10614 data-nosnippet>10614</a>        </span><span class="kw">pub fn </span>schedule(
-<a href=#10615 id=10615 data-nosnippet>10615</a>            <span class="kw-2">&amp;</span><span class="self">self</span>,
-<a href=#10616 id=10616 data-nosnippet>10616</a>            target: alloy::sol_types::private::Address,
-<a href=#10617 id=10617 data-nosnippet>10617</a>            value: alloy::sol_types::private::primitives::aliases::U256,
-<a href=#10618 id=10618 data-nosnippet>10618</a>            data: alloy::sol_types::private::Bytes,
-<a href=#10619 id=10619 data-nosnippet>10619</a>            predecessor: alloy::sol_types::private::FixedBytes&lt;<span class="number">32</span>&gt;,
-<a href=#10620 id=10620 data-nosnippet>10620</a>            salt: alloy::sol_types::private::FixedBytes&lt;<span class="number">32</span>&gt;,
-<a href=#10621 id=10621 data-nosnippet>10621</a>            delay: alloy::sol_types::private::primitives::aliases::U256,
-<a href=#10622 id=10622 data-nosnippet>10622</a>        ) -&gt; alloy_contract::SolCallBuilder&lt;<span class="kw-2">&amp;</span>P, scheduleCall, N&gt; {
-<a href=#10623 id=10623 data-nosnippet>10623</a>            <span class="self">self</span>.call_builder(
-<a href=#10624 id=10624 data-nosnippet>10624</a>                <span class="kw-2">&amp;</span>scheduleCall {
-<a href=#10625 id=10625 data-nosnippet>10625</a>                    target,
-<a href=#10626 id=10626 data-nosnippet>10626</a>                    value,
-<a href=#10627 id=10627 data-nosnippet>10627</a>                    data,
-<a href=#10628 id=10628 data-nosnippet>10628</a>                    predecessor,
-<a href=#10629 id=10629 data-nosnippet>10629</a>                    salt,
-<a href=#10630 id=10630 data-nosnippet>10630</a>                    delay,
-<a href=#10631 id=10631 data-nosnippet>10631</a>                },
-<a href=#10632 id=10632 data-nosnippet>10632</a>            )
-<a href=#10633 id=10633 data-nosnippet>10633</a>        }
-<a href=#10634 id=10634 data-nosnippet>10634</a>        <span class="doccomment">///Creates a new call builder for the [`scheduleBatch`] function.
-<a href=#10635 id=10635 data-nosnippet>10635</a>        </span><span class="kw">pub fn </span>scheduleBatch(
-<a href=#10636 id=10636 data-nosnippet>10636</a>            <span class="kw-2">&amp;</span><span class="self">self</span>,
-<a href=#10637 id=10637 data-nosnippet>10637</a>            targets: alloy::sol_types::private::Vec&lt;alloy::sol_types::private::Address&gt;,
-<a href=#10638 id=10638 data-nosnippet>10638</a>            values: alloy::sol_types::private::Vec&lt;
-<a href=#10639 id=10639 data-nosnippet>10639</a>                alloy::sol_types::private::primitives::aliases::U256,
-<a href=#10640 id=10640 data-nosnippet>10640</a>            &gt;,
-<a href=#10641 id=10641 data-nosnippet>10641</a>            payloads: alloy::sol_types::private::Vec&lt;alloy::sol_types::private::Bytes&gt;,
-<a href=#10642 id=10642 data-nosnippet>10642</a>            predecessor: alloy::sol_types::private::FixedBytes&lt;<span class="number">32</span>&gt;,
-<a href=#10643 id=10643 data-nosnippet>10643</a>            salt: alloy::sol_types::private::FixedBytes&lt;<span class="number">32</span>&gt;,
-<a href=#10644 id=10644 data-nosnippet>10644</a>            delay: alloy::sol_types::private::primitives::aliases::U256,
-<a href=#10645 id=10645 data-nosnippet>10645</a>        ) -&gt; alloy_contract::SolCallBuilder&lt;<span class="kw-2">&amp;</span>P, scheduleBatchCall, N&gt; {
-<a href=#10646 id=10646 data-nosnippet>10646</a>            <span class="self">self</span>.call_builder(
-<a href=#10647 id=10647 data-nosnippet>10647</a>                <span class="kw-2">&amp;</span>scheduleBatchCall {
-<a href=#10648 id=10648 data-nosnippet>10648</a>                    targets,
-<a href=#10649 id=10649 data-nosnippet>10649</a>                    values,
-<a href=#10650 id=10650 data-nosnippet>10650</a>                    payloads,
-<a href=#10651 id=10651 data-nosnippet>10651</a>                    predecessor,
-<a href=#10652 id=10652 data-nosnippet>10652</a>                    salt,
-<a href=#10653 id=10653 data-nosnippet>10653</a>                    delay,
-<a href=#10654 id=10654 data-nosnippet>10654</a>                },
-<a href=#10655 id=10655 data-nosnippet>10655</a>            )
-<a href=#10656 id=10656 data-nosnippet>10656</a>        }
-<a href=#10657 id=10657 data-nosnippet>10657</a>        <span class="doccomment">///Creates a new call builder for the [`supportsInterface`] function.
-<a href=#10658 id=10658 data-nosnippet>10658</a>        </span><span class="kw">pub fn </span>supportsInterface(
-<a href=#10659 id=10659 data-nosnippet>10659</a>            <span class="kw-2">&amp;</span><span class="self">self</span>,
-<a href=#10660 id=10660 data-nosnippet>10660</a>            interfaceId: alloy::sol_types::private::FixedBytes&lt;<span class="number">4</span>&gt;,
-<a href=#10661 id=10661 data-nosnippet>10661</a>        ) -&gt; alloy_contract::SolCallBuilder&lt;<span class="kw-2">&amp;</span>P, supportsInterfaceCall, N&gt; {
-<a href=#10662 id=10662 data-nosnippet>10662</a>            <span class="self">self</span>.call_builder(
-<a href=#10663 id=10663 data-nosnippet>10663</a>                <span class="kw-2">&amp;</span>supportsInterfaceCall {
-<a href=#10664 id=10664 data-nosnippet>10664</a>                    interfaceId,
+<a href=#10438 id=10438 data-nosnippet>10438</a>            targets: alloy::sol_types::private::Vec&lt;alloy::sol_types::private::Address&gt;,
+<a href=#10439 id=10439 data-nosnippet>10439</a>            values: alloy::sol_types::private::Vec&lt;
+<a href=#10440 id=10440 data-nosnippet>10440</a>                alloy::sol_types::private::primitives::aliases::U256,
+<a href=#10441 id=10441 data-nosnippet>10441</a>            &gt;,
+<a href=#10442 id=10442 data-nosnippet>10442</a>            payloads: alloy::sol_types::private::Vec&lt;alloy::sol_types::private::Bytes&gt;,
+<a href=#10443 id=10443 data-nosnippet>10443</a>            predecessor: alloy::sol_types::private::FixedBytes&lt;<span class="number">32</span>&gt;,
+<a href=#10444 id=10444 data-nosnippet>10444</a>            salt: alloy::sol_types::private::FixedBytes&lt;<span class="number">32</span>&gt;,
+<a href=#10445 id=10445 data-nosnippet>10445</a>        ) -&gt; alloy_contract::SolCallBuilder&lt;<span class="kw-2">&amp;</span>P, executeBatchCall, N&gt; {
+<a href=#10446 id=10446 data-nosnippet>10446</a>            <span class="self">self</span>.call_builder(
+<a href=#10447 id=10447 data-nosnippet>10447</a>                <span class="kw-2">&amp;</span>executeBatchCall {
+<a href=#10448 id=10448 data-nosnippet>10448</a>                    targets,
+<a href=#10449 id=10449 data-nosnippet>10449</a>                    values,
+<a href=#10450 id=10450 data-nosnippet>10450</a>                    payloads,
+<a href=#10451 id=10451 data-nosnippet>10451</a>                    predecessor,
+<a href=#10452 id=10452 data-nosnippet>10452</a>                    salt,
+<a href=#10453 id=10453 data-nosnippet>10453</a>                },
+<a href=#10454 id=10454 data-nosnippet>10454</a>            )
+<a href=#10455 id=10455 data-nosnippet>10455</a>        }
+<a href=#10456 id=10456 data-nosnippet>10456</a>        <span class="doccomment">///Creates a new call builder for the [`getMinDelay`] function.
+<a href=#10457 id=10457 data-nosnippet>10457</a>        </span><span class="kw">pub fn </span>getMinDelay(
+<a href=#10458 id=10458 data-nosnippet>10458</a>            <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#10459 id=10459 data-nosnippet>10459</a>        ) -&gt; alloy_contract::SolCallBuilder&lt;<span class="kw-2">&amp;</span>P, getMinDelayCall, N&gt; {
+<a href=#10460 id=10460 data-nosnippet>10460</a>            <span class="self">self</span>.call_builder(<span class="kw-2">&amp;</span>getMinDelayCall)
+<a href=#10461 id=10461 data-nosnippet>10461</a>        }
+<a href=#10462 id=10462 data-nosnippet>10462</a>        <span class="doccomment">///Creates a new call builder for the [`getOperationState`] function.
+<a href=#10463 id=10463 data-nosnippet>10463</a>        </span><span class="kw">pub fn </span>getOperationState(
+<a href=#10464 id=10464 data-nosnippet>10464</a>            <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#10465 id=10465 data-nosnippet>10465</a>            id: alloy::sol_types::private::FixedBytes&lt;<span class="number">32</span>&gt;,
+<a href=#10466 id=10466 data-nosnippet>10466</a>        ) -&gt; alloy_contract::SolCallBuilder&lt;<span class="kw-2">&amp;</span>P, getOperationStateCall, N&gt; {
+<a href=#10467 id=10467 data-nosnippet>10467</a>            <span class="self">self</span>.call_builder(<span class="kw-2">&amp;</span>getOperationStateCall { id })
+<a href=#10468 id=10468 data-nosnippet>10468</a>        }
+<a href=#10469 id=10469 data-nosnippet>10469</a>        <span class="doccomment">///Creates a new call builder for the [`getRoleAdmin`] function.
+<a href=#10470 id=10470 data-nosnippet>10470</a>        </span><span class="kw">pub fn </span>getRoleAdmin(
+<a href=#10471 id=10471 data-nosnippet>10471</a>            <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#10472 id=10472 data-nosnippet>10472</a>            role: alloy::sol_types::private::FixedBytes&lt;<span class="number">32</span>&gt;,
+<a href=#10473 id=10473 data-nosnippet>10473</a>        ) -&gt; alloy_contract::SolCallBuilder&lt;<span class="kw-2">&amp;</span>P, getRoleAdminCall, N&gt; {
+<a href=#10474 id=10474 data-nosnippet>10474</a>            <span class="self">self</span>.call_builder(<span class="kw-2">&amp;</span>getRoleAdminCall { role })
+<a href=#10475 id=10475 data-nosnippet>10475</a>        }
+<a href=#10476 id=10476 data-nosnippet>10476</a>        <span class="doccomment">///Creates a new call builder for the [`getTimestamp`] function.
+<a href=#10477 id=10477 data-nosnippet>10477</a>        </span><span class="kw">pub fn </span>getTimestamp(
+<a href=#10478 id=10478 data-nosnippet>10478</a>            <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#10479 id=10479 data-nosnippet>10479</a>            id: alloy::sol_types::private::FixedBytes&lt;<span class="number">32</span>&gt;,
+<a href=#10480 id=10480 data-nosnippet>10480</a>        ) -&gt; alloy_contract::SolCallBuilder&lt;<span class="kw-2">&amp;</span>P, getTimestampCall, N&gt; {
+<a href=#10481 id=10481 data-nosnippet>10481</a>            <span class="self">self</span>.call_builder(<span class="kw-2">&amp;</span>getTimestampCall { id })
+<a href=#10482 id=10482 data-nosnippet>10482</a>        }
+<a href=#10483 id=10483 data-nosnippet>10483</a>        <span class="doccomment">///Creates a new call builder for the [`grantRole`] function.
+<a href=#10484 id=10484 data-nosnippet>10484</a>        </span><span class="kw">pub fn </span>grantRole(
+<a href=#10485 id=10485 data-nosnippet>10485</a>            <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#10486 id=10486 data-nosnippet>10486</a>            role: alloy::sol_types::private::FixedBytes&lt;<span class="number">32</span>&gt;,
+<a href=#10487 id=10487 data-nosnippet>10487</a>            account: alloy::sol_types::private::Address,
+<a href=#10488 id=10488 data-nosnippet>10488</a>        ) -&gt; alloy_contract::SolCallBuilder&lt;<span class="kw-2">&amp;</span>P, grantRoleCall, N&gt; {
+<a href=#10489 id=10489 data-nosnippet>10489</a>            <span class="self">self</span>.call_builder(<span class="kw-2">&amp;</span>grantRoleCall { role, account })
+<a href=#10490 id=10490 data-nosnippet>10490</a>        }
+<a href=#10491 id=10491 data-nosnippet>10491</a>        <span class="doccomment">///Creates a new call builder for the [`hasRole`] function.
+<a href=#10492 id=10492 data-nosnippet>10492</a>        </span><span class="kw">pub fn </span>hasRole(
+<a href=#10493 id=10493 data-nosnippet>10493</a>            <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#10494 id=10494 data-nosnippet>10494</a>            role: alloy::sol_types::private::FixedBytes&lt;<span class="number">32</span>&gt;,
+<a href=#10495 id=10495 data-nosnippet>10495</a>            account: alloy::sol_types::private::Address,
+<a href=#10496 id=10496 data-nosnippet>10496</a>        ) -&gt; alloy_contract::SolCallBuilder&lt;<span class="kw-2">&amp;</span>P, hasRoleCall, N&gt; {
+<a href=#10497 id=10497 data-nosnippet>10497</a>            <span class="self">self</span>.call_builder(<span class="kw-2">&amp;</span>hasRoleCall { role, account })
+<a href=#10498 id=10498 data-nosnippet>10498</a>        }
+<a href=#10499 id=10499 data-nosnippet>10499</a>        <span class="doccomment">///Creates a new call builder for the [`hashOperation`] function.
+<a href=#10500 id=10500 data-nosnippet>10500</a>        </span><span class="kw">pub fn </span>hashOperation(
+<a href=#10501 id=10501 data-nosnippet>10501</a>            <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#10502 id=10502 data-nosnippet>10502</a>            target: alloy::sol_types::private::Address,
+<a href=#10503 id=10503 data-nosnippet>10503</a>            value: alloy::sol_types::private::primitives::aliases::U256,
+<a href=#10504 id=10504 data-nosnippet>10504</a>            data: alloy::sol_types::private::Bytes,
+<a href=#10505 id=10505 data-nosnippet>10505</a>            predecessor: alloy::sol_types::private::FixedBytes&lt;<span class="number">32</span>&gt;,
+<a href=#10506 id=10506 data-nosnippet>10506</a>            salt: alloy::sol_types::private::FixedBytes&lt;<span class="number">32</span>&gt;,
+<a href=#10507 id=10507 data-nosnippet>10507</a>        ) -&gt; alloy_contract::SolCallBuilder&lt;<span class="kw-2">&amp;</span>P, hashOperationCall, N&gt; {
+<a href=#10508 id=10508 data-nosnippet>10508</a>            <span class="self">self</span>.call_builder(
+<a href=#10509 id=10509 data-nosnippet>10509</a>                <span class="kw-2">&amp;</span>hashOperationCall {
+<a href=#10510 id=10510 data-nosnippet>10510</a>                    target,
+<a href=#10511 id=10511 data-nosnippet>10511</a>                    value,
+<a href=#10512 id=10512 data-nosnippet>10512</a>                    data,
+<a href=#10513 id=10513 data-nosnippet>10513</a>                    predecessor,
+<a href=#10514 id=10514 data-nosnippet>10514</a>                    salt,
+<a href=#10515 id=10515 data-nosnippet>10515</a>                },
+<a href=#10516 id=10516 data-nosnippet>10516</a>            )
+<a href=#10517 id=10517 data-nosnippet>10517</a>        }
+<a href=#10518 id=10518 data-nosnippet>10518</a>        <span class="doccomment">///Creates a new call builder for the [`hashOperationBatch`] function.
+<a href=#10519 id=10519 data-nosnippet>10519</a>        </span><span class="kw">pub fn </span>hashOperationBatch(
+<a href=#10520 id=10520 data-nosnippet>10520</a>            <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#10521 id=10521 data-nosnippet>10521</a>            targets: alloy::sol_types::private::Vec&lt;alloy::sol_types::private::Address&gt;,
+<a href=#10522 id=10522 data-nosnippet>10522</a>            values: alloy::sol_types::private::Vec&lt;
+<a href=#10523 id=10523 data-nosnippet>10523</a>                alloy::sol_types::private::primitives::aliases::U256,
+<a href=#10524 id=10524 data-nosnippet>10524</a>            &gt;,
+<a href=#10525 id=10525 data-nosnippet>10525</a>            payloads: alloy::sol_types::private::Vec&lt;alloy::sol_types::private::Bytes&gt;,
+<a href=#10526 id=10526 data-nosnippet>10526</a>            predecessor: alloy::sol_types::private::FixedBytes&lt;<span class="number">32</span>&gt;,
+<a href=#10527 id=10527 data-nosnippet>10527</a>            salt: alloy::sol_types::private::FixedBytes&lt;<span class="number">32</span>&gt;,
+<a href=#10528 id=10528 data-nosnippet>10528</a>        ) -&gt; alloy_contract::SolCallBuilder&lt;<span class="kw-2">&amp;</span>P, hashOperationBatchCall, N&gt; {
+<a href=#10529 id=10529 data-nosnippet>10529</a>            <span class="self">self</span>.call_builder(
+<a href=#10530 id=10530 data-nosnippet>10530</a>                <span class="kw-2">&amp;</span>hashOperationBatchCall {
+<a href=#10531 id=10531 data-nosnippet>10531</a>                    targets,
+<a href=#10532 id=10532 data-nosnippet>10532</a>                    values,
+<a href=#10533 id=10533 data-nosnippet>10533</a>                    payloads,
+<a href=#10534 id=10534 data-nosnippet>10534</a>                    predecessor,
+<a href=#10535 id=10535 data-nosnippet>10535</a>                    salt,
+<a href=#10536 id=10536 data-nosnippet>10536</a>                },
+<a href=#10537 id=10537 data-nosnippet>10537</a>            )
+<a href=#10538 id=10538 data-nosnippet>10538</a>        }
+<a href=#10539 id=10539 data-nosnippet>10539</a>        <span class="doccomment">///Creates a new call builder for the [`isOperation`] function.
+<a href=#10540 id=10540 data-nosnippet>10540</a>        </span><span class="kw">pub fn </span>isOperation(
+<a href=#10541 id=10541 data-nosnippet>10541</a>            <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#10542 id=10542 data-nosnippet>10542</a>            id: alloy::sol_types::private::FixedBytes&lt;<span class="number">32</span>&gt;,
+<a href=#10543 id=10543 data-nosnippet>10543</a>        ) -&gt; alloy_contract::SolCallBuilder&lt;<span class="kw-2">&amp;</span>P, isOperationCall, N&gt; {
+<a href=#10544 id=10544 data-nosnippet>10544</a>            <span class="self">self</span>.call_builder(<span class="kw-2">&amp;</span>isOperationCall { id })
+<a href=#10545 id=10545 data-nosnippet>10545</a>        }
+<a href=#10546 id=10546 data-nosnippet>10546</a>        <span class="doccomment">///Creates a new call builder for the [`isOperationDone`] function.
+<a href=#10547 id=10547 data-nosnippet>10547</a>        </span><span class="kw">pub fn </span>isOperationDone(
+<a href=#10548 id=10548 data-nosnippet>10548</a>            <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#10549 id=10549 data-nosnippet>10549</a>            id: alloy::sol_types::private::FixedBytes&lt;<span class="number">32</span>&gt;,
+<a href=#10550 id=10550 data-nosnippet>10550</a>        ) -&gt; alloy_contract::SolCallBuilder&lt;<span class="kw-2">&amp;</span>P, isOperationDoneCall, N&gt; {
+<a href=#10551 id=10551 data-nosnippet>10551</a>            <span class="self">self</span>.call_builder(<span class="kw-2">&amp;</span>isOperationDoneCall { id })
+<a href=#10552 id=10552 data-nosnippet>10552</a>        }
+<a href=#10553 id=10553 data-nosnippet>10553</a>        <span class="doccomment">///Creates a new call builder for the [`isOperationPending`] function.
+<a href=#10554 id=10554 data-nosnippet>10554</a>        </span><span class="kw">pub fn </span>isOperationPending(
+<a href=#10555 id=10555 data-nosnippet>10555</a>            <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#10556 id=10556 data-nosnippet>10556</a>            id: alloy::sol_types::private::FixedBytes&lt;<span class="number">32</span>&gt;,
+<a href=#10557 id=10557 data-nosnippet>10557</a>        ) -&gt; alloy_contract::SolCallBuilder&lt;<span class="kw-2">&amp;</span>P, isOperationPendingCall, N&gt; {
+<a href=#10558 id=10558 data-nosnippet>10558</a>            <span class="self">self</span>.call_builder(<span class="kw-2">&amp;</span>isOperationPendingCall { id })
+<a href=#10559 id=10559 data-nosnippet>10559</a>        }
+<a href=#10560 id=10560 data-nosnippet>10560</a>        <span class="doccomment">///Creates a new call builder for the [`isOperationReady`] function.
+<a href=#10561 id=10561 data-nosnippet>10561</a>        </span><span class="kw">pub fn </span>isOperationReady(
+<a href=#10562 id=10562 data-nosnippet>10562</a>            <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#10563 id=10563 data-nosnippet>10563</a>            id: alloy::sol_types::private::FixedBytes&lt;<span class="number">32</span>&gt;,
+<a href=#10564 id=10564 data-nosnippet>10564</a>        ) -&gt; alloy_contract::SolCallBuilder&lt;<span class="kw-2">&amp;</span>P, isOperationReadyCall, N&gt; {
+<a href=#10565 id=10565 data-nosnippet>10565</a>            <span class="self">self</span>.call_builder(<span class="kw-2">&amp;</span>isOperationReadyCall { id })
+<a href=#10566 id=10566 data-nosnippet>10566</a>        }
+<a href=#10567 id=10567 data-nosnippet>10567</a>        <span class="doccomment">///Creates a new call builder for the [`onERC1155BatchReceived`] function.
+<a href=#10568 id=10568 data-nosnippet>10568</a>        </span><span class="kw">pub fn </span>onERC1155BatchReceived(
+<a href=#10569 id=10569 data-nosnippet>10569</a>            <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#10570 id=10570 data-nosnippet>10570</a>            _0: alloy::sol_types::private::Address,
+<a href=#10571 id=10571 data-nosnippet>10571</a>            _1: alloy::sol_types::private::Address,
+<a href=#10572 id=10572 data-nosnippet>10572</a>            _2: alloy::sol_types::private::Vec&lt;
+<a href=#10573 id=10573 data-nosnippet>10573</a>                alloy::sol_types::private::primitives::aliases::U256,
+<a href=#10574 id=10574 data-nosnippet>10574</a>            &gt;,
+<a href=#10575 id=10575 data-nosnippet>10575</a>            _3: alloy::sol_types::private::Vec&lt;
+<a href=#10576 id=10576 data-nosnippet>10576</a>                alloy::sol_types::private::primitives::aliases::U256,
+<a href=#10577 id=10577 data-nosnippet>10577</a>            &gt;,
+<a href=#10578 id=10578 data-nosnippet>10578</a>            _4: alloy::sol_types::private::Bytes,
+<a href=#10579 id=10579 data-nosnippet>10579</a>        ) -&gt; alloy_contract::SolCallBuilder&lt;<span class="kw-2">&amp;</span>P, onERC1155BatchReceivedCall, N&gt; {
+<a href=#10580 id=10580 data-nosnippet>10580</a>            <span class="self">self</span>.call_builder(
+<a href=#10581 id=10581 data-nosnippet>10581</a>                <span class="kw-2">&amp;</span>onERC1155BatchReceivedCall {
+<a href=#10582 id=10582 data-nosnippet>10582</a>                    _0,
+<a href=#10583 id=10583 data-nosnippet>10583</a>                    _1,
+<a href=#10584 id=10584 data-nosnippet>10584</a>                    _2,
+<a href=#10585 id=10585 data-nosnippet>10585</a>                    _3,
+<a href=#10586 id=10586 data-nosnippet>10586</a>                    _4,
+<a href=#10587 id=10587 data-nosnippet>10587</a>                },
+<a href=#10588 id=10588 data-nosnippet>10588</a>            )
+<a href=#10589 id=10589 data-nosnippet>10589</a>        }
+<a href=#10590 id=10590 data-nosnippet>10590</a>        <span class="doccomment">///Creates a new call builder for the [`onERC1155Received`] function.
+<a href=#10591 id=10591 data-nosnippet>10591</a>        </span><span class="kw">pub fn </span>onERC1155Received(
+<a href=#10592 id=10592 data-nosnippet>10592</a>            <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#10593 id=10593 data-nosnippet>10593</a>            _0: alloy::sol_types::private::Address,
+<a href=#10594 id=10594 data-nosnippet>10594</a>            _1: alloy::sol_types::private::Address,
+<a href=#10595 id=10595 data-nosnippet>10595</a>            _2: alloy::sol_types::private::primitives::aliases::U256,
+<a href=#10596 id=10596 data-nosnippet>10596</a>            _3: alloy::sol_types::private::primitives::aliases::U256,
+<a href=#10597 id=10597 data-nosnippet>10597</a>            _4: alloy::sol_types::private::Bytes,
+<a href=#10598 id=10598 data-nosnippet>10598</a>        ) -&gt; alloy_contract::SolCallBuilder&lt;<span class="kw-2">&amp;</span>P, onERC1155ReceivedCall, N&gt; {
+<a href=#10599 id=10599 data-nosnippet>10599</a>            <span class="self">self</span>.call_builder(
+<a href=#10600 id=10600 data-nosnippet>10600</a>                <span class="kw-2">&amp;</span>onERC1155ReceivedCall {
+<a href=#10601 id=10601 data-nosnippet>10601</a>                    _0,
+<a href=#10602 id=10602 data-nosnippet>10602</a>                    _1,
+<a href=#10603 id=10603 data-nosnippet>10603</a>                    _2,
+<a href=#10604 id=10604 data-nosnippet>10604</a>                    _3,
+<a href=#10605 id=10605 data-nosnippet>10605</a>                    _4,
+<a href=#10606 id=10606 data-nosnippet>10606</a>                },
+<a href=#10607 id=10607 data-nosnippet>10607</a>            )
+<a href=#10608 id=10608 data-nosnippet>10608</a>        }
+<a href=#10609 id=10609 data-nosnippet>10609</a>        <span class="doccomment">///Creates a new call builder for the [`onERC721Received`] function.
+<a href=#10610 id=10610 data-nosnippet>10610</a>        </span><span class="kw">pub fn </span>onERC721Received(
+<a href=#10611 id=10611 data-nosnippet>10611</a>            <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#10612 id=10612 data-nosnippet>10612</a>            _0: alloy::sol_types::private::Address,
+<a href=#10613 id=10613 data-nosnippet>10613</a>            _1: alloy::sol_types::private::Address,
+<a href=#10614 id=10614 data-nosnippet>10614</a>            _2: alloy::sol_types::private::primitives::aliases::U256,
+<a href=#10615 id=10615 data-nosnippet>10615</a>            _3: alloy::sol_types::private::Bytes,
+<a href=#10616 id=10616 data-nosnippet>10616</a>        ) -&gt; alloy_contract::SolCallBuilder&lt;<span class="kw-2">&amp;</span>P, onERC721ReceivedCall, N&gt; {
+<a href=#10617 id=10617 data-nosnippet>10617</a>            <span class="self">self</span>.call_builder(
+<a href=#10618 id=10618 data-nosnippet>10618</a>                <span class="kw-2">&amp;</span>onERC721ReceivedCall {
+<a href=#10619 id=10619 data-nosnippet>10619</a>                    _0,
+<a href=#10620 id=10620 data-nosnippet>10620</a>                    _1,
+<a href=#10621 id=10621 data-nosnippet>10621</a>                    _2,
+<a href=#10622 id=10622 data-nosnippet>10622</a>                    _3,
+<a href=#10623 id=10623 data-nosnippet>10623</a>                },
+<a href=#10624 id=10624 data-nosnippet>10624</a>            )
+<a href=#10625 id=10625 data-nosnippet>10625</a>        }
+<a href=#10626 id=10626 data-nosnippet>10626</a>        <span class="doccomment">///Creates a new call builder for the [`renounceRole`] function.
+<a href=#10627 id=10627 data-nosnippet>10627</a>        </span><span class="kw">pub fn </span>renounceRole(
+<a href=#10628 id=10628 data-nosnippet>10628</a>            <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#10629 id=10629 data-nosnippet>10629</a>            role: alloy::sol_types::private::FixedBytes&lt;<span class="number">32</span>&gt;,
+<a href=#10630 id=10630 data-nosnippet>10630</a>            callerConfirmation: alloy::sol_types::private::Address,
+<a href=#10631 id=10631 data-nosnippet>10631</a>        ) -&gt; alloy_contract::SolCallBuilder&lt;<span class="kw-2">&amp;</span>P, renounceRoleCall, N&gt; {
+<a href=#10632 id=10632 data-nosnippet>10632</a>            <span class="self">self</span>.call_builder(
+<a href=#10633 id=10633 data-nosnippet>10633</a>                <span class="kw-2">&amp;</span>renounceRoleCall {
+<a href=#10634 id=10634 data-nosnippet>10634</a>                    role,
+<a href=#10635 id=10635 data-nosnippet>10635</a>                    callerConfirmation,
+<a href=#10636 id=10636 data-nosnippet>10636</a>                },
+<a href=#10637 id=10637 data-nosnippet>10637</a>            )
+<a href=#10638 id=10638 data-nosnippet>10638</a>        }
+<a href=#10639 id=10639 data-nosnippet>10639</a>        <span class="doccomment">///Creates a new call builder for the [`revokeRole`] function.
+<a href=#10640 id=10640 data-nosnippet>10640</a>        </span><span class="kw">pub fn </span>revokeRole(
+<a href=#10641 id=10641 data-nosnippet>10641</a>            <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#10642 id=10642 data-nosnippet>10642</a>            role: alloy::sol_types::private::FixedBytes&lt;<span class="number">32</span>&gt;,
+<a href=#10643 id=10643 data-nosnippet>10643</a>            account: alloy::sol_types::private::Address,
+<a href=#10644 id=10644 data-nosnippet>10644</a>        ) -&gt; alloy_contract::SolCallBuilder&lt;<span class="kw-2">&amp;</span>P, revokeRoleCall, N&gt; {
+<a href=#10645 id=10645 data-nosnippet>10645</a>            <span class="self">self</span>.call_builder(<span class="kw-2">&amp;</span>revokeRoleCall { role, account })
+<a href=#10646 id=10646 data-nosnippet>10646</a>        }
+<a href=#10647 id=10647 data-nosnippet>10647</a>        <span class="doccomment">///Creates a new call builder for the [`schedule`] function.
+<a href=#10648 id=10648 data-nosnippet>10648</a>        </span><span class="kw">pub fn </span>schedule(
+<a href=#10649 id=10649 data-nosnippet>10649</a>            <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#10650 id=10650 data-nosnippet>10650</a>            target: alloy::sol_types::private::Address,
+<a href=#10651 id=10651 data-nosnippet>10651</a>            value: alloy::sol_types::private::primitives::aliases::U256,
+<a href=#10652 id=10652 data-nosnippet>10652</a>            data: alloy::sol_types::private::Bytes,
+<a href=#10653 id=10653 data-nosnippet>10653</a>            predecessor: alloy::sol_types::private::FixedBytes&lt;<span class="number">32</span>&gt;,
+<a href=#10654 id=10654 data-nosnippet>10654</a>            salt: alloy::sol_types::private::FixedBytes&lt;<span class="number">32</span>&gt;,
+<a href=#10655 id=10655 data-nosnippet>10655</a>            delay: alloy::sol_types::private::primitives::aliases::U256,
+<a href=#10656 id=10656 data-nosnippet>10656</a>        ) -&gt; alloy_contract::SolCallBuilder&lt;<span class="kw-2">&amp;</span>P, scheduleCall, N&gt; {
+<a href=#10657 id=10657 data-nosnippet>10657</a>            <span class="self">self</span>.call_builder(
+<a href=#10658 id=10658 data-nosnippet>10658</a>                <span class="kw-2">&amp;</span>scheduleCall {
+<a href=#10659 id=10659 data-nosnippet>10659</a>                    target,
+<a href=#10660 id=10660 data-nosnippet>10660</a>                    value,
+<a href=#10661 id=10661 data-nosnippet>10661</a>                    data,
+<a href=#10662 id=10662 data-nosnippet>10662</a>                    predecessor,
+<a href=#10663 id=10663 data-nosnippet>10663</a>                    salt,
+<a href=#10664 id=10664 data-nosnippet>10664</a>                    delay,
 <a href=#10665 id=10665 data-nosnippet>10665</a>                },
 <a href=#10666 id=10666 data-nosnippet>10666</a>            )
 <a href=#10667 id=10667 data-nosnippet>10667</a>        }
-<a href=#10668 id=10668 data-nosnippet>10668</a>        <span class="doccomment">///Creates a new call builder for the [`updateDelay`] function.
-<a href=#10669 id=10669 data-nosnippet>10669</a>        </span><span class="kw">pub fn </span>updateDelay(
+<a href=#10668 id=10668 data-nosnippet>10668</a>        <span class="doccomment">///Creates a new call builder for the [`scheduleBatch`] function.
+<a href=#10669 id=10669 data-nosnippet>10669</a>        </span><span class="kw">pub fn </span>scheduleBatch(
 <a href=#10670 id=10670 data-nosnippet>10670</a>            <span class="kw-2">&amp;</span><span class="self">self</span>,
-<a href=#10671 id=10671 data-nosnippet>10671</a>            newDelay: alloy::sol_types::private::primitives::aliases::U256,
-<a href=#10672 id=10672 data-nosnippet>10672</a>        ) -&gt; alloy_contract::SolCallBuilder&lt;<span class="kw-2">&amp;</span>P, updateDelayCall, N&gt; {
-<a href=#10673 id=10673 data-nosnippet>10673</a>            <span class="self">self</span>.call_builder(<span class="kw-2">&amp;</span>updateDelayCall { newDelay })
-<a href=#10674 id=10674 data-nosnippet>10674</a>        }
-<a href=#10675 id=10675 data-nosnippet>10675</a>    }
-<a href=#10676 id=10676 data-nosnippet>10676</a>    <span class="doccomment">/// Event filters.
-<a href=#10677 id=10677 data-nosnippet>10677</a>    </span><span class="kw">impl</span>&lt;
-<a href=#10678 id=10678 data-nosnippet>10678</a>        P: alloy_contract::private::Provider&lt;N&gt;,
-<a href=#10679 id=10679 data-nosnippet>10679</a>        N: alloy_contract::private::Network,
-<a href=#10680 id=10680 data-nosnippet>10680</a>    &gt; OpsTimelockInstance&lt;P, N&gt; {
-<a href=#10681 id=10681 data-nosnippet>10681</a>        <span class="doccomment">/// Creates a new event filter using this contract instance's provider and address.
-<a href=#10682 id=10682 data-nosnippet>10682</a>        ///
-<a href=#10683 id=10683 data-nosnippet>10683</a>        /// Note that the type can be any event, not just those defined in this contract.
-<a href=#10684 id=10684 data-nosnippet>10684</a>        /// Prefer using the other methods for building type-safe event filters.
-<a href=#10685 id=10685 data-nosnippet>10685</a>        </span><span class="kw">pub fn </span>event_filter&lt;E: alloy_sol_types::SolEvent&gt;(
-<a href=#10686 id=10686 data-nosnippet>10686</a>            <span class="kw-2">&amp;</span><span class="self">self</span>,
-<a href=#10687 id=10687 data-nosnippet>10687</a>        ) -&gt; alloy_contract::Event&lt;<span class="kw-2">&amp;</span>P, E, N&gt; {
-<a href=#10688 id=10688 data-nosnippet>10688</a>            alloy_contract::Event::new_sol(<span class="kw-2">&amp;</span><span class="self">self</span>.provider, <span class="kw-2">&amp;</span><span class="self">self</span>.address)
-<a href=#10689 id=10689 data-nosnippet>10689</a>        }
-<a href=#10690 id=10690 data-nosnippet>10690</a>        <span class="doccomment">///Creates a new event filter for the [`CallExecuted`] event.
-<a href=#10691 id=10691 data-nosnippet>10691</a>        </span><span class="kw">pub fn </span>CallExecuted_filter(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; alloy_contract::Event&lt;<span class="kw-2">&amp;</span>P, CallExecuted, N&gt; {
-<a href=#10692 id=10692 data-nosnippet>10692</a>            <span class="self">self</span>.event_filter::&lt;CallExecuted&gt;()
-<a href=#10693 id=10693 data-nosnippet>10693</a>        }
-<a href=#10694 id=10694 data-nosnippet>10694</a>        <span class="doccomment">///Creates a new event filter for the [`CallSalt`] event.
-<a href=#10695 id=10695 data-nosnippet>10695</a>        </span><span class="kw">pub fn </span>CallSalt_filter(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; alloy_contract::Event&lt;<span class="kw-2">&amp;</span>P, CallSalt, N&gt; {
-<a href=#10696 id=10696 data-nosnippet>10696</a>            <span class="self">self</span>.event_filter::&lt;CallSalt&gt;()
-<a href=#10697 id=10697 data-nosnippet>10697</a>        }
-<a href=#10698 id=10698 data-nosnippet>10698</a>        <span class="doccomment">///Creates a new event filter for the [`CallScheduled`] event.
-<a href=#10699 id=10699 data-nosnippet>10699</a>        </span><span class="kw">pub fn </span>CallScheduled_filter(
-<a href=#10700 id=10700 data-nosnippet>10700</a>            <span class="kw-2">&amp;</span><span class="self">self</span>,
-<a href=#10701 id=10701 data-nosnippet>10701</a>        ) -&gt; alloy_contract::Event&lt;<span class="kw-2">&amp;</span>P, CallScheduled, N&gt; {
-<a href=#10702 id=10702 data-nosnippet>10702</a>            <span class="self">self</span>.event_filter::&lt;CallScheduled&gt;()
-<a href=#10703 id=10703 data-nosnippet>10703</a>        }
-<a href=#10704 id=10704 data-nosnippet>10704</a>        <span class="doccomment">///Creates a new event filter for the [`Cancelled`] event.
-<a href=#10705 id=10705 data-nosnippet>10705</a>        </span><span class="kw">pub fn </span>Cancelled_filter(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; alloy_contract::Event&lt;<span class="kw-2">&amp;</span>P, Cancelled, N&gt; {
-<a href=#10706 id=10706 data-nosnippet>10706</a>            <span class="self">self</span>.event_filter::&lt;Cancelled&gt;()
-<a href=#10707 id=10707 data-nosnippet>10707</a>        }
-<a href=#10708 id=10708 data-nosnippet>10708</a>        <span class="doccomment">///Creates a new event filter for the [`MinDelayChange`] event.
-<a href=#10709 id=10709 data-nosnippet>10709</a>        </span><span class="kw">pub fn </span>MinDelayChange_filter(
-<a href=#10710 id=10710 data-nosnippet>10710</a>            <span class="kw-2">&amp;</span><span class="self">self</span>,
-<a href=#10711 id=10711 data-nosnippet>10711</a>        ) -&gt; alloy_contract::Event&lt;<span class="kw-2">&amp;</span>P, MinDelayChange, N&gt; {
-<a href=#10712 id=10712 data-nosnippet>10712</a>            <span class="self">self</span>.event_filter::&lt;MinDelayChange&gt;()
-<a href=#10713 id=10713 data-nosnippet>10713</a>        }
-<a href=#10714 id=10714 data-nosnippet>10714</a>        <span class="doccomment">///Creates a new event filter for the [`RoleAdminChanged`] event.
-<a href=#10715 id=10715 data-nosnippet>10715</a>        </span><span class="kw">pub fn </span>RoleAdminChanged_filter(
-<a href=#10716 id=10716 data-nosnippet>10716</a>            <span class="kw-2">&amp;</span><span class="self">self</span>,
-<a href=#10717 id=10717 data-nosnippet>10717</a>        ) -&gt; alloy_contract::Event&lt;<span class="kw-2">&amp;</span>P, RoleAdminChanged, N&gt; {
-<a href=#10718 id=10718 data-nosnippet>10718</a>            <span class="self">self</span>.event_filter::&lt;RoleAdminChanged&gt;()
-<a href=#10719 id=10719 data-nosnippet>10719</a>        }
-<a href=#10720 id=10720 data-nosnippet>10720</a>        <span class="doccomment">///Creates a new event filter for the [`RoleGranted`] event.
-<a href=#10721 id=10721 data-nosnippet>10721</a>        </span><span class="kw">pub fn </span>RoleGranted_filter(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; alloy_contract::Event&lt;<span class="kw-2">&amp;</span>P, RoleGranted, N&gt; {
-<a href=#10722 id=10722 data-nosnippet>10722</a>            <span class="self">self</span>.event_filter::&lt;RoleGranted&gt;()
+<a href=#10671 id=10671 data-nosnippet>10671</a>            targets: alloy::sol_types::private::Vec&lt;alloy::sol_types::private::Address&gt;,
+<a href=#10672 id=10672 data-nosnippet>10672</a>            values: alloy::sol_types::private::Vec&lt;
+<a href=#10673 id=10673 data-nosnippet>10673</a>                alloy::sol_types::private::primitives::aliases::U256,
+<a href=#10674 id=10674 data-nosnippet>10674</a>            &gt;,
+<a href=#10675 id=10675 data-nosnippet>10675</a>            payloads: alloy::sol_types::private::Vec&lt;alloy::sol_types::private::Bytes&gt;,
+<a href=#10676 id=10676 data-nosnippet>10676</a>            predecessor: alloy::sol_types::private::FixedBytes&lt;<span class="number">32</span>&gt;,
+<a href=#10677 id=10677 data-nosnippet>10677</a>            salt: alloy::sol_types::private::FixedBytes&lt;<span class="number">32</span>&gt;,
+<a href=#10678 id=10678 data-nosnippet>10678</a>            delay: alloy::sol_types::private::primitives::aliases::U256,
+<a href=#10679 id=10679 data-nosnippet>10679</a>        ) -&gt; alloy_contract::SolCallBuilder&lt;<span class="kw-2">&amp;</span>P, scheduleBatchCall, N&gt; {
+<a href=#10680 id=10680 data-nosnippet>10680</a>            <span class="self">self</span>.call_builder(
+<a href=#10681 id=10681 data-nosnippet>10681</a>                <span class="kw-2">&amp;</span>scheduleBatchCall {
+<a href=#10682 id=10682 data-nosnippet>10682</a>                    targets,
+<a href=#10683 id=10683 data-nosnippet>10683</a>                    values,
+<a href=#10684 id=10684 data-nosnippet>10684</a>                    payloads,
+<a href=#10685 id=10685 data-nosnippet>10685</a>                    predecessor,
+<a href=#10686 id=10686 data-nosnippet>10686</a>                    salt,
+<a href=#10687 id=10687 data-nosnippet>10687</a>                    delay,
+<a href=#10688 id=10688 data-nosnippet>10688</a>                },
+<a href=#10689 id=10689 data-nosnippet>10689</a>            )
+<a href=#10690 id=10690 data-nosnippet>10690</a>        }
+<a href=#10691 id=10691 data-nosnippet>10691</a>        <span class="doccomment">///Creates a new call builder for the [`supportsInterface`] function.
+<a href=#10692 id=10692 data-nosnippet>10692</a>        </span><span class="kw">pub fn </span>supportsInterface(
+<a href=#10693 id=10693 data-nosnippet>10693</a>            <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#10694 id=10694 data-nosnippet>10694</a>            interfaceId: alloy::sol_types::private::FixedBytes&lt;<span class="number">4</span>&gt;,
+<a href=#10695 id=10695 data-nosnippet>10695</a>        ) -&gt; alloy_contract::SolCallBuilder&lt;<span class="kw-2">&amp;</span>P, supportsInterfaceCall, N&gt; {
+<a href=#10696 id=10696 data-nosnippet>10696</a>            <span class="self">self</span>.call_builder(
+<a href=#10697 id=10697 data-nosnippet>10697</a>                <span class="kw-2">&amp;</span>supportsInterfaceCall {
+<a href=#10698 id=10698 data-nosnippet>10698</a>                    interfaceId,
+<a href=#10699 id=10699 data-nosnippet>10699</a>                },
+<a href=#10700 id=10700 data-nosnippet>10700</a>            )
+<a href=#10701 id=10701 data-nosnippet>10701</a>        }
+<a href=#10702 id=10702 data-nosnippet>10702</a>        <span class="doccomment">///Creates a new call builder for the [`updateDelay`] function.
+<a href=#10703 id=10703 data-nosnippet>10703</a>        </span><span class="kw">pub fn </span>updateDelay(
+<a href=#10704 id=10704 data-nosnippet>10704</a>            <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#10705 id=10705 data-nosnippet>10705</a>            newDelay: alloy::sol_types::private::primitives::aliases::U256,
+<a href=#10706 id=10706 data-nosnippet>10706</a>        ) -&gt; alloy_contract::SolCallBuilder&lt;<span class="kw-2">&amp;</span>P, updateDelayCall, N&gt; {
+<a href=#10707 id=10707 data-nosnippet>10707</a>            <span class="self">self</span>.call_builder(<span class="kw-2">&amp;</span>updateDelayCall { newDelay })
+<a href=#10708 id=10708 data-nosnippet>10708</a>        }
+<a href=#10709 id=10709 data-nosnippet>10709</a>    }
+<a href=#10710 id=10710 data-nosnippet>10710</a>    <span class="doccomment">/// Event filters.
+<a href=#10711 id=10711 data-nosnippet>10711</a>    </span><span class="kw">impl</span>&lt;
+<a href=#10712 id=10712 data-nosnippet>10712</a>        P: alloy_contract::private::Provider&lt;N&gt;,
+<a href=#10713 id=10713 data-nosnippet>10713</a>        N: alloy_contract::private::Network,
+<a href=#10714 id=10714 data-nosnippet>10714</a>    &gt; OpsTimelockInstance&lt;P, N&gt; {
+<a href=#10715 id=10715 data-nosnippet>10715</a>        <span class="doccomment">/// Creates a new event filter using this contract instance's provider and address.
+<a href=#10716 id=10716 data-nosnippet>10716</a>        ///
+<a href=#10717 id=10717 data-nosnippet>10717</a>        /// Note that the type can be any event, not just those defined in this contract.
+<a href=#10718 id=10718 data-nosnippet>10718</a>        /// Prefer using the other methods for building type-safe event filters.
+<a href=#10719 id=10719 data-nosnippet>10719</a>        </span><span class="kw">pub fn </span>event_filter&lt;E: alloy_sol_types::SolEvent&gt;(
+<a href=#10720 id=10720 data-nosnippet>10720</a>            <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#10721 id=10721 data-nosnippet>10721</a>        ) -&gt; alloy_contract::Event&lt;<span class="kw-2">&amp;</span>P, E, N&gt; {
+<a href=#10722 id=10722 data-nosnippet>10722</a>            alloy_contract::Event::new_sol(<span class="kw-2">&amp;</span><span class="self">self</span>.provider, <span class="kw-2">&amp;</span><span class="self">self</span>.address)
 <a href=#10723 id=10723 data-nosnippet>10723</a>        }
-<a href=#10724 id=10724 data-nosnippet>10724</a>        <span class="doccomment">///Creates a new event filter for the [`RoleRevoked`] event.
-<a href=#10725 id=10725 data-nosnippet>10725</a>        </span><span class="kw">pub fn </span>RoleRevoked_filter(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; alloy_contract::Event&lt;<span class="kw-2">&amp;</span>P, RoleRevoked, N&gt; {
-<a href=#10726 id=10726 data-nosnippet>10726</a>            <span class="self">self</span>.event_filter::&lt;RoleRevoked&gt;()
+<a href=#10724 id=10724 data-nosnippet>10724</a>        <span class="doccomment">///Creates a new event filter for the [`CallExecuted`] event.
+<a href=#10725 id=10725 data-nosnippet>10725</a>        </span><span class="kw">pub fn </span>CallExecuted_filter(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; alloy_contract::Event&lt;<span class="kw-2">&amp;</span>P, CallExecuted, N&gt; {
+<a href=#10726 id=10726 data-nosnippet>10726</a>            <span class="self">self</span>.event_filter::&lt;CallExecuted&gt;()
 <a href=#10727 id=10727 data-nosnippet>10727</a>        }
-<a href=#10728 id=10728 data-nosnippet>10728</a>    }
-<a href=#10729 id=10729 data-nosnippet>10729</a>}
+<a href=#10728 id=10728 data-nosnippet>10728</a>        <span class="doccomment">///Creates a new event filter for the [`CallSalt`] event.
+<a href=#10729 id=10729 data-nosnippet>10729</a>        </span><span class="kw">pub fn </span>CallSalt_filter(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; alloy_contract::Event&lt;<span class="kw-2">&amp;</span>P, CallSalt, N&gt; {
+<a href=#10730 id=10730 data-nosnippet>10730</a>            <span class="self">self</span>.event_filter::&lt;CallSalt&gt;()
+<a href=#10731 id=10731 data-nosnippet>10731</a>        }
+<a href=#10732 id=10732 data-nosnippet>10732</a>        <span class="doccomment">///Creates a new event filter for the [`CallScheduled`] event.
+<a href=#10733 id=10733 data-nosnippet>10733</a>        </span><span class="kw">pub fn </span>CallScheduled_filter(
+<a href=#10734 id=10734 data-nosnippet>10734</a>            <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#10735 id=10735 data-nosnippet>10735</a>        ) -&gt; alloy_contract::Event&lt;<span class="kw-2">&amp;</span>P, CallScheduled, N&gt; {
+<a href=#10736 id=10736 data-nosnippet>10736</a>            <span class="self">self</span>.event_filter::&lt;CallScheduled&gt;()
+<a href=#10737 id=10737 data-nosnippet>10737</a>        }
+<a href=#10738 id=10738 data-nosnippet>10738</a>        <span class="doccomment">///Creates a new event filter for the [`Cancelled`] event.
+<a href=#10739 id=10739 data-nosnippet>10739</a>        </span><span class="kw">pub fn </span>Cancelled_filter(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; alloy_contract::Event&lt;<span class="kw-2">&amp;</span>P, Cancelled, N&gt; {
+<a href=#10740 id=10740 data-nosnippet>10740</a>            <span class="self">self</span>.event_filter::&lt;Cancelled&gt;()
+<a href=#10741 id=10741 data-nosnippet>10741</a>        }
+<a href=#10742 id=10742 data-nosnippet>10742</a>        <span class="doccomment">///Creates a new event filter for the [`MinDelayChange`] event.
+<a href=#10743 id=10743 data-nosnippet>10743</a>        </span><span class="kw">pub fn </span>MinDelayChange_filter(
+<a href=#10744 id=10744 data-nosnippet>10744</a>            <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#10745 id=10745 data-nosnippet>10745</a>        ) -&gt; alloy_contract::Event&lt;<span class="kw-2">&amp;</span>P, MinDelayChange, N&gt; {
+<a href=#10746 id=10746 data-nosnippet>10746</a>            <span class="self">self</span>.event_filter::&lt;MinDelayChange&gt;()
+<a href=#10747 id=10747 data-nosnippet>10747</a>        }
+<a href=#10748 id=10748 data-nosnippet>10748</a>        <span class="doccomment">///Creates a new event filter for the [`RoleAdminChanged`] event.
+<a href=#10749 id=10749 data-nosnippet>10749</a>        </span><span class="kw">pub fn </span>RoleAdminChanged_filter(
+<a href=#10750 id=10750 data-nosnippet>10750</a>            <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#10751 id=10751 data-nosnippet>10751</a>        ) -&gt; alloy_contract::Event&lt;<span class="kw-2">&amp;</span>P, RoleAdminChanged, N&gt; {
+<a href=#10752 id=10752 data-nosnippet>10752</a>            <span class="self">self</span>.event_filter::&lt;RoleAdminChanged&gt;()
+<a href=#10753 id=10753 data-nosnippet>10753</a>        }
+<a href=#10754 id=10754 data-nosnippet>10754</a>        <span class="doccomment">///Creates a new event filter for the [`RoleGranted`] event.
+<a href=#10755 id=10755 data-nosnippet>10755</a>        </span><span class="kw">pub fn </span>RoleGranted_filter(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; alloy_contract::Event&lt;<span class="kw-2">&amp;</span>P, RoleGranted, N&gt; {
+<a href=#10756 id=10756 data-nosnippet>10756</a>            <span class="self">self</span>.event_filter::&lt;RoleGranted&gt;()
+<a href=#10757 id=10757 data-nosnippet>10757</a>        }
+<a href=#10758 id=10758 data-nosnippet>10758</a>        <span class="doccomment">///Creates a new event filter for the [`RoleRevoked`] event.
+<a href=#10759 id=10759 data-nosnippet>10759</a>        </span><span class="kw">pub fn </span>RoleRevoked_filter(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; alloy_contract::Event&lt;<span class="kw-2">&amp;</span>P, RoleRevoked, N&gt; {
+<a href=#10760 id=10760 data-nosnippet>10760</a>            <span class="self">self</span>.event_filter::&lt;RoleRevoked&gt;()
+<a href=#10761 id=10761 data-nosnippet>10761</a>        }
+<a href=#10762 id=10762 data-nosnippet>10762</a>    }
+<a href=#10763 id=10763 data-nosnippet>10763</a>}
 </code></pre></div></section></main></body></html>
