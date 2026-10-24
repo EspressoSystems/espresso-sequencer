@@ -414,8 +414,8 @@ impl SourcesSnapshot {
         )))
     }
 
-    /// Epoch of the last block of the median peer. The median of an even count is
-    /// the lower one.
+    /// Epoch of the last block of the median peer. The median of an even count is the lower
+    /// one.
     fn median_peer_tip_epoch(&self) -> Option<EpochNumber> {
         let mut heights = self.peer_block_heights.clone();
         heights.sort_unstable();
@@ -968,9 +968,16 @@ mod tests {
         roots: Arc<std::sync::Mutex<HashMap<u64, Header>>>,
         /// The epochs `load_stake` was asked for.
         asked: Arc<std::sync::Mutex<Vec<u64>>>,
+        /// Per epoch, how many more `load_stake` calls answer `None` despite a seeded table.
+        misses: Arc<std::sync::Mutex<HashMap<u64, usize>>>,
     }
 
     impl SeededStore {
+        /// Answer `None` to the next `count` `load_stake` calls for `epoch`.
+        fn miss_first(&self, epoch: u64, count: usize) {
+            self.misses.lock().unwrap().insert(epoch, count);
+        }
+
         /// Whether `load_stake` was asked for `epoch`.
         fn loaded(&self, epoch: u64) -> bool {
             self.asked.lock().unwrap().contains(&epoch)
@@ -999,6 +1006,7 @@ mod tests {
                 tables: Arc::new(std::sync::Mutex::new(tables)),
                 roots: Arc::new(std::sync::Mutex::new(headers)),
                 asked: Arc::default(),
+                misses: Arc::default(),
             }
         }
     }
@@ -1007,6 +1015,12 @@ mod tests {
     impl MembershipPersistence for SeededStore {
         async fn load_stake(&self, epoch: EpochNumber) -> anyhow::Result<Option<StakeTuple>> {
             self.asked.lock().unwrap().push(epoch.u64());
+            if let Some(left) = self.misses.lock().unwrap().get_mut(&epoch.u64()) {
+                if *left > 0 {
+                    *left -= 1;
+                    return Ok(None);
+                }
+            }
             Ok(self.tables.lock().unwrap().get(&epoch.u64()).cloned())
         }
 
@@ -1467,8 +1481,8 @@ mod tests {
         }
     }
 
-    /// Peers that agree on the tip end peer catchup there,
-    /// without a probe past it, even though the store holds a later epoch.
+    /// Peers that agree on the tip end peer catchup there, without a probe past it, even though
+    /// the store holds a later epoch.
     #[test_log::test(tokio::test)]
     async fn peer_catchup_stops_at_the_highest_tip() {
         let (client, lc_contract_state) = chain().await;
@@ -1791,12 +1805,8 @@ mod tests {
             .mock_block_height((MEDIAN - 1) * EPOCH_HEIGHT + 6)
             .await;
         let store = SeededStore::for_chain(&client, (N - 3)..=(MEDIAN + 1)).await;
-        let withheld = store.tables.lock().unwrap().remove(&(N + 4)).unwrap();
-        let coordinator = coordinator(store.clone());
-        tokio::spawn(async move {
-            tokio::time::sleep(Duration::from_millis(100)).await;
-            store.tables.lock().unwrap().insert(N + 4, withheld);
-        });
+        store.miss_first(N + 4, 1);
+        let coordinator = coordinator(store);
 
         let outcome = catch_up_cliquenet_stake_tables(
             &coordinator,

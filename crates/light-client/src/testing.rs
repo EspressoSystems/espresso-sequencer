@@ -928,9 +928,13 @@ impl TestClient {
 
 impl Client for TestClient {
     async fn block_height(&self) -> Result<u64> {
-        let delay = self.inner.lock().await.block_height_delay;
-        sleep(delay).await;
         let mut inner = self.inner.lock().await;
+        let delay = inner.block_height_delay;
+        if !delay.is_zero() {
+            drop(inner);
+            sleep(delay).await;
+            inner = self.inner.lock().await;
+        }
         if inner.failing_block_heights > 0 {
             inner.failing_block_heights -= 1;
             bail!("block height unavailable");

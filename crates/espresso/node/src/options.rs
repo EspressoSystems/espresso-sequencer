@@ -198,9 +198,9 @@ pub struct Options {
     /// Timeout for each step of the startup stake-table catchup.
     ///
     /// Bounds a peer catchup step (`wait_for_stake_table`), the LC contract state read, an LC
-    /// contract catchup fetch from one peer, a peer height read, and DRB preparation. Below the
-    /// median peer tip's epoch a timed-out step is retried until the bootstrap deadline. From there
-    /// up, it ends peer catchup. The timeout does not cancel the catchup task, which is a detached
+    /// contract catchup fetch from one peer, a peer height read, and DRB preparation. A timed-out
+    /// step up to and including the epoch after the median peer tip's is retried until the
+    /// bootstrap deadline. Past that, it ends peer catchup. The timeout does not cancel the catchup task, which is a detached
     /// `tokio::spawn` bounded by its own `DEFAULT_CATCHUP_TIMEOUT` watchdog.
     #[clap(long, env = "ESPRESSO_NODE_BOOTSTRAP_EPOCH_CATCHUP_TIMEOUT", default_value = "30s", value_parser = parse_duration)]
     pub bootstrap_epoch_catchup_timeout: Duration,
