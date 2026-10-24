@@ -60,9 +60,6 @@ const MAX_BACKOFF: Duration = Duration::from_secs(60);
 /// Time to read the peers' block heights. Up to three passes when peers fail fast: at 0, 1 and 3
 /// initial backoffs, plus slack.
 const PEER_HEIGHT_BUDGET: Duration = INITIAL_BACKOFF.saturating_mul(5);
-/// Epochs past `epoch(F)` that the median peer tip epoch may reach, `F` being the LC contract
-/// header.
-const MAX_TIP_EPOCHS_PAST_LC_CONTRACT: u64 = 2;
 
 /// Catches up the stake tables of `N-1`, `N`, `N+1`, the epochs cliquenet connects to.
 ///
@@ -247,7 +244,7 @@ impl<C: Client> StartupCatchup<'_, C> {
         }
         snapshot.peer_block_heights = self.read_peer_block_heights().await?;
         let plan = snapshot.plan();
-        self.log_plan(&snapshot, &plan);
+        self.log_plan(&plan);
 
         let highest_epoch = match plan.peer_catchup {
             Some(catchup) => {
@@ -380,14 +377,8 @@ impl SourcesSnapshot {
     fn peer_catchup(&self) -> Option<PeerCatchup> {
         let median_peer_tip_epoch = self.median_peer_tip_epoch()?;
         let highest_peer_tip_epoch = self.highest_peer_tip_epoch()?;
-        // Epochs past the LC contract one cannot be vouched for, so a few lying peers cannot hold
-        // peer catchup there.
-        let cap = self.lc_contract_epochs().map(|_| {
-            EpochNumber::new(self.lc_contract_epoch().u64() + MAX_TIP_EPOCHS_PAST_LC_CONTRACT)
-        });
         Some(PeerCatchup {
-            median_peer_tip_epoch: cap
-                .map_or(median_peer_tip_epoch, |cap| median_peer_tip_epoch.min(cap)),
+            median_peer_tip_epoch,
             highest_peer_tip_epoch,
         })
     }
@@ -422,7 +413,7 @@ impl SourcesSnapshot {
         )))
     }
 
-    /// Epoch of the last block of the median peer, before the cap. The median of an even count is
+    /// Epoch of the last block of the median peer. The median of an even count is
     /// the lower one.
     fn median_peer_tip_epoch(&self) -> Option<EpochNumber> {
         let mut heights = self.peer_block_heights.clone();
@@ -557,9 +548,8 @@ impl<C: Client> StartupCatchup<'_, C> {
 /// Peer catchup: the epochs to derive from the peers' chain tips.
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct PeerCatchup {
-    /// Epoch of the median peer's last block, capped at
-    /// `epoch(F) + MAX_TIP_EPOCHS_PAST_LC_CONTRACT`. Peer catchup must reach the epoch after it,
-    /// and retries until the deadline on the way.
+    /// Epoch of the median peer's last block. Peer catchup must reach the epoch after it, and
+    /// retries until the deadline on the way.
     median_peer_tip_epoch: EpochNumber,
     /// Epoch of the highest peer's last block, at least `median_peer_tip_epoch`. Peer catchup
     /// stops at the epoch after it, trying each step above the median once.
@@ -708,19 +698,8 @@ impl<C: Client> StartupCatchup<'_, C> {
 }
 
 impl<C: Client> StartupCatchup<'_, C> {
-    /// Log `plan` as a milestone, and warn when the median peer tip epoch is capped.
-    fn log_plan(&self, snapshot: &SourcesSnapshot, plan: &CatchupPlan) {
-        let capped = snapshot
-            .peer_catchup()
-            .zip(snapshot.median_peer_tip_epoch())
-            .filter(|(catchup, uncapped)| catchup.median_peer_tip_epoch < *uncapped);
-        if let Some((catchup, uncapped)) = capped {
-            tracing::warn!(
-                peer_tip_epoch = %uncapped,
-                median_peer_tip_epoch = %catchup.median_peer_tip_epoch,
-                "startup catchup: median peer tip past the LC contract epochs; capping it"
-            );
-        }
+    /// Log `plan` as a milestone.
+    fn log_plan(&self, plan: &CatchupPlan) {
         tracing::info!(
             target: "announce::bootstrap",
             lc_contract_epochs = ?plan.lc_contract_catchup.as_ref().map(|c| epoch_numbers(&c.missing_epochs)),
@@ -897,16 +876,15 @@ mod tests {
     #[case::no_lc_contract_state(0, &[3, 4], &[88], None, 4, Some((9, 9)))]
     #[case::no_lc_contract_state_fresh(0, &[], &[88], None, 2, Some((9, 9)))]
     #[case::lc_contract_before_first_epoch_root(10, &[], &[88], None, 2, Some((9, 9)))]
-    #[case::prover_lag_cap(77, &[], &[10_000], Some(&[5, 6, 7, 8, 9][..]), 9, Some((10, 1000)))]
-    #[case::no_lc_contract_state_no_cap(0, &[], &[10_000], None, 2, Some((1000, 1000)))]
-    #[case::cap_below_start(77, &[5, 6, 7, 8, 9, 10, 11], &[10_000], None, 11, Some((10, 1000)))]
+    #[case::prover_lag(77, &[], &[10_000], Some(&[5, 6, 7, 8, 9][..]), 9, Some((1000, 1000)))]
+    #[case::median_above_start(77, &[5, 6, 7, 8, 9, 10, 11], &[10_000], None, 11, Some((1000, 1000)))]
     #[case::no_peer_heights(77, &[], &[], Some(&[5, 6, 7, 8, 9][..]), 9, None)]
     #[case::empty_peer_list(77, &[5, 6, 7, 8, 9], &[], None, 9, None)]
     #[case::empty_chain(77, &[], &[0], Some(&[5, 6, 7, 8, 9][..]), 9, None)]
     #[case::lying_high_peer(77, &[], &[78, 98], Some(&[5, 6, 7, 8, 9][..]), 9, Some((8, 10)))]
     #[case::median_ignores_liar(77, &[], &[88, 88, 10_000], Some(&[5, 6, 7, 8, 9][..]), 9, Some((9, 1000)))]
     #[case::even_takes_the_lower(77, &[], &[78, 10_000], Some(&[5, 6, 7, 8, 9][..]), 9, Some((8, 1000)))]
-    #[case::liars_in_majority(77, &[], &[78, 10_000, 10_000], Some(&[5, 6, 7, 8, 9][..]), 9, Some((10, 1000)))]
+    #[case::liars_in_majority(77, &[], &[78, 10_000, 10_000], Some(&[5, 6, 7, 8, 9][..]), 9, Some((1000, 1000)))]
     fn plan_cases(
         #[case] lc_contract_height: u64,
         #[case] stored: &[u64],
@@ -1487,7 +1465,7 @@ mod tests {
         }
     }
 
-    /// Peers that agree on the tip and an uncapped median peer tip epoch end peer catchup there,
+    /// Peers that agree on the tip end peer catchup there,
     /// without a probe past it, even though the store holds a later epoch.
     #[test_log::test(tokio::test)]
     async fn peer_catchup_stops_at_the_highest_tip() {
@@ -1774,26 +1752,34 @@ mod tests {
         assert!(has_table(&coordinator, N + 1));
     }
 
-    /// A peer that reports a huge chain cannot make peer catchup require more than the slack past
-    /// the LC contract epoch. Past it peer catchup is best-effort and ends at the first epoch peers
-    /// cannot serve.
+    /// The LC contract prover lags several epochs behind honest peers: a transient failure of a
+    /// step past `epoch(F) + 3` is retried, and peer catchup reaches the epoch after the median.
     #[test_log::test(tokio::test)]
-    async fn huge_peer_height_is_capped_by_the_lc_contract_header() {
+    async fn prover_lag_does_not_make_steps_best_effort() {
+        const MEDIAN: u64 = N + 5;
         let (client, lc_contract_state) = chain().await;
-        client.mock_block_height(10_000).await;
-        let store =
-            SeededStore::for_chain(&client, (N - 3)..=(N + 1 + MAX_TIP_EPOCHS_PAST_LC_CONTRACT))
-                .await;
+        client
+            .mock_block_height((MEDIAN - 1) * EPOCH_HEIGHT + 6)
+            .await;
+        let store = SeededStore::for_chain(&client, (N - 3)..=(MEDIAN + 1)).await;
+        let withheld = store.tables.lock().unwrap().remove(&(N + 4)).unwrap();
         let coordinator = coordinator(store.clone());
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(100)).await;
+            store.tables.lock().unwrap().insert(N + 4, withheld);
+        });
 
-        let current = run_catchup(&coordinator, Some(lc_contract_state), &[client], PARAMS)
-            .await
-            .unwrap();
+        let outcome = catch_up_cliquenet_stake_tables(
+            &coordinator,
+            EPOCH_HEIGHT,
+            || async { Ok(lc_contract_state.clone()) },
+            &peer_list(&[client]),
+            &PARAMS,
+        )
+        .await
+        .unwrap();
 
-        assert_eq!(
-            current,
-            EpochNumber::new(N + MAX_TIP_EPOCHS_PAST_LC_CONTRACT)
-        );
-        assert!(store.loaded(N + 2 + MAX_TIP_EPOCHS_PAST_LC_CONTRACT));
+        assert_eq!(outcome.current, EpochNumber::new(MEDIAN));
+        assert_eq!(outcome.required, Some(EpochNumber::new(MEDIAN + 1)));
     }
 }
