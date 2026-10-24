@@ -22,8 +22,9 @@
 //!    the deadline. Above it, up to the epoch of the highest reported tip, the first failure
 //!    marks the live tip and peer catchup stops there. Without state peers, or on a chain of no
 //!    blocks, peer catchup is skipped. With peers, the block heights are read after LC contract
-//!    catchup, for a few passes. If none answers in that time, peer catchup is skipped with a
-//!    warning: it fetches through the same peers. If the deadline passes first, startup fails.
+//!    catchup, for a few passes and at least one step timeout. If none answers in that time, peer
+//!    catchup is skipped with a warning: it fetches through the same peers. If the deadline passes
+//!    first, startup fails.
 //!
 //! All stages share one deadline.
 //!
@@ -57,8 +58,8 @@ use vec1::Vec1;
 const INITIAL_BACKOFF: Duration = Duration::from_secs(1);
 /// Longest wait between two retries.
 const MAX_BACKOFF: Duration = Duration::from_secs(60);
-/// Time to read the peers' block heights. Up to three passes when peers fail fast: at 0, 1 and 3
-/// initial backoffs, plus slack.
+/// Least time to read the peers' block heights, raised to `step_timeout` when that is longer. Up to
+/// three passes when peers fail fast: at 0, 1 and 3 initial backoffs, plus slack.
 const PEER_HEIGHT_BUDGET: Duration = INITIAL_BACKOFF.saturating_mul(5);
 
 /// Catches up the stake tables of `N-1`, `N`, `N+1`, the epochs cliquenet connects to.
@@ -573,14 +574,15 @@ impl<C: Client> StartupCatchup<'_, C> {
     /// The block heights the peers report, each read bounded by `step_timeout`.
     ///
     /// Passes over the peers repeat with backoff until one answers, for at most
-    /// `PEER_HEIGHT_BUDGET` and the deadline. Empty without peers, or when none answered in that
-    /// time: peer catchup would fetch through the same peers, so it is skipped. Fails when the
-    /// deadline passes first.
+    /// `step_timeout.max(PEER_HEIGHT_BUDGET)` and the deadline. Empty without peers, or when none
+    /// answered in that time: peer catchup would fetch through the same peers, so it is skipped.
+    /// Fails when the deadline passes first.
     async fn read_peer_block_heights(&self) -> Result<Vec<u64>, StartupCatchupError> {
         if self.state_peers.is_empty() {
             return Ok(vec![]);
         }
-        let deadline = self.deadline.min(Instant::now() + PEER_HEIGHT_BUDGET);
+        let budget = self.params.step_timeout.max(PEER_HEIGHT_BUDGET);
+        let deadline = self.deadline.min(Instant::now() + budget);
         let read = retry(deadline, Stage::PeerHeights, 1, |_, remaining| async move {
             let bound = self.params.step_timeout.min(remaining);
             let reads = self
@@ -1750,6 +1752,33 @@ mod tests {
         assert_eq!(reads.load(Ordering::Relaxed), 2);
         assert_eq!(current, EpochNumber::new(N));
         assert!(has_table(&coordinator, N + 1));
+    }
+
+    /// A peer answering its height after `PEER_HEIGHT_BUDGET`, within `step_timeout`, still counts.
+    #[test_log::test(tokio::test(start_paused = true))]
+    async fn slow_peer_height_within_the_step_timeout_is_used() {
+        let (client, lc_contract_state) = chain().await;
+        client.mock_block_height(LC_CONTRACT_HEIGHT + 1).await;
+        client
+            .delay_block_heights(PEER_HEIGHT_BUDGET + Duration::from_secs(3))
+            .await;
+        let coordinator = fresh_coordinator(&client).await;
+        let params = StartupCatchupParams {
+            step_timeout: PEER_HEIGHT_BUDGET * 3,
+            total_timeout: PEER_HEIGHT_BUDGET * 6,
+        };
+
+        let outcome = catch_up_cliquenet_stake_tables(
+            &coordinator,
+            EPOCH_HEIGHT,
+            || async { Ok(lc_contract_state.clone()) },
+            &peer_list(&[client]),
+            &params,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(outcome.required, Some(EpochNumber::new(N + 1)));
     }
 
     /// The LC contract prover lags several epochs behind honest peers: a transient failure of a

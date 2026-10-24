@@ -5,6 +5,7 @@ use std::{
     collections::{HashMap, HashSet},
     ops::Range,
     sync::Arc,
+    time::Duration,
 };
 
 use alloy::primitives::{Address, U256};
@@ -48,6 +49,7 @@ use jf_merkle_tree_compat::{
     AppendableMerkleTreeScheme, MerkleTreeScheme, prelude::SHA3MerkleTree,
 };
 use rand::RngCore;
+use tokio::time::sleep;
 use vbs::version::{StaticVersionType, Version};
 use versions::{
     DRB_AND_HEADER_UPGRADE_VERSION, EPOCH_VERSION, FEE_VERSION, NEW_PROTOCOL_VERSION, Upgrade,
@@ -442,6 +444,8 @@ struct InnerTestClient {
     fail_header_proofs: bool,
     /// Number of upcoming `block_height` requests to fail, like a peer that does not answer.
     failing_block_heights: usize,
+    /// How long each `block_height` request takes to answer, like a slow peer.
+    block_height_delay: Duration,
 }
 
 impl InnerTestClient {
@@ -897,6 +901,11 @@ impl TestClient {
         self.inner.lock().await.failing_block_heights = count;
     }
 
+    /// Answer every `block_height` request after `delay`.
+    pub async fn delay_block_heights(&self, delay: Duration) {
+        self.inner.lock().await.block_height_delay = delay;
+    }
+
     /// Fail payload proof ranges requests, like a server that predates the endpoint.
     pub async fn fail_payload_proof_ranges(&self) {
         let mut inner = self.inner.lock().await;
@@ -919,6 +928,8 @@ impl TestClient {
 
 impl Client for TestClient {
     async fn block_height(&self) -> Result<u64> {
+        let delay = self.inner.lock().await.block_height_delay;
+        sleep(delay).await;
         let mut inner = self.inner.lock().await;
         if inner.failing_block_heights > 0 {
             inner.failing_block_heights -= 1;
