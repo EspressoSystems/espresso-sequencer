@@ -23,7 +23,7 @@
 //!    marks the live tip and peer catchup stops there. Without state peers, or on a chain of no
 //!    blocks, peer catchup is skipped. With peers, the block heights are read after LC contract
 //!    catchup, for a few passes. If none answers in that time, peer catchup is skipped with a
-//!    warning: it fetches through the same peers. If the deadline is already spent, startup fails.
+//!    warning: it fetches through the same peers. If the deadline passes first, startup fails.
 //!
 //! All stages share one deadline.
 //!
@@ -57,13 +57,14 @@ use vec1::Vec1;
 const INITIAL_BACKOFF: Duration = Duration::from_secs(1);
 /// Longest wait between two retries.
 const MAX_BACKOFF: Duration = Duration::from_secs(60);
-/// Time to read the peers' block heights: passes at 0, 1 and 3 initial backoffs, plus slack.
+/// Time to read the peers' block heights. Up to three passes when peers fail fast: at 0, 1 and 3
+/// initial backoffs, plus slack.
 const PEER_HEIGHT_BUDGET: Duration = INITIAL_BACKOFF.saturating_mul(5);
 /// Epochs past `epoch(F)` that the median peer tip epoch may reach, `F` being the LC contract
 /// header.
 const MAX_TIP_EPOCHS_PAST_LC_CONTRACT: u64 = 2;
 
-/// Catches up the stake tables of `N-1`, `N`, `N+1`, the epochs cliquenet connects to. Returns `N`.
+/// Catches up the stake tables of `N-1`, `N`, `N+1`, the epochs cliquenet connects to.
 ///
 /// `read_lc_contract_state` returns the LC contract state, or `LightClientStateSol::default()`
 /// when there is none. Its failures are retried until the deadline.
@@ -76,7 +77,7 @@ pub(crate) async fn catch_up_cliquenet_stake_tables<C: Client, Fut>(
     read_lc_contract_state: impl Fn() -> Fut,
     state_peers: &[(Url, C)],
     params: &StartupCatchupParams,
-) -> Result<EpochNumber, StartupCatchupError>
+) -> Result<CatchupOutcome, StartupCatchupError>
 where
     Fut: Future<Output = anyhow::Result<LightClientStateSol>>,
 {
@@ -93,14 +94,24 @@ where
         deadline: started + params.total_timeout,
     };
     let snapshot = SourcesSnapshot::create(&catchup, read_lc_contract_state).await?;
-    let current = catchup.execute(snapshot).await?;
+    let outcome = catchup.execute(snapshot).await?;
     tracing::info!(
         target: "announce::bootstrap",
-        current_epoch = %current,
+        current_epoch = %outcome.current,
         duration_ms = started.elapsed().as_millis() as u64,
         "cliquenet stake tables ready",
     );
-    Ok(current)
+    Ok(outcome)
+}
+
+/// What a finished startup catchup reached.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct CatchupOutcome {
+    /// The current epoch `N`.
+    pub current: EpochNumber,
+    /// The highest epoch peer catchup had to reach, retrying until the deadline. Stake tables above
+    /// it are best-effort. `None` when peer catchup was skipped for lack of peer block heights.
+    pub required: Option<EpochNumber>,
 }
 
 /// Why the startup catchup failed.
@@ -226,11 +237,11 @@ struct StartupCatchup<'a, C> {
 
 impl<C: Client> StartupCatchup<'_, C> {
     /// Run LC contract catchup, read the peer block heights, plan and run peer catchup, and
-    /// prepare the epochs cliquenet connects to. Returns the current epoch `N`.
+    /// prepare the epochs cliquenet connects to.
     async fn execute(
         &self,
         mut snapshot: SourcesSnapshot,
-    ) -> Result<EpochNumber, StartupCatchupError> {
+    ) -> Result<CatchupOutcome, StartupCatchupError> {
         if let Some(catchup) = snapshot.lc_contract_catchup() {
             self.catch_up_from_lc_contract(&catchup).await?;
         }
@@ -245,8 +256,13 @@ impl<C: Client> StartupCatchup<'_, C> {
             },
             None => plan.highest_held_epoch,
         };
-        self.prepare_cliquenet_epochs(snapshot.first_epoch, highest_epoch)
-            .await
+        let current = self
+            .prepare_cliquenet_epochs(snapshot.first_epoch, highest_epoch)
+            .await?;
+        let required = snapshot
+            .peer_catchup()
+            .map(|catchup| catchup.median_peer_tip_epoch + 1);
+        Ok(CatchupOutcome { current, required })
     }
 }
 
@@ -569,17 +585,10 @@ impl<C: Client> StartupCatchup<'_, C> {
     /// Passes over the peers repeat with backoff until one answers, for at most
     /// `PEER_HEIGHT_BUDGET` and the deadline. Empty without peers, or when none answered in that
     /// time: peer catchup would fetch through the same peers, so it is skipped. Fails when the
-    /// deadline is already spent.
+    /// deadline passes first.
     async fn read_peer_block_heights(&self) -> Result<Vec<u64>, StartupCatchupError> {
         if self.state_peers.is_empty() {
             return Ok(vec![]);
-        }
-        if self.deadline <= Instant::now() {
-            return Err(StartupCatchupError::DeadlineExceeded {
-                stage: Stage::PeerHeights,
-                attempts: 0,
-                source: anyhow!("the deadline passed before the peer block heights were read"),
-            });
         }
         let deadline = self.deadline.min(Instant::now() + PEER_HEIGHT_BUDGET);
         let read = retry(deadline, Stage::PeerHeights, 1, |_, remaining| async move {
@@ -597,13 +606,17 @@ impl<C: Client> StartupCatchup<'_, C> {
             Ok(heights)
         })
         .await;
-        Ok(read.unwrap_or_else(|err| {
-            tracing::warn!(
-                err = format!("{:#}", anyhow::Error::from(err)),
-                "startup catchup: no state peer reported a block height; skipping peer catchup"
-            );
-            vec![]
-        }))
+        match read {
+            Ok(heights) => Ok(heights),
+            Err(err) if Instant::now() >= self.deadline => Err(err),
+            Err(err) => {
+                tracing::warn!(
+                    err = format!("{:#}", anyhow::Error::from(err)),
+                    "startup catchup: no state peer reported a block height; skipping peer catchup"
+                );
+                Ok(vec![])
+            },
+        }
     }
 
     /// Derive the stake table of one epoch at a time above `highest_held_epoch`, the highest epoch
@@ -1153,14 +1166,15 @@ mod tests {
         state_peers: &[TestClient],
         params: StartupCatchupParams,
     ) -> Result<EpochNumber, StartupCatchupError> {
-        catch_up_cliquenet_stake_tables(
+        let outcome = catch_up_cliquenet_stake_tables(
             coordinator,
             EPOCH_HEIGHT,
             || async { lc_contract_state.clone().context("no lc_contract_state") },
             &peer_list(state_peers),
             &params,
         )
-        .await
+        .await?;
+        Ok(outcome.current)
     }
 
     fn has_table(coordinator: &EpochMembershipCoordinator<SeqTypes>, epoch: u64) -> bool {
@@ -1554,7 +1568,7 @@ mod tests {
     /// the deadline.
     #[rstest]
     #[case::default_deadline(PARAMS.total_timeout)]
-    #[case::short_deadline(Duration::from_millis(1500))]
+    #[case::short_deadline(PEER_HEIGHT_BUDGET * 2)]
     #[test_log::test(tokio::test(start_paused = true))]
     async fn no_peer_height_starts_from_storage(#[case] deadline: Duration) {
         let (client, lc_contract_state) = chain().await;
@@ -1609,6 +1623,33 @@ mod tests {
             params: &PARAMS,
             blocks_per_epoch: EPOCH_HEIGHT,
             deadline: Instant::now(),
+        };
+
+        let err = catchup.read_peer_block_heights().await.unwrap_err();
+
+        assert_matches!(
+            err,
+            StartupCatchupError::DeadlineExceeded {
+                stage: Stage::PeerHeights,
+                ..
+            }
+        );
+    }
+
+    /// The deadline falling inside the height budget fails the read instead of reading as no peer
+    /// answering.
+    #[test_log::test(tokio::test(start_paused = true))]
+    async fn deadline_inside_the_height_budget_fails_the_peer_height_read() {
+        let (client, _) = chain().await;
+        let coordinator = fresh_coordinator(&client).await;
+        client.fail_block_heights(usize::MAX).await;
+        let peers = peer_list(&[client]);
+        let catchup = StartupCatchup {
+            coordinator: &coordinator,
+            state_peers: &peers,
+            params: &PARAMS,
+            blocks_per_epoch: EPOCH_HEIGHT,
+            deadline: Instant::now() + PEER_HEIGHT_BUDGET / 2,
         };
 
         let err = catchup.read_peer_block_heights().await.unwrap_err();
@@ -1725,7 +1766,8 @@ mod tests {
             &PARAMS,
         )
         .await
-        .unwrap();
+        .unwrap()
+        .current;
 
         assert_eq!(reads.load(Ordering::Relaxed), 2);
         assert_eq!(current, EpochNumber::new(N));

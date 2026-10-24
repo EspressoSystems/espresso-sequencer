@@ -190,7 +190,8 @@ where
             &bootstrap_params,
         )
         .await
-        .context("startup stake-table catchup failed")?;
+        .context("startup stake-table catchup failed")?
+        .current;
 
         // For cliquenet this dials the stake tables of N-1, N and N+1 before consensus starts.
         if let Err(err) = coordinator_network.apply_epoch(current_epoch, &membership_coordinator) {
