@@ -1015,11 +1015,11 @@ mod tests {
     impl MembershipPersistence for SeededStore {
         async fn load_stake(&self, epoch: EpochNumber) -> anyhow::Result<Option<StakeTuple>> {
             self.asked.lock().unwrap().push(epoch.u64());
-            if let Some(left) = self.misses.lock().unwrap().get_mut(&epoch.u64()) {
-                if *left > 0 {
-                    *left -= 1;
-                    return Ok(None);
-                }
+            if let Some(left) = self.misses.lock().unwrap().get_mut(&epoch.u64())
+                && *left > 0
+            {
+                *left -= 1;
+                return Ok(None);
             }
             Ok(self.tables.lock().unwrap().get(&epoch.u64()).cloned())
         }
